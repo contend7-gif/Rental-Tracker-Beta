@@ -1,0 +1,88 @@
+{
+  "name": "rental-tracker-beta",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bug:sweep": "node scripts/bug-sweep.mjs",
+    "privacy:scan": "node scripts/privacy-scan.mjs",
+    "scan:ui": "node scripts/ui-scan.mjs",
+    "diff:check": "git diff --check",
+    "check": "npm test && npm run build && npm run diff:check && npm run scan:ui",
+    "scenario:dry-run": "node --test --test-concurrency=1 --experimental-strip-types src/domain/realDuplexScenario.test.ts",
+    "scenario:loan-tax": "node --test --test-concurrency=1 --experimental-strip-types src/domain/loanTaxStabilizationScenario.test.ts",
+    "test": "npm run privacy:scan && npm run bug:sweep && npm rebuild better-sqlite3 && node --test --test-concurrency=1 --experimental-strip-types \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
+    "smoke:ci": "npm run privacy:scan && npm run bug:sweep && npm rebuild better-sqlite3 && node --test --test-concurrency=1 --experimental-strip-types \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\" && vite build && node scripts/run-electron-builder.mjs --dir && node scripts/release-smoke.mjs",
+    "release:verify": "npm run smoke:ci",
+    "desktop:run": "npm run build && node scripts/run-electron-builder.mjs install-app-deps && electron .",
+    "desktop:pack": "npm run build && node scripts/run-electron-builder.mjs --dir",
+    "desktop:dist": "npm run build && node scripts/run-electron-builder.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "electron-updater": "^6.8.3",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.542.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1",
+    "postcss": "^8.5.8",
+    "tailwindcss": "^4.2.1",
+    "vite": "^7.1.3"
+  },
+  "main": "electron/main.mjs",
+  "build": {
+    "appId": "com.rentaltracker.desktop",
+    "productName": "Rental Tracker",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Rental-Tracker-Setup-${version}.${ext}",
+      "signAndEditExecutable": false,
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "contend7-gif",
+        "repo": "Rental-Tracker-Beta",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "description": "Desktop rental portfolio operations tracker",
+  "author": "Rental Tracker Team",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:contend7-gif/Rental-Tracker-Beta.git"
+  }
+}

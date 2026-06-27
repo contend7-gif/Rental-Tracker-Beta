@@ -1,0 +1,307 @@
+@import "tailwindcss";
+
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #0f172a;
+  background: #eef3f7;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --rt-bg: #eef3f7;
+  --rt-bg-soft: #f8fafc;
+  --rt-surface: #ffffff;
+  --rt-surface-strong: #f1f8fb;
+  --rt-border: #dbe5ee;
+  --rt-border-strong: #cbd8e3;
+  --rt-text: #0f172a;
+  --rt-muted: #64748b;
+  --rt-accent: #0f766e;
+  --rt-accent-strong: #0d9488;
+  --rt-blue: #2563eb;
+  --rt-ring: rgba(15, 118, 110, 0.2);
+  --rt-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+  --rt-shadow-soft: 0 8px 24px rgba(15, 23, 42, 0.06);
+  --rt-type-page-title: 1.25rem;
+  --rt-type-page-subtitle: 0.8125rem;
+  --rt-type-workspace-title: 1rem;
+  --rt-type-section-title: 0.9375rem;
+  --rt-type-row-title: 0.875rem;
+  --rt-type-body: 0.8125rem;
+  --rt-type-meta: 0.75rem;
+  --rt-type-chip: 0.6875rem;
+  --rt-type-table-heading: 0.6875rem;
+  --rt-type-control: 0.8125rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.08), transparent 32rem),
+    linear-gradient(180deg, #f8fbfd 0%, var(--rt-bg) 34rem);
+  color: var(--rt-text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--rt-accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(13, 148, 136, 0.18);
+}
+
+::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd8e3;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8;
+}
+
+.rt-app-shell {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0) 28rem),
+    transparent;
+}
+
+.rt-sidebar {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--rt-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.rt-header-card {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(240, 249, 250, 0.92)),
+    var(--rt-surface);
+  box-shadow: var(--rt-shadow-soft);
+}
+
+.rt-page-title {
+  font-size: var(--rt-type-page-title);
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--rt-text);
+}
+
+.rt-page-subtitle {
+  font-size: var(--rt-type-page-subtitle);
+  line-height: 1.35;
+  color: var(--rt-muted);
+}
+
+.rt-workspace-title,
+.rt-card-title {
+  font-size: var(--rt-type-workspace-title);
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--rt-text);
+}
+
+.rt-section-title {
+  font-size: var(--rt-type-section-title);
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--rt-text);
+}
+
+.rt-row-title {
+  font-size: var(--rt-type-row-title);
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--rt-text);
+}
+
+.rt-body-text {
+  font-size: var(--rt-type-body);
+  line-height: 1.4;
+}
+
+.rt-row-meta,
+.rt-helper-text {
+  font-size: var(--rt-type-meta);
+  line-height: 1.35;
+  color: var(--rt-muted);
+}
+
+.rt-metric-label {
+  font-size: var(--rt-type-table-heading);
+  font-weight: 650;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--rt-muted);
+}
+
+.rt-metric-value {
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--rt-text);
+}
+
+.rt-chip-text {
+  font-size: var(--rt-type-chip);
+  line-height: 1rem;
+}
+
+.rt-table-heading {
+  font-size: var(--rt-type-table-heading);
+  font-weight: 650;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--rt-muted);
+}
+
+.rt-button-text {
+  font-size: var(--rt-type-control);
+  line-height: 1.2;
+}
+
+.rt-app-shell {
+  font-size: var(--rt-type-body);
+}
+
+.rt-app-shell .text-xl {
+  font-size: var(--rt-type-page-title);
+  line-height: 1.2;
+}
+
+.rt-app-shell .text-2xl {
+  font-size: 1.375rem;
+  line-height: 1.2;
+}
+
+.rt-app-shell .text-lg {
+  font-size: var(--rt-type-workspace-title);
+  line-height: 1.25;
+}
+
+.rt-app-shell .text-base {
+  font-size: var(--rt-type-section-title);
+  line-height: 1.3;
+}
+
+.rt-app-shell .text-sm {
+  font-size: var(--rt-type-body);
+  line-height: 1.4;
+}
+
+.rt-app-shell th,
+.rt-app-shell thead {
+  font-size: var(--rt-type-table-heading);
+}
+
+.rt-brand-mark {
+  background:
+    linear-gradient(135deg, #0f766e 0%, #2563eb 100%);
+  box-shadow: 0 10px 24px rgba(15, 118, 110, 0.22);
+}
+
+.theme-light .bg-slate-100 {
+  background-color: #eef3f7 !important;
+}
+
+.theme-light .bg-slate-50,
+.theme-light .bg-slate-50\/60,
+.theme-light .bg-slate-50\/70,
+.theme-light .bg-slate-50\/80,
+.theme-light .bg-slate-50\/90 {
+  background-color: #f8fafc !important;
+}
+
+.theme-light .border-slate-200 {
+  border-color: var(--rt-border) !important;
+}
+
+.theme-light .border-slate-300 {
+  border-color: var(--rt-border-strong) !important;
+}
+
+.theme-light .shadow-sm {
+  box-shadow: var(--rt-shadow-soft) !important;
+}
+
+.theme-light thead.bg-slate-50 {
+  background-color: #f1f8fb !important;
+}
+
+.theme-light .hover\:bg-blue-50\/30:hover,
+.theme-light .hover\:bg-blue-50\/40:hover,
+.theme-light .hover\:bg-blue-50\/60:hover,
+.theme-light .hover\:bg-blue-50\/80:hover {
+  background-color: rgba(236, 253, 245, 0.76) !important;
+}
+
+.theme-light .hover\:border-blue-200:hover {
+  border-color: #99d7d0 !important;
+}
+
+.theme-dark {
+  color: #e5e7eb;
+  color-scheme: dark;
+}
+
+.theme-dark .bg-white {
+  background-color: #111827 !important;
+}
+
+.theme-dark .bg-slate-50,
+.theme-dark .bg-slate-50\/60,
+.theme-dark .bg-slate-100 {
+  background-color: #1f2937 !important;
+}
+
+.theme-dark .border,
+.theme-dark .border-slate-200 {
+  border-color: #374151 !important;
+}
+
+.theme-dark .text-slate-900,
+.theme-dark .text-slate-700,
+.theme-dark .text-slate-600,
+.theme-dark .text-slate-500 {
+  color: #d1d5db !important;
+}
+
+.theme-dark .hover\:bg-blue-50\/40:hover {
+  background-color: #1e293b !important;
+}
+
+.theme-dark .hover\:border-blue-200:hover {
+  border-color: #475569 !important;
+}
