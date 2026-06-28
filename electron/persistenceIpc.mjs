@@ -6,6 +6,7 @@ export const PERSISTENCE_CHANNELS = {
   isAvailable: "persistence:is-available",
   loadAppData: "persistence:load-app-data",
   saveAppData: "persistence:save-app-data",
+  createRestorePoint: "persistence:create-restore-point",
   importLegacyLocalStorageData: "persistence:import-legacy-local-storage-data",
   exportBackup: "persistence:export-backup",
   exportBackupArchive: "persistence:export-backup-archive",
@@ -90,6 +91,13 @@ export function registerPersistenceIpc({ app, recordDesktopHealthEvent } = {}) {
     safely("SQLite app data save failed.", servicePromise, recordDesktopHealthEvent, (service) => {
       if (!isPlainObject(payload)) return { ok: false, message: "Invalid app data payload." };
       return service.saveAppData(payload);
+    }),
+  );
+
+  ipcMain.handle(PERSISTENCE_CHANNELS.createRestorePoint, async (_event, payload) =>
+    safely("SQLite restore point creation failed.", servicePromise, recordDesktopHealthEvent, (service) => {
+      if (!isPlainObject(payload)) return { ok: false, message: "Invalid restore point payload." };
+      return service.createRestorePoint(payload);
     }),
   );
 

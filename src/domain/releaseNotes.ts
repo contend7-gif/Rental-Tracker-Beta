@@ -8,15 +8,50 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.1",
+    releaseDate: "2026-06-27",
+    title: "Fresh restore points",
+    summary: "Carries the final Alpha backup safety fix into the Beta line before installing Beta over real rental data.",
+    changes: [
+      "Beta now starts from the Alpha v1.50.3 data-safety baseline while keeping the same desktop app id and product name so existing SQLite, document, and backup folders remain anchored.",
+      "Create restore point now uses a dedicated desktop persistence action that always writes a fresh managed backup instead of being skipped by the automatic weekly backup throttle.",
+      "Manual data backup export now saves the live app snapshot directly before exporting the SQLite zip, preventing a current-dated backup from carrying older records.",
+      "GitHub release publishing points at Rental-Tracker-Beta for future installer updates and release assets.",
+    ],
+  },
+  {
     version: "1.0.0",
     releaseDate: "2026-06-27",
     title: "First Beta release",
     summary: "Starts the Beta release line from the stabilized Alpha app while preserving the desktop app identity used for local data storage.",
     changes: [
       "The app version resets to 1.0.0 for the Beta repository while keeping the same desktop app id and product name so existing SQLite, document, and backup folders remain anchored.",
-      "GitHub release publishing now points at Rental-Tracker-Beta for future installer updates and release assets.",
-      "The Beta line includes the v1.50.1 data-safety checkpoint that shows restore-point, backup-validation, and local data-folder details before installing Beta builds.",
+      "GitHub release publishing points at Rental-Tracker-Beta for future installer updates and release assets.",
+      "The Beta line includes the data-safety checkpoint that shows restore-point, backup-validation, and local data-folder details before installing Beta builds.",
       "Alpha release history remains bundled below for continuity while Beta releases begin from this clean baseline.",
+    ],
+  },
+  {
+    version: "1.50.3",
+    releaseDate: "2026-06-27",
+    title: "Fresh restore points",
+    summary: "Makes Alpha restore points and manual backup exports save the current screen data before packaging anything for the Beta transition.",
+    changes: [
+      "Create restore point now uses a dedicated desktop persistence action that always writes a fresh managed backup instead of being skipped by the automatic weekly backup throttle.",
+      "Managed restore-point files now use timestamped names so multiple same-day restore points do not overwrite each other.",
+      "Manual data backup export now saves the live app snapshot directly before exporting the SQLite zip, preventing a current-dated backup from carrying older records.",
+      "Settings shows a Creating state while a restore point is being written, and regression tests cover forced restore points plus fresh desktop backup exports.",
+    ],
+  },
+  {
+    version: "1.50.2",
+    releaseDate: "2026-06-27",
+    title: "Restore point quota fix",
+    summary: "Fixes a storage quota warning in the Alpha bridge release before installing the first Beta build.",
+    changes: [
+      "Desktop restore points now use SQLite-managed backups as the source of truth and store only lightweight restore-point metadata in localStorage.",
+      "The Beta install safety flow no longer trips browser storage quota warnings when rental data or document metadata grows beyond localStorage limits.",
+      "A regression test protects the desktop restore-point path from writing full backup snapshots to localStorage again.",
     ],
   },
   {

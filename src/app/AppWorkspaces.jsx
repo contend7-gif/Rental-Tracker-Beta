@@ -335,6 +335,7 @@ const SETTINGS_WORKSPACE_PROP_KEYS = [
   "persistenceLastError",
   "realDataChecklist",
   "reloadDesktopPersistenceData",
+  "restorePointBusy",
   "resetToDefaults",
   "restoreLocalAdminAccess",
   "roleAccessSummary",

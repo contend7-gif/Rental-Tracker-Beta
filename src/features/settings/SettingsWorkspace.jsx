@@ -168,6 +168,7 @@ export function SettingsWorkspace({
   persistenceLastError,
   realDataChecklist,
   reloadDesktopPersistenceData,
+  restorePointBusy,
   resetToDefaults,
   restoreLocalAdminAccess,
   roleAccessSummary,
@@ -1064,8 +1065,8 @@ export function SettingsWorkspace({
                     <Button size="sm" variant="secondary" onClick={() => setSetting("realDataModeEnabled", true)}>
                       Start real data setup
                     </Button>
-                    <Button size="sm" variant="secondary" onClick={createAutoBackupNow} disabled={!canManageDataAdmin}>
-                      Create restore point
+                    <Button size="sm" variant="secondary" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
+                      {restorePointBusy ? "Creating..." : "Create restore point"}
                     </Button>
                     <Button size="sm" variant="secondary" onClick={validateLatestBackup} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable || backupValidationBusy}>
                       {backupValidationBusy ? "Validating..." : "Validate backup"}
@@ -1179,8 +1180,8 @@ export function SettingsWorkspace({
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={createAutoBackupNow} disabled={!canManageDataAdmin}>
-                    Create restore point
+                  <Button size="sm" variant="secondary" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
+                    {restorePointBusy ? "Creating..." : "Create restore point"}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={validateLatestBackup} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable || backupValidationBusy}>
                     {backupValidationBusy ? "Validating..." : "Validate backup"}
@@ -1242,9 +1243,9 @@ export function SettingsWorkspace({
                   <FolderOpen className="mr-2 h-4 w-4" />
                   Export latest auto-backup
                 </Button>
-                <Button variant="secondary" className="w-full" onClick={createAutoBackupNow} disabled={!canManageDataAdmin}>
+                <Button variant="secondary" className="w-full" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
                   <Archive className="mr-2 h-4 w-4" />
-                  Create restore point now
+                  {restorePointBusy ? "Creating restore point..." : "Create restore point now"}
                 </Button>
                 <Button variant="secondary" className="w-full" onClick={reloadDesktopPersistenceData} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
                   <Archive className="mr-2 h-4 w-4" />

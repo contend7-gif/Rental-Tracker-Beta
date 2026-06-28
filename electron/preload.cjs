@@ -12,6 +12,7 @@ const DESKTOP_DIAGNOSTICS_RUN_CHANNEL = "desktop-diagnostics:run";
 const PERSISTENCE_IS_AVAILABLE_CHANNEL = "persistence:is-available";
 const PERSISTENCE_LOAD_APP_DATA_CHANNEL = "persistence:load-app-data";
 const PERSISTENCE_SAVE_APP_DATA_CHANNEL = "persistence:save-app-data";
+const PERSISTENCE_CREATE_RESTORE_POINT_CHANNEL = "persistence:create-restore-point";
 const PERSISTENCE_IMPORT_LEGACY_LOCAL_STORAGE_DATA_CHANNEL = "persistence:import-legacy-local-storage-data";
 const PERSISTENCE_EXPORT_BACKUP_CHANNEL = "persistence:export-backup";
 const PERSISTENCE_EXPORT_BACKUP_ARCHIVE_CHANNEL = "persistence:export-backup-archive";
@@ -75,6 +76,7 @@ contextBridge.exposeInMainWorld("desktopPersistence", {
   isAvailable: () => ipcRenderer.invoke(PERSISTENCE_IS_AVAILABLE_CHANNEL),
   loadAppData: () => ipcRenderer.invoke(PERSISTENCE_LOAD_APP_DATA_CHANNEL),
   saveAppData: (payload) => ipcRenderer.invoke(PERSISTENCE_SAVE_APP_DATA_CHANNEL, payload),
+  createRestorePoint: (payload) => ipcRenderer.invoke(PERSISTENCE_CREATE_RESTORE_POINT_CHANNEL, payload),
   importLegacyLocalStorageData: (payload) => ipcRenderer.invoke(PERSISTENCE_IMPORT_LEGACY_LOCAL_STORAGE_DATA_CHANNEL, payload),
   exportBackup: () => ipcRenderer.invoke(PERSISTENCE_EXPORT_BACKUP_CHANNEL),
   exportBackupArchive: () => ipcRenderer.invoke(PERSISTENCE_EXPORT_BACKUP_ARCHIVE_CHANNEL),

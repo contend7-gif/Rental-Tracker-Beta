@@ -634,6 +634,34 @@ export async function saveAppDataToDatabase({ db, paths, backup, appVersion = ""
   return { ok: true, savedAt: now };
 }
 
+export async function createRestorePointInDatabase({ db, paths, backup, appVersion = "", retentionCount = DEFAULT_AUTO_BACKUP_RETENTION }) {
+  const saveResult = await saveAppDataToDatabase({
+    db,
+    paths,
+    backup,
+    appVersion,
+    autoBackup: false,
+    retentionCount,
+  });
+  const backupResult = await maybeWriteAutomaticBackup({
+    db,
+    paths,
+    backup: {
+      ...backup,
+      appVersion: backup?.appVersion || appVersion,
+      exportedAt: backup?.exportedAt || saveResult.savedAt,
+    },
+    retentionCount,
+    force: true,
+  });
+  return {
+    ok: true,
+    savedAt: saveResult.savedAt,
+    backedUpAt: backupResult.backedUpAt || saveResult.savedAt,
+    filePath: backupResult.filePath || "",
+  };
+}
+
 function readCollection(db, collection) {
   const rows = db.prepare(`SELECT json FROM ${collection.table} ORDER BY rowid ASC`).all();
   return rows.map((row) => parseJson(row.json, {})).filter(isRecord);
@@ -743,20 +771,22 @@ export async function importBackupArchiveToDatabase({ db, paths, archiveBuffer, 
   };
 }
 
-export async function maybeWriteAutomaticBackup({ db, paths, backup, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION }) {
+export async function maybeWriteAutomaticBackup({ db, paths, backup, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION, force = false }) {
   const now = new Date();
   const lastBackupAt = getMeta(db, "lastBackupAt", "");
   const lastBackupMs = Date.parse(lastBackupAt);
   const weeklyMs = 7 * 24 * 60 * 60 * 1000;
-  if (!Number.isNaN(lastBackupMs) && now.getTime() - lastBackupMs < weeklyMs) {
+  if (!force && !Number.isNaN(lastBackupMs) && now.getTime() - lastBackupMs < weeklyMs) {
     return { ok: true, skipped: true, reason: "recent" };
   }
 
   await fs.mkdir(paths.backupsDir, { recursive: true });
-  const backupFile = path.join(paths.backupsDir, `rental-tracker-auto-backup-${now.toISOString().slice(0, 10)}.zip`);
+  const timestamp = now.toISOString();
+  const safeTimestamp = timestamp.replace(/[:.]/g, "-");
+  const backupFile = path.join(paths.backupsDir, `rental-tracker-auto-backup-${safeTimestamp}.zip`);
   const payload = {
     ...sanitizeBackupForPersistence(backup),
-    exportedAt: now.toISOString(),
+    exportedAt: timestamp,
     backupFormat: ZIP_BACKUP_FORMAT,
     documentsEmbedded: true,
     documentBackupNote: "Document files are embedded in this zip under documents/.",
@@ -992,6 +1022,9 @@ export async function createPersistenceService({ userDataPath, appVersion = "" }
     },
     async saveAppData(payload) {
       return saveAppDataToDatabase({ db, paths, backup: payload, appVersion });
+    },
+    async createRestorePoint(payload) {
+      return createRestorePointInDatabase({ db, paths, backup: payload, appVersion });
     },
     async importLegacyLocalStorageData(payload) {
       return importLegacyLocalStorageData({ db, paths, payload, appVersion });

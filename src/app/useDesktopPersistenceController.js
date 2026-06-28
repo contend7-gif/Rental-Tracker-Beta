@@ -98,6 +98,7 @@ export function useDesktopPersistenceController({
   const [leaseAutomationLastRunAt, setLeaseAutomationLastRunAt] = useState("");
   const [persistenceHealth, setPersistenceHealth] = useState(null);
   const [persistenceLastError, setPersistenceLastError] = useState("");
+  const [restorePointBusy, setRestorePointBusy] = useState(false);
   const leaseReminderSignatureRef = useRef("");
   const hydrationStartedRef = useRef(false);
   const hydrationInputsRef = useRef({});
@@ -258,6 +259,18 @@ export function useDesktopPersistenceController({
 
     saveQueue.enqueue(buildBackupSnapshot());
     const result = await saveQueue.flush();
+    if (result?.ok === false) {
+      const message = result.message || "SQLite save failed.";
+      setPersistenceLastError(message);
+      throw new Error(message);
+    }
+    return result || { ok: true };
+  };
+
+  const saveCurrentDesktopSnapshotNow = async () => {
+    const desktopPersistence = typeof window !== "undefined" ? window.desktopPersistence : null;
+    if (!desktopPersistence?.saveAppData) return { ok: true };
+    const result = await desktopPersistence.saveAppData(buildBackupSnapshot());
     if (result?.ok === false) {
       const message = result.message || "SQLite save failed.";
       setPersistenceLastError(message);
@@ -801,7 +814,7 @@ export function useDesktopPersistenceController({
     if (!requirePermission("manage_data_admin", "Admin access is required to export full data backups.")) return;
     try {
       if (window.desktopPersistence?.exportBackupArchive) {
-        await flushCurrentDesktopSave();
+        await saveCurrentDesktopSnapshotNow();
         const archive = await window.desktopPersistence.exportBackupArchive();
         if (archive?.ok !== false && archive?.buffer) {
           await saveBackupArchive(archive, "rental-tracker-backup");
@@ -813,7 +826,7 @@ export function useDesktopPersistenceController({
         }
       }
       if (window.desktopPersistence?.exportBackup) {
-        await flushCurrentDesktopSave();
+        await saveCurrentDesktopSnapshotNow();
       }
       const desktopBackup = window.desktopPersistence?.exportBackup ? await window.desktopPersistence.exportBackup() : null;
       await saveBackupSnapshot(desktopBackup?.schemaVersion ? desktopBackup : buildBackupSnapshot(), "rental-tracker-backup");
@@ -889,6 +902,7 @@ export function useDesktopPersistenceController({
 
   const createAutoBackupNow = async () => {
     if (!requirePermission("manage_data_admin", "Admin access is required to create restore points.")) return;
+    if (restorePointBusy) return;
     if (typeof window === "undefined") {
       setNotice("Auto-backup is unavailable in this environment.");
       return;
@@ -900,19 +914,34 @@ export function useDesktopPersistenceController({
     }
 
     try {
+      setRestorePointBusy(true);
+      setNotice("Creating restore point...");
       const snapshot = buildBackupSnapshot();
-      if (window.desktopPersistence?.saveAppData) {
-        const saveQueue = getDesktopSaveQueue(window.desktopPersistence);
-        saveQueue?.enqueue(snapshot);
-        const result = await saveQueue?.flush();
+      if (window.desktopPersistence?.createRestorePoint || window.desktopPersistence?.saveAppData) {
+        const result = window.desktopPersistence?.createRestorePoint
+          ? await window.desktopPersistence.createRestorePoint(snapshot)
+          : await window.desktopPersistence.saveAppData(snapshot);
         if (result?.ok === false) {
           throw new Error(result.message || "SQLite save failed.");
         }
         const health = window.desktopPersistence?.getHealth ? await window.desktopPersistence.getHealth() : null;
+        const savedAt = result?.backedUpAt || health?.lastBackupAt || snapshot.exportedAt;
         if (health?.ok !== false) {
           setPersistenceHealth(health);
-          setLastAutoBackupAt(health?.lastBackupAt || snapshot.exportedAt);
+          setLastAutoBackupAt(savedAt);
         }
+        window.localStorage.setItem(AUTO_BACKUP_META_STORAGE_KEY, JSON.stringify({ lastAutoBackupAt: savedAt }));
+        addAuditEntry({
+          action: "backup",
+          entityType: "restore-point",
+          entityId: savedAt,
+          summary: "Created restore point.",
+          details: `Stored SQLite restore point at ${savedAt}.`,
+          category: "data",
+        });
+        setPersistenceLastError("");
+        setNotice("Restore point created.");
+        return;
       }
       const existingBackups = readStoredAutoBackups(window.localStorage.getItem(AUTO_BACKUP_STORAGE_KEY));
       const nextBackups = [snapshot, ...existingBackups].slice(0, AUTO_BACKUP_MAX_ENTRIES);
@@ -932,6 +961,8 @@ export function useDesktopPersistenceController({
       const message = error instanceof Error ? error.message : "Could not create restore point.";
       setPersistenceLastError(message);
       setNotice(`Could not create restore point: ${message}`);
+    } finally {
+      setRestorePointBusy(false);
     }
   };
 
@@ -1007,6 +1038,7 @@ export function useDesktopPersistenceController({
     persistenceLastError,
     reloadDesktopPersistenceData,
     releaseNotesDialog,
+    restorePointBusy,
     releaseNotesDialogDateLabel,
     releaseNotesDialogEntry,
     releaseNotesDialogLines,

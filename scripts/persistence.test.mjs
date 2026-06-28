@@ -266,3 +266,34 @@ test("zip backup archives report missing document files without blocking structu
   assert.equal(restored.backup.data.documents[0].dataUrl, undefined);
   assert.equal(restored.errors.length, 1);
 });
+
+test("manual restore points force a fresh managed backup with the latest data", async (t) => {
+  const service = await withPersistence(t);
+  await service.saveAppData(sampleBackup());
+  const firstBackupFiles = (await fs.readdir(service.paths.backupsDir)).filter((name) => name.endsWith(".zip"));
+  assert.equal(firstBackupFiles.length, 1);
+
+  await service.createRestorePoint(sampleBackup({
+    exportedAt: "2026-05-06T12:00:00.000Z",
+    data: {
+      transactions: [{
+        id: "t2",
+        date: "2026-05-06",
+        propertyId: "p1",
+        unit: "A",
+        type: "Income",
+        category: "Rent",
+        description: "June rent",
+        amount: 1200,
+        status: "active",
+      }],
+    },
+  }));
+
+  const backupFiles = (await fs.readdir(service.paths.backupsDir)).filter((name) => name.endsWith(".zip"));
+  const exported = await service.exportBackup();
+  const health = await service.getHealth();
+  assert.equal(backupFiles.length, 2);
+  assert.equal(exported.data.transactions[0].id, "t2");
+  assert.match(health.lastBackupAt, /^202/);
+});
