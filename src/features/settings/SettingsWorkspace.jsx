@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Archive, Database, FileText, FolderOpen, HardDrive, ShieldCheck, SlidersHorizontal, Sparkles } from "lucide-react";
+import { Archive, Database, FileText, FolderOpen, HardDrive, ShieldCheck, SlidersHorizontal } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -17,7 +17,7 @@ import {
   SIDEBAR_DEFAULT_OPTIONS,
 } from "../../store/appSettings.ts";
 
-const SETTINGS_SECTION_CLASS = "rounded-xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-200/40";
+const SETTINGS_SECTION_CLASS = "rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/30";
 const SETTINGS_CARD_CLASS = "self-start rounded-lg border border-slate-200 bg-slate-50/60 p-3";
 const TEXTAREA_CLASS =
   "mt-1 min-h-[96px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200";
@@ -65,8 +65,8 @@ function SettingsSectionShell({ title, description, badge, collapsed, onToggle, 
     <div className={SETTINGS_SECTION_CLASS}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-base font-semibold text-slate-900">{title}</div>
-          <div className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">{description}</div>
+          <div className="text-sm font-semibold text-slate-900">{title}</div>
+          <div className="mt-0.5 max-w-3xl text-xs leading-5 text-slate-500">{description}</div>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
           {badge ? badge : null}
@@ -76,39 +76,12 @@ function SettingsSectionShell({ title, description, badge, collapsed, onToggle, 
         </div>
       </div>
       {collapsed ? (
-        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-3 text-sm text-slate-500">
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 text-sm text-slate-500">
           Hidden for now. Expand when you need to adjust these settings.
         </div>
       ) : (
         children
       )}
-    </div>
-  );
-}
-
-function SettingsStatusTile({ icon: Icon, label, value, tone = "slate", detail }) {
-  const toneClass =
-    tone === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-      : tone === "amber"
-        ? "border-amber-200 bg-amber-50 text-amber-900"
-        : tone === "blue"
-          ? "border-blue-200 bg-blue-50 text-blue-900"
-          : "border-slate-200 bg-white text-slate-800";
-  return (
-    <div className={`rounded-lg border px-3 py-2 ${toneClass}`}>
-      <div className="flex items-start gap-2">
-        {Icon ? (
-          <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${settingsIconTone(tone)}`}>
-            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
-        ) : null}
-        <div className="min-w-0">
-          <div className="text-[11px] font-medium uppercase tracking-wide opacity-70">{label}</div>
-          <div className="mt-0.5 truncate text-sm font-semibold">{value}</div>
-          {detail ? <div className="mt-0.5 text-xs opacity-75">{detail}</div> : null}
-        </div>
-      </div>
     </div>
   );
 }
@@ -189,6 +162,9 @@ export function SettingsWorkspace({
   validateLatestBackup,
 }) {
   const [settingsTab, setSettingsTab] = useState("workspace");
+  const [showStoragePaths, setShowStoragePaths] = useState(false);
+  const [showRecoveryTools, setShowRecoveryTools] = useState(false);
+  const [showRealDataChecklist, setShowRealDataChecklist] = useState(false);
   const persistenceRecordCountSummary = formatPersistenceRecordCounts(persistenceHealth?.collectionCounts);
   const realDataBlockingCount = Number(realDataChecklist?.counts?.needsSetup || 0) + Number(realDataChecklist?.counts?.needsReview || 0);
   const saveStatusLabel = persistenceLastError
@@ -217,35 +193,41 @@ export function SettingsWorkspace({
 
   return (
     <Card className="overflow-hidden shadow-none">
-      <CardContent className="space-y-5 !p-3 text-sm">
+      <CardContent className="space-y-4 !p-3 text-sm">
         <div className="flex flex-wrap justify-end gap-2">
           <Badge variant="secondary">{activeAccessRoleOption?.label || "Admin"}</Badge>
           <Badge variant="secondary">{saveStatusLabel}</Badge>
         </div>
-        <div className="grid gap-2 md:grid-cols-3">
-          <SettingsStatusTile icon={SlidersHorizontal} label="Workspace" value={workspaceSummary} detail={`${appSettings.dashboardDensity || "comfortable"} dashboard`} tone="teal" />
-          <SettingsStatusTile icon={HardDrive} label="Data safety" value={backupSummary} detail={lastBackupLabel} tone={backupTone} />
-          <SettingsStatusTile icon={Sparkles} label="Admin tools" value={adminToolsSummary} detail={desktopUpdaterAvailable ? "Desktop tools available" : "Browser-safe mode"} tone={adminToolsTone} />
-        </div>
-
         <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2 md:grid-cols-3">
           {SETTINGS_TABS.map((tab) => {
             const TabIcon = tab.icon;
+            const tabSummary =
+              tab.key === "workspace" ? workspaceSummary : tab.key === "data" ? backupSummary : adminToolsSummary;
+            const tabDetail =
+              tab.key === "workspace"
+                ? `${appSettings.dashboardDensity || "comfortable"} dashboard`
+                : tab.key === "data"
+                  ? lastBackupLabel
+                  : desktopUpdaterAvailable
+                    ? "Desktop tools available"
+                    : "Browser-safe mode";
+            const tabTone = tab.key === "data" ? backupTone : tab.key === "admin_tools" ? adminToolsTone : tab.tone;
             return (
               <button
                 key={tab.key}
                 type="button"
-                className={`flex min-h-14 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
+                className={`flex min-h-16 items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition ${
                   settingsTab === tab.key ? "border border-teal-200 bg-white text-teal-900 shadow-sm" : "border border-transparent text-slate-600 hover:bg-white hover:text-slate-900"
                 }`}
                 onClick={() => setSettingsTab(tab.key)}
               >
-                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${settingsIconTone(tab.tone)}`}>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${settingsIconTone(tabTone)}`}>
                   <TabIcon className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate">{tab.label}</span>
-                  <span className="block truncate text-xs font-normal opacity-70">{tab.detail}</span>
+                  <span className="block truncate text-[11px] font-semibold uppercase tracking-wide opacity-70">{tab.label}</span>
+                  <span className="block truncate text-sm font-semibold">{tabSummary}</span>
+                  <span className="block truncate text-xs font-normal opacity-70">{tabDetail}</span>
                 </span>
               </button>
             );
@@ -1028,63 +1010,196 @@ export function SettingsWorkspace({
           collapsed={settingsSectionCollapsed.backup}
           onToggle={() => setSettingsSectionCollapsed((prev) => ({ ...prev, backup: !prev.backup }))}
         >
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <div className={`${SETTINGS_CARD_CLASS} md:col-span-2 xl:col-span-3`}>
-              <div className="mb-3 grid gap-3 xl:grid-cols-2">
-                <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="mt-3 space-y-3">
+            <input ref={backupImportInputRef} type="file" accept="application/json,application/zip,.json,.zip" className="hidden" onChange={onBackupImportInputChange} />
+
+            <div className="grid gap-3 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className={`${SETTINGS_CARD_CLASS} bg-white`}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Archive className="h-4 w-4 text-teal-700" aria-hidden="true" />
                     <div>
-                      <div className="text-sm font-medium text-slate-900">Current data status</div>
-                      <div className="mt-1 text-xs text-slate-600">Use this before switching from sample data to real records.</div>
-                    </div>
-                    <Badge variant="secondary" className={currentDataStatus?.demoDataLoaded ? "!bg-amber-100 !text-amber-800" : currentDataStatus?.realDataPresent ? "!bg-emerald-100 !text-emerald-700" : ""}>
-                      {currentDataStatus?.label || "Unknown"}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 grid gap-2 text-xs md:grid-cols-2">
-                    <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-600">Meaningful records: {Number(currentDataStatus?.counts?.total || 0)}</div>
-                    <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-600">Last backup: {lastBackupLabel}</div>
-                    <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-600">Last validation: {currentDataStatus?.lastValidationStatus || "Not validated"}</div>
-                    <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-600">Validated at: {formatDesktopUpdateDate(currentDataStatus?.lastValidationAt || "") || "Not yet"}</div>
-                    <div className={`rounded-md border px-2 py-1.5 ${currentDataStatus?.databaseIntegrityOk ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                      Database integrity: {currentDataStatus?.databaseIntegrityLabel || "Unavailable"}
-                    </div>
-                    <div className={`rounded-md border px-2 py-1.5 ${Number(currentDataStatus?.missingDocumentFileCount || 0) > 0 ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
-                      Documents: {Number(currentDataStatus?.documentFileCount || 0)} files | {Number(currentDataStatus?.missingDocumentFileCount || 0)} missing
+                      <div className="text-sm font-semibold text-slate-900">Restore point</div>
+                      <div className="mt-0.5 text-xs text-slate-500">Last backup {lastBackupLabel}; validation {lastValidationLabel}.</div>
                     </div>
                   </div>
-                  <label className="mt-3 flex items-center gap-2 rounded-md border border-white bg-white px-2 py-1.5 text-xs text-slate-700">
+                  <Badge variant="secondary" className={backupCheckpointClass.includes("emerald") ? "!bg-emerald-100 !text-emerald-700" : "!bg-amber-100 !text-amber-800"}>
+                    {backupCheckpointClass.includes("emerald") ? "Ready" : "Needs backup"}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-slate-700">
+                    <div className="font-medium text-slate-900">1. Save point</div>
+                    <div className="mt-0.5">{lastBackupLabel}</div>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-slate-700">
+                    <div className="font-medium text-slate-900">2. Validate</div>
+                    <div className="mt-0.5">{lastValidationLabel}</div>
+                  </div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-slate-700">
+                    <div className="font-medium text-slate-900">3. Folder</div>
+                    <div className="mt-0.5">{persistenceHealth?.persistenceAvailable ? "Desktop data anchored" : "Open desktop app"}</div>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
+                    <Archive className="mr-2 h-4 w-4" />
+                    {restorePointBusy ? "Creating..." : "Create restore point"}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={validateLatestBackup} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable || backupValidationBusy}>
+                    {backupValidationBusy ? "Validating..." : "Validate backup"}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={openDesktopDataFolder} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
+                    Open data folder
+                  </Button>
+                </div>
+                {persistenceLastError ? (
+                  <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                    Persistence warning: {persistenceLastError}
+                  </div>
+                ) : null}
+                {(backupValidationResult?.warnings || []).length > 0 ? (
+                  <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{backupValidationResult.warnings.slice(0, 3).join(" ")}</div>
+                ) : null}
+                {(backupValidationResult?.errors || []).length > 0 ? (
+                  <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-900">{backupValidationResult.errors.slice(0, 3).join(" ")}</div>
+                ) : null}
+              </div>
+
+              <div className={`${SETTINGS_CARD_CLASS} bg-white`}>
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-700" aria-hidden="true" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Backup files</div>
+                    <div className="mt-0.5 text-xs text-slate-500">Zip backups include document files; JSON remains importable.</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <Button variant="secondary" className="justify-start" onClick={exportDataBackup} disabled={!canManageDataAdmin}>
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    Export backup
+                  </Button>
+                  <Button variant="secondary" className="justify-start" onClick={openBackupImportPicker} disabled={!canManageDataAdmin}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Import backup
+                  </Button>
+                  <Button variant="secondary" className="justify-start" onClick={exportLatestAutoBackup} disabled={!canManageDataAdmin}>
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    Export latest restore point
+                  </Button>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Backups: {persistenceHealth?.backupCount ?? 0}</div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Latest size: {Number(persistenceHealth?.mostRecentBackupSizeBytes || backupValidationResult?.mostRecentBackupSizeBytes || 0)} bytes</div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Last auto: {autoBackupStatusLabel}</div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Validated: {formatDesktopUpdateDate(backupValidationResult?.checkedAt || persistenceHealth?.lastBackupValidationAt || "") || "Not yet"}</div>
+                </div>
+                <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-2 text-xs text-blue-900">
+                  Desktop keeps the newest 8 managed restore-point files. Automatic restore points are throttled to about weekly; manual restore points are created when you click Create restore point.
+                </div>
+              </div>
+            </div>
+
+            <div className={`${SETTINGS_CARD_CLASS} bg-white`}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Database className="h-4 w-4 text-slate-700" aria-hidden="true" />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Storage health</div>
+                    <div className="mt-0.5 text-xs text-slate-500">Desktop persistence, documents, and record counts.</div>
+                  </div>
+                </div>
+                <Badge variant="secondary" className={persistenceHealth?.persistenceAvailable ? "!bg-teal-100 !text-teal-800" : "!bg-amber-100 !text-amber-800"}>
+                  {persistenceHealth?.persistenceAvailable ? "Data anchored" : "Browser/local fallback"}
+                </Badge>
+              </div>
+              <div className="mt-3 grid gap-2 text-xs md:grid-cols-2 xl:grid-cols-5">
+                <div className={`rounded-md border px-2 py-1.5 ${desktopDiagnosticPillClass(Boolean(persistenceHealth?.persistenceAvailable))}`}>
+                  Storage: {persistenceHealth?.persistenceAvailable ? "SQLite" : "Local fallback"}
+                </div>
+                <div className={`rounded-md border px-2 py-1.5 ${persistenceLastError ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+                  Save: {saveStatusLabel}
+                </div>
+                <div className={`rounded-md border px-2 py-1.5 ${persistenceHealth?.databaseIntegrityOk === false ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
+                  Integrity: {persistenceHealth?.databaseIntegrityOk === false ? "Needs attention" : persistenceHealth?.persistenceAvailable ? "ok" : "Unavailable"}
+                </div>
+                <div className={`rounded-md border px-2 py-1.5 ${Number(persistenceHealth?.missingDocumentFileCount || 0) > 0 ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
+                  Documents: {documentHealthSummary || `${Number(currentDataStatus?.documentFileCount || 0)} files`}
+                </div>
+                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">
+                  Last saved: {formatDesktopUpdateDate(persistenceHealth?.lastSaveAt || "") || "Not yet"}
+                </div>
+              </div>
+              {persistenceRecordCountSummary ? (
+                <div className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-2 text-xs text-blue-900">
+                  SQLite records: {persistenceRecordCountSummary}
+                </div>
+              ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setShowStoragePaths((prev) => !prev)}>
+                  {showStoragePaths ? "Hide folder paths" : "Show folder paths"}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setShowRecoveryTools((prev) => !prev)}>
+                  {showRecoveryTools ? "Hide recovery tools" : "Show recovery tools"}
+                </Button>
+              </div>
+              {showStoragePaths ? (
+                persistenceHealth?.databasePath || persistenceHealth?.documentStoragePath || persistenceHealth?.backupPath ? (
+                  <div className="mt-2 grid gap-2 text-xs xl:grid-cols-3">
+                    {persistenceHealth?.databasePath ? <div className="break-all rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-600">Database: {persistenceHealth.databasePath}</div> : null}
+                    {persistenceHealth?.documentStoragePath ? <div className="break-all rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-600">Documents: {persistenceHealth.documentStoragePath}</div> : null}
+                    {persistenceHealth?.backupPath ? <div className="break-all rounded-md border border-slate-200 bg-slate-50 p-2 text-slate-600">Backups: {persistenceHealth.backupPath}</div> : null}
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+                    Open the installed desktop app to see exact database, document, and backup folders.
+                  </div>
+                )
+              ) : null}
+              {showRecoveryTools ? (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <div className="text-xs font-semibold text-amber-900">Recovery tools</div>
+                  <div className="mt-1 text-xs text-amber-900">
+                    Use these only when the visible app state looks out of sync with the local desktop database.
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={reloadDesktopPersistenceData} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
+                      <Database className="mr-2 h-4 w-4" />
+                      Reload from SQLite
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={openDesktopDataFolder} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
+                      Open data folder
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid gap-3 xl:grid-cols-[1fr_0.8fr]">
+              <div className={`${SETTINGS_CARD_CLASS} bg-white`}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Real data readiness</div>
+                    <div className="mt-0.5 text-xs text-slate-500">Current data status and first-record checks.</div>
+                  </div>
+                  <Badge variant="secondary" className={realDataBlockingCount > 0 ? "!bg-amber-100 !text-amber-800" : "!bg-emerald-100 !text-emerald-700"}>
+                    {realDataChecklist?.label || currentDataStatus?.label || "Not checked"}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Records: {Number(currentDataStatus?.counts?.total || 0)}</div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Mode: {currentDataStatus?.label || "Unknown"}</div>
+                  <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-700">
                     <input
                       type="checkbox"
                       checked={Boolean(appSettings.realDataModeEnabled)}
                       onChange={(event) => setSetting("realDataModeEnabled", event.target.checked)}
                     />
-                    <span>Real Data Mode enabled</span>
+                    <span>Real Data Mode</span>
                   </label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => setSetting("realDataModeEnabled", true)}>
-                      Start real data setup
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
-                      {restorePointBusy ? "Creating..." : "Create restore point"}
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={validateLatestBackup} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable || backupValidationBusy}>
-                      {backupValidationBusy ? "Validating..." : "Validate backup"}
-                    </Button>
-                  </div>
                 </div>
-
-                <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900">Real Data Mode / First Real Records</div>
-                      <div className="mt-1 text-xs text-slate-500">A quick calm-down checklist before entering actual rental records.</div>
-                    </div>
-                    <Badge variant="secondary" className={realDataBlockingCount > 0 ? "!bg-amber-100 !text-amber-800" : "!bg-emerald-100 !text-emerald-700"}>
-                      {realDataChecklist?.label || "Not checked"}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 space-y-2">
+                {showRealDataChecklist ? (
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
                     {(realDataChecklist?.items || []).map((item) => (
                       <div key={item.key} className="flex flex-wrap items-start justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-xs">
                         <div className="min-w-0">
@@ -1104,167 +1219,34 @@ export function SettingsWorkspace({
                       </div>
                     ))}
                   </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Database className="h-4 w-4 text-slate-600" aria-hidden="true" />
-                <Label>Backups & restore</Label>
-              </div>
-              <input ref={backupImportInputRef} type="file" accept="application/json,application/zip,.json,.zip" className="hidden" onChange={onBackupImportInputChange} />
-              <div className="mt-3 grid gap-2 text-xs md:grid-cols-2 xl:grid-cols-4">
-                <div className={`rounded-md border px-2 py-1.5 ${desktopDiagnosticPillClass(Boolean(persistenceHealth?.persistenceAvailable))}`}>
-                  Data storage: {persistenceHealth?.persistenceAvailable ? "SQLite desktop database" : "Browser/local fallback"}
-                </div>
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">
-                  Last saved: {formatDesktopUpdateDate(persistenceHealth?.lastSaveAt || "") || "Not yet"}
-                </div>
-                <div className={`rounded-md border px-2 py-1.5 ${persistenceLastError ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
-                  Save status: {saveStatusLabel}
-                </div>
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">
-                  Last backup: {formatDesktopUpdateDate(persistenceHealth?.lastBackupAt || "") || autoBackupStatusLabel}
-                </div>
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">
-                  Migration: {persistenceHealth?.migrationStatus || "Legacy-compatible"}
-                </div>
-              </div>
-              {persistenceHealth?.databasePath || persistenceHealth?.documentStoragePath ? (
-                <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-                  {persistenceHealth?.databasePath ? `Database: ${persistenceHealth.databasePath}` : ""}
-                  {persistenceHealth?.documentStoragePath ? ` | Documents: ${persistenceHealth.documentStoragePath}` : ""}
-                </div>
-              ) : null}
-              {persistenceRecordCountSummary ? (
-                <div className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-2 text-xs text-blue-900">
-                  SQLite records: {persistenceRecordCountSummary}
-                </div>
-              ) : null}
-              {persistenceHealth?.persistenceAvailable ? (
-                <div className={`mt-2 rounded-md border p-2 text-xs ${persistenceHealth.databaseIntegrityOk === false || persistenceHealth.missingDocumentFileCount > 0 || persistenceHealth.orphanDocumentFileCount > 0 ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-100 bg-emerald-50 text-emerald-800"}`}>
-                  SQLite integrity: {persistenceHealth.databaseIntegrityOk === false ? persistenceHealth.databaseIntegrityResult || "Needs attention" : "ok"}
-                  {documentHealthSummary ? ` | Documents: ${documentHealthSummary}` : ""}
-                </div>
-              ) : null}
-              <div className="mt-3 rounded-xl border border-teal-200 bg-teal-50/70 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">Beta install safety</div>
-                    <div className="mt-1 text-xs text-teal-900">
-                      The beta installer can keep using this same local data folder when the app identity stays the same.
-                    </div>
-                  </div>
-                  <Badge variant="secondary" className={persistenceHealth?.persistenceAvailable ? "!bg-teal-100 !text-teal-800" : "!bg-amber-100 !text-amber-800"}>
-                    {persistenceHealth?.persistenceAvailable ? "Data anchored" : "Check desktop app"}
-                  </Badge>
-                </div>
-                <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
-                  <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-700">
-                    1. Create restore point: {lastBackupLabel}
-                  </div>
-                  <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-700">
-                    2. Validate backup: {lastValidationLabel}
-                  </div>
-                  <div className="rounded-md border border-white bg-white px-2 py-1.5 text-slate-700">
-                    3. Confirm data folder before installing beta.
-                  </div>
-                </div>
-                {persistenceHealth?.databasePath || persistenceHealth?.documentStoragePath || persistenceHealth?.backupPath ? (
-                  <div className="mt-2 space-y-1 rounded-md border border-white bg-white p-2 text-xs text-slate-600">
-                    {persistenceHealth?.databasePath ? <div className="break-all">Database: {persistenceHealth.databasePath}</div> : null}
-                    {persistenceHealth?.documentStoragePath ? <div className="break-all">Documents: {persistenceHealth.documentStoragePath}</div> : null}
-                    {persistenceHealth?.backupPath ? <div className="break-all">Backups: {persistenceHealth.backupPath}</div> : null}
-                  </div>
                 ) : (
-                  <div className="mt-2 rounded-md border border-white bg-white p-2 text-xs text-slate-600">
-                    Open the installed desktop app to see the exact SQLite, document, and backup folders.
+                  <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-xs text-slate-600">
+                    Checklist hidden to keep backup tools compact. Open it when you are moving from sample data to real records.
                   </div>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
-                    {restorePointBusy ? "Creating..." : "Create restore point"}
+                  <Button size="sm" variant="secondary" onClick={() => setSetting("realDataModeEnabled", true)}>
+                    Start real data setup
                   </Button>
-                  <Button size="sm" variant="secondary" onClick={validateLatestBackup} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable || backupValidationBusy}>
-                    {backupValidationBusy ? "Validating..." : "Validate backup"}
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={openDesktopDataFolder} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
-                    Open data folder
+                  <Button size="sm" variant="secondary" onClick={() => setShowRealDataChecklist((prev) => !prev)}>
+                    {showRealDataChecklist ? "Hide checklist" : "Show checklist"}
                   </Button>
                 </div>
               </div>
-              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">Backup Health / Backup Validation</div>
-                    <div className="mt-1 text-xs text-slate-500">Validate the latest managed backup without restoring it.</div>
-                  </div>
-                  <Badge variant="secondary">{backupValidationResult?.label || persistenceHealth?.lastBackupValidationLabel || "Not validated"}</Badge>
+
+              <div className={`${SETTINGS_CARD_CLASS} border-amber-200 bg-amber-50/70`}>
+                <div className="flex items-center gap-2">
+                  <Archive className="h-4 w-4 text-amber-700" aria-hidden="true" />
+                  <div className="text-sm font-semibold text-slate-900">Sample data reset</div>
                 </div>
-                <div className="mt-3 grid gap-2 text-xs md:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Last backup: {formatDesktopUpdateDate(persistenceHealth?.lastBackupAt || "") || autoBackupStatusLabel}</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Backup count: {persistenceHealth?.backupCount ?? 0}</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Latest size: {Number(persistenceHealth?.mostRecentBackupSizeBytes || backupValidationResult?.mostRecentBackupSizeBytes || 0)} bytes</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Database integrity: {persistenceHealth?.databaseIntegrityOk === false ? "Needs attention" : persistenceHealth?.persistenceAvailable ? "ok" : "Unavailable"}</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Document files: {Number(persistenceHealth?.documentStorageFileCount || 0)}</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Missing document files: {Number(persistenceHealth?.missingDocumentFileCount || 0)}</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Last validation: {backupValidationResult?.label || persistenceHealth?.lastBackupValidationLabel || "Not yet"}</div>
-                  <div className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-slate-600">Validated at: {formatDesktopUpdateDate(backupValidationResult?.checkedAt || persistenceHealth?.lastBackupValidationAt || "") || "Not yet"}</div>
+                <div className="mt-2 rounded-md border border-amber-200 bg-white/80 p-2 text-xs text-amber-900">
+                  Loading Sample Duplex replaces current local app records. Create and validate a restore point first when this app contains real work.
                 </div>
-                {persistenceHealth?.backupPath ? <div className="mt-2 text-xs text-slate-500">Managed backup folder: {persistenceHealth.backupPath}</div> : null}
-                {(backupValidationResult?.warnings || []).length > 0 ? (
-                  <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{backupValidationResult.warnings.slice(0, 3).join(" ")}</div>
-                ) : null}
-                {(backupValidationResult?.errors || []).length > 0 ? (
-                  <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-900">{backupValidationResult.errors.slice(0, 3).join(" ")}</div>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button variant="secondary" className="h-9" onClick={validateLatestBackup} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable || backupValidationBusy}>
-                    {backupValidationBusy ? "Validating..." : "Validate latest backup"}
-                  </Button>
-                </div>
-              </div>
-              {persistenceLastError ? (
-                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                  Persistence warning: {persistenceLastError}
-                </div>
-              ) : null}
-              <div className={`mt-3 rounded-md border p-2 text-xs ${backupCheckpointClass}`}>
-                Before destructive data actions: last backup {lastBackupLabel}; latest validation {lastValidationLabel}. Create and validate a restore point before replacing real records.
-              </div>
-              <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                <Button variant="secondary" className="w-full" onClick={exportDataBackup} disabled={!canManageDataAdmin}>
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  Export data backup
-                </Button>
-                <Button variant="secondary" className="w-full" onClick={openBackupImportPicker} disabled={!canManageDataAdmin}>
-                  <FileText className="mr-2 h-4 w-4" />
-                  Import data backup
-                </Button>
-                <Button variant="secondary" className="w-full" onClick={exportLatestAutoBackup} disabled={!canManageDataAdmin}>
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  Export latest auto-backup
-                </Button>
-                <Button variant="secondary" className="w-full" onClick={createAutoBackupNow} disabled={!canManageDataAdmin || restorePointBusy}>
-                  <Archive className="mr-2 h-4 w-4" />
-                  {restorePointBusy ? "Creating restore point..." : "Create restore point now"}
-                </Button>
-                <Button variant="secondary" className="w-full" onClick={reloadDesktopPersistenceData} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
-                  <Archive className="mr-2 h-4 w-4" />
-                  Reload from SQLite
-                </Button>
-                <Button variant="secondary" className="w-full" onClick={openDesktopDataFolder} disabled={!canManageDataAdmin || !persistenceHealth?.persistenceAvailable}>
-                  <FolderOpen className="mr-2 h-4 w-4" />
-                  Open data folder
-                </Button>
-                <Button variant="secondary" className="w-full" onClick={loadDemoData} disabled={!canManageDataAdmin}>
+                <Button variant="secondary" className="mt-3 w-full justify-start" onClick={loadDemoData} disabled={!canManageDataAdmin}>
                   <Archive className="mr-2 h-4 w-4" />
                   Load Sample Duplex Dataset
                 </Button>
               </div>
-              <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-                The Sample Duplex dataset is fictional. Loading it replaces current local app records; export a backup first when this app contains real work.
-              </div>
-              <div className="mt-3 text-xs text-slate-500">Last auto-backup: {autoBackupStatusLabel}</div>
-              <div className="mt-1 text-xs text-slate-500">Desktop backups export as zip files with document files. Legacy JSON backups still import.</div>
             </div>
           </div>
         </SettingsSectionShell>

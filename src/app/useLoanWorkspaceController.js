@@ -306,14 +306,14 @@ export function useLoanWorkspaceController({
   };
 
   const recordLoanPayment = (selectedLoanOverride, loanSelectorValueOverride = "") => {
-    if (!requirePermission("create_edit_records", "This access profile cannot record loan payments.")) return;
+    if (!requirePermission("create_edit_records", "This access profile cannot record loan payments.")) return false;
     const loan = selectedLoanOverride
       || findLoanBySelectorValue(visibleLoanOptions, loanSelectorValueOverride)
       || findLoanBySelectorValue(visibleLoanOptions, loanPaymentDraft.loanSelectorValue)
       || findLoanById(loans, loanPaymentDraft.loanId);
     if (!loan) {
       setNotice("Select a loan first.");
-      return;
+      return false;
     }
 
     const existingPayment = editingLoanPaymentId ? loanPayments.find((item) => item.id === editingLoanPaymentId) : undefined;
@@ -378,6 +378,7 @@ export function useLoanWorkspaceController({
       mortgageInsurance,
       extraPrincipal: loan.defaultExtraPrincipal || 0,
     });
+    return true;
   };
 
   const deleteLoanPayment = (payment) => {

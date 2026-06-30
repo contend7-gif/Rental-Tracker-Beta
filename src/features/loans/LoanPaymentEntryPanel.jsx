@@ -18,6 +18,7 @@ export function LoanPaymentEntryPanel({
   propertyNameById,
   recordLoanPayment,
   resetLoanPaymentDraftForLoan,
+  onPaymentRecorded,
   setEditingLoanPaymentId,
   setIsEditingLoanPaymentTotal,
   setLoanPaymentDraft,
@@ -161,7 +162,10 @@ export function LoanPaymentEntryPanel({
             onClick={() => {
               const selectedValue = loanPickerRef.current?.value || activeLoanValue;
               const option = loanOptions.find((entry) => entry.value === selectedValue);
-              recordLoanPayment(option?.loan, selectedValue);
+              const recorded = recordLoanPayment(option?.loan, selectedValue);
+              if (recorded) {
+                onPaymentRecorded?.();
+              }
             }}
           >
             {editingLoanPaymentId ? "Save payment changes" : "Record payment"}

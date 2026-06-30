@@ -237,6 +237,7 @@ export function LoansWorkspace({
               projectedCurrentPaymentComponents={projectedCurrentPaymentComponents}
               recordLoanPayment={recordLoanPayment}
               resetLoanPaymentDraftForLoan={resetLoanPaymentDraftForLoan}
+              onPaymentRecorded={() => setPaymentPanelOpen(false)}
               setEditingLoanPaymentId={setEditingLoanPaymentId}
               setIsEditingLoanPaymentTotal={setIsEditingLoanPaymentTotal}
               setLoanPaymentDraft={setLoanPaymentDraft}

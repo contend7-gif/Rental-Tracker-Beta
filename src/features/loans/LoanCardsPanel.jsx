@@ -62,6 +62,7 @@ export function LoanCardsPanel({
           const propertySummary = propertySummaryById[loan.propertyId];
           const payments = loanPayments.filter((payment) => loanIdsMatch(payment.loanId, loan.id)).sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
           const recordedPayments = payments.filter((payment) => !asOfDate || String(payment.paymentDate || "").slice(0, 10) <= asOfDate);
+          const futurePaymentCount = Math.max(0, payments.length - recordedPayments.length);
           const reviewRecord = reviewById[loan.id];
           const expanded = expandedById[loan.id] ?? false;
           const repairInsight = reconcileLoanPaymentsAgainstSchedule({ loan, payments: recordedPayments, usePeriods, leases, units });
@@ -99,6 +100,7 @@ export function LoanCardsPanel({
                   <div className="text-xs font-medium">{paymentTiming.lastRecordedDate ? formatDate(paymentTiming.lastRecordedDate) : "No recorded payment yet"}</div>
                   {paymentTiming.nextScheduledDate ? <div className="text-[11px] text-slate-500">Next: {formatDate(paymentTiming.nextScheduledDate)}</div> : null}
                   <div className={paymentTiming.missingPayment ? "text-[11px] font-medium text-rose-700" : "text-[11px] font-medium text-emerald-700"}>{paymentTiming.status}</div>
+                  {futurePaymentCount > 0 ? <div className="text-[11px] font-medium text-blue-700">{futurePaymentCount} future {futurePaymentCount === 1 ? "payment" : "payments"} hidden by as-of date</div> : null}
                   <div className="text-[11px] text-slate-500">{ltv == null ? "LTV needs valuation" : `${ltv.toFixed(1)}% LTV`}</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">

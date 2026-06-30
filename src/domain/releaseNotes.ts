@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.2",
+    releaseDate: "2026-06-30",
+    title: "Cleaner settings and loan payment feedback",
+    summary: "Tightens the Beta settings backup workspace and makes loan payment recording give clearer success and filtered-payment feedback.",
+    changes: [
+      "Settings now combines the subtab selector and status summaries into one compact row so Data & Backup has less duplicate header space.",
+      "The Data & Backup tab keeps restore point, backup file, and storage health actions prominent while moving the real-data readiness checklist behind a Show checklist control.",
+      "Record loan payment now closes the form only after a successful save, making the action feel complete instead of leaving the panel open.",
+      "Loan cards now show when future-dated payments are hidden by the current as-of date filter, so recorded payments do not look like they disappeared.",
+    ],
+  },
+  {
     version: "1.0.1",
     releaseDate: "2026-06-27",
     title: "Fresh restore points",
