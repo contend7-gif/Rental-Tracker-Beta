@@ -317,6 +317,17 @@ export function useLoanWorkspaceController({
     }
 
     const existingPayment = editingLoanPaymentId ? loanPayments.find((item) => item.id === editingLoanPaymentId) : undefined;
+    const paymentDate = String(loanPaymentDraft.paymentDate || "").slice(0, 10);
+    const duplicatePayment = loanPayments.find((item) => (
+      item.id !== editingLoanPaymentId
+      && String(item.loanId ?? "") === String(loan.id ?? "")
+      && String(item.paymentDate || "").slice(0, 10) === paymentDate
+    ));
+    if (duplicatePayment) {
+      setNotice("A payment already exists for this loan and date. Edit or delete the existing payment first.");
+      return false;
+    }
+
     const effectiveLoan = effectiveLoanForDraft(loan, existingPayment?.id || "");
     if (Number(effectiveLoan?.currentBalance || 0) !== Number(loan.currentBalance || 0)) {
       actions.addOrUpdateLoan({
@@ -343,7 +354,7 @@ export function useLoanWorkspaceController({
     const payment = {
       ...createLoanPayment({
         loan: effectiveLoan,
-        paymentDate: loanPaymentDraft.paymentDate,
+        paymentDate,
         interest,
         principal,
         escrow,

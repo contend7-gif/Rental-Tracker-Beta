@@ -62,7 +62,8 @@ export function LoanCardsPanel({
           const propertySummary = propertySummaryById[loan.propertyId];
           const payments = loanPayments.filter((payment) => loanIdsMatch(payment.loanId, loan.id)).sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
           const recordedPayments = payments.filter((payment) => !asOfDate || String(payment.paymentDate || "").slice(0, 10) <= asOfDate);
-          const futurePaymentCount = Math.max(0, payments.length - recordedPayments.length);
+          const hiddenFuturePayments = asOfDate ? payments.filter((payment) => String(payment.paymentDate || "").slice(0, 10) > asOfDate) : [];
+          const futurePaymentCount = hiddenFuturePayments.length;
           const reviewRecord = reviewById[loan.id];
           const expanded = expandedById[loan.id] ?? false;
           const repairInsight = reconcileLoanPaymentsAgainstSchedule({ loan, payments: recordedPayments, usePeriods, leases, units });
@@ -162,6 +163,23 @@ export function LoanCardsPanel({
                             </tbody>
                           </table>
                         </div>
+                        {hiddenFuturePayments.length > 0 ? (
+                          <div className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                            <div className="font-semibold">Future payments hidden by the as-of date</div>
+                            <div className="mt-1 text-blue-800">These are saved, but excluded from balances and history through {formatDate(asOfDate)}.</div>
+                            <div className="mt-2 space-y-1">
+                              {hiddenFuturePayments.map((payment) => (
+                                <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-100 bg-white px-2 py-1.5">
+                                  <span>{formatDate(payment.paymentDate)} - {currency(payment.totalPayment)}</span>
+                                  <span className="flex items-center gap-1">
+                                    <Button size="sm" variant="ghost" onClick={() => startEditLoanPayment(payment)}>Edit</Button>
+                                    <Button size="sm" variant="ghost" onClick={() => deleteLoanPayment(payment)}>Delete</Button>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </section>
                     </div>
 

@@ -8,6 +8,17 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.3",
+    releaseDate: "2026-07-01",
+    title: "Loan payment duplicate guard",
+    summary: "Prevents accidental same-date loan payment duplicates and makes hidden future payments easier to remove.",
+    changes: [
+      "Record loan payment now blocks a second payment for the same loan and payment date, with a clear notice to edit or delete the existing payment first.",
+      "Expanded loan payment history now shows future payments hidden by the selected as-of date, including Edit and Delete actions.",
+      "A loan payment controls contract test now covers the duplicate guard and hidden-future payment cleanup affordance.",
+    ],
+  },
+  {
     version: "1.0.2",
     releaseDate: "2026-06-30",
     title: "Cleaner settings and loan payment feedback",
