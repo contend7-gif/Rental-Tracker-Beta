@@ -585,6 +585,9 @@ export function useRentalStore(auditContext: { actorName?: string; actorRole?: s
         const normalized: Vendor = {
           ...vendor,
           name: String(vendor.name || "").trim(),
+          aliases: Array.isArray(vendor.aliases)
+            ? Array.from(new Set(vendor.aliases.map((alias) => String(alias || "").trim()).filter(Boolean)))
+            : [],
           phone: formatUsPhone(vendor.phone),
           email: String(vendor.email || "").trim(),
           defaultCategory: String(vendor.defaultCategory || "").trim(),

@@ -31,6 +31,34 @@ function formatAmount(currency, value) {
   return value != null ? (currency?.(Number(value)) || String(value)) : "";
 }
 
+function normalizeComparableText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function dateLike(value) {
+  const text = String(value || "").trim();
+  return text ? text.slice(0, 10) : "";
+}
+
+function amountLike(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) / 100 : undefined;
+}
+
+function linkedDocumentTargetKey(document) {
+  if (document?.transactionId) return `transaction:${document.transactionId}`;
+  if (document?.leaseId) return `lease:${document.leaseId}`;
+  if (document?.workOrderId) return `workOrder:${document.workOrderId}`;
+  const related = Array.isArray(document?.relatedTransactionIds) ? document.relatedTransactionIds[0] : "";
+  return related ? `transaction:${related}` : "";
+}
+
 export function buildLinkedRecordSummary(document, {
   currency,
   getDocumentLinkedWorkOrder,
@@ -106,17 +134,31 @@ export function buildLinkedRecordSummary(document, {
 
 export function buildDocumentQualityWarnings(document, {
   currency,
+  duplicateCandidates = [],
   extractedFields,
   linkedTransaction,
 } = {}) {
   const warnings = [];
   if (!document) return warnings;
+  const reviewedWarningKeys = new Set(
+    (Array.isArray(document.reviewedWarningKeys) ? document.reviewedWarningKeys : [])
+      .map((key) => String(key || "").trim())
+      .filter(Boolean),
+  );
   const extractedText = normalizeExtractedDocumentText(document.extractedText || "");
   const extractedAmount = Number(extractedFields?.totalAmount ?? extractedFields?.amount ?? NaN);
   const linkedAmount = linkedTransaction ? Math.abs(Number(linkedTransaction.amount || 0)) : NaN;
 
   if (extractedFields?.confidence && extractedFields.confidence !== "high") {
     warnings.push({ key: "low_confidence", label: "Low confidence", detail: "Review extracted fields before applying changes." });
+  }
+  if (duplicateCandidates.length > 0) {
+    const firstDuplicate = duplicateCandidates[0];
+    warnings.push({
+      key: "duplicate_document",
+      label: "Possible duplicate file",
+      detail: `Looks similar to ${firstDuplicate.document?.name || "another document"}. Review before creating or linking another record.`,
+    });
   }
   if (Number.isFinite(extractedAmount) && Number.isFinite(linkedAmount) && Math.abs(extractedAmount - linkedAmount) > 0.01) {
     warnings.push({
@@ -143,5 +185,101 @@ export function buildDocumentQualityWarnings(document, {
   }) !== "reviewed") {
     warnings.push({ key: "no_text", label: "No extracted text", detail: "Run OCR or add text so this file can be searched and matched." });
   }
-  return warnings;
+  return warnings.filter((warning) => !reviewedWarningKeys.has(warning.key));
+}
+
+export function buildDocumentDuplicateCandidates(document, {
+  documents = [],
+  getDocumentExtractedFields,
+  transactionById = {},
+} = {}) {
+  if (!document || !Array.isArray(documents) || documents.length === 0) return [];
+  const currentFields = getDocumentExtractedFields?.(document) || null;
+  const currentLinkedTxn = document.transactionId ? transactionById[document.transactionId] : null;
+  const currentName = normalizeComparableText(document.name);
+  const currentVendor = normalizeComparableText(currentFields?.vendorName || currentLinkedTxn?.vendor || "");
+  const currentDate = dateLike(currentFields?.invoiceDate || currentFields?.serviceDate || currentLinkedTxn?.date || document.uploadedAt);
+  const currentAmount = amountLike(currentFields?.totalAmount ?? currentLinkedTxn?.amount);
+  const currentTargetKey = linkedDocumentTargetKey(document);
+
+  return documents
+    .filter((candidate) => candidate && candidate.id !== document.id)
+    .map((candidate) => {
+      const candidateFields = getDocumentExtractedFields?.(candidate) || null;
+      const candidateLinkedTxn = candidate.transactionId ? transactionById[candidate.transactionId] : null;
+      const reasons = [];
+      let score = 0;
+
+      const candidateTargetKey = linkedDocumentTargetKey(candidate);
+      if (currentTargetKey && candidateTargetKey && currentTargetKey === candidateTargetKey) {
+        score += 6;
+        reasons.push("same linked record");
+      }
+
+      const candidateName = normalizeComparableText(candidate.name);
+      if (currentName && candidateName && currentName === candidateName) {
+        score += 4;
+        reasons.push("same file name");
+      }
+
+      const candidateAmount = amountLike(candidateFields?.totalAmount ?? candidateLinkedTxn?.amount);
+      if (currentAmount != null && candidateAmount != null && Math.abs(currentAmount - candidateAmount) < 0.01) {
+        score += 2;
+        reasons.push("same amount");
+      }
+
+      const candidateDate = dateLike(candidateFields?.invoiceDate || candidateFields?.serviceDate || candidateLinkedTxn?.date || candidate.uploadedAt);
+      if (currentDate && candidateDate && currentDate === candidateDate) {
+        score += 2;
+        reasons.push("same date");
+      }
+
+      const candidateVendor = normalizeComparableText(candidateFields?.vendorName || candidateLinkedTxn?.vendor || "");
+      if (currentVendor && candidateVendor && (currentVendor.includes(candidateVendor) || candidateVendor.includes(currentVendor))) {
+        score += 2;
+        reasons.push("same vendor");
+      }
+
+      return {
+        document: candidate,
+        score,
+        reasons,
+      };
+    })
+    .filter((candidate) => candidate.score >= 4)
+    .sort((left, right) => right.score - left.score || String(right.document?.uploadedAt || "").localeCompare(String(left.document?.uploadedAt || "")))
+    .slice(0, 5);
+}
+
+export function buildDocumentHealthBadges(document, context = {}) {
+  if (!document) return [];
+  const warnings = context.getDocumentQualityWarnings?.(document) || [];
+  const warningBadges = warnings.map((warning) => {
+    if (warning.key === "duplicate_document") return { key: "duplicate", label: "Duplicate?", tone: "amber" };
+    if (warning.key === "amount_mismatch") return { key: "linked_mismatch", label: "Linked mismatch", tone: "amber" };
+    if (warning.key === "missing_amount") return { key: "missing_amount", label: "Missing amount", tone: "amber" };
+    if (warning.key === "missing_vendor") return { key: "missing_vendor", label: "Missing vendor", tone: "amber" };
+    if (warning.key === "missing_date") return { key: "missing_date", label: "Missing date", tone: "amber" };
+    if (warning.key === "no_text") return { key: "needs_text", label: "Needs OCR", tone: "blue" };
+    return { key: warning.key, label: warning.label || "Needs review", tone: "amber" };
+  });
+
+  const extracted = document.ocrStatus === "completed" || Boolean(String(document.extractedText || "").trim());
+  const status = getDocumentWorkflowStatus(document, context);
+  const badges = [...warningBadges];
+  if (!extracted) badges.push({ key: "needs_text_status", label: document.ocrStatus === "pending" ? "OCR pending" : "Needs OCR", tone: "blue" });
+  if (status === "needs_expense_review") badges.push({ key: "expense_draft", label: "Expense draft", tone: "emerald" });
+  if (status === "needs_work_order_review") badges.push({ key: "work_order_draft", label: "Work order draft", tone: "sky" });
+  if (context.getSafeDocumentLinkSuggestion?.(document)) badges.push({ key: "suggested_link", label: "Suggested link", tone: "indigo" });
+  if (status === "needs_attachment" && extracted) badges.push({ key: "ready_to_attach", label: "Ready to attach", tone: "teal" });
+  if (status === "reviewed") badges.push({ key: "reviewed", label: "Reviewed", tone: "slate" });
+  if (status === "supporting_only") badges.push({ key: "supporting", label: "Supporting", tone: "slate" });
+
+  const seen = new Set();
+  return badges.filter((badge) => {
+    const key = badge.key || badge.label;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 5);
 }

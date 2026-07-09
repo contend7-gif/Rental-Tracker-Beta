@@ -372,12 +372,17 @@ export function QuickAddWorkspace({
             <div className="rounded-lg border border-blue-200 bg-blue-50/80 p-3 text-sm text-blue-900">
               <div>
                 Linked document: <span className="font-medium">{pendingDocumentExpenseSource.documentName || "Document"}</span>.
-                Saving will attach this document to the transaction.
+                Saving will attach this document {pendingDocumentExpenseSource.linkMode === "related" ? "as related support" : "as the primary transaction file"}.
               </div>
               {pendingDocumentExpenseSource.confidence ? (
                 <div className="mt-1 text-xs text-blue-800">
                   {expenseSuggestionConfidenceLabel(pendingDocumentExpenseSource.confidence)}
                   {pendingDocumentExpenseSource.reasonSummary ? ` | ${pendingDocumentExpenseSource.reasonSummary}` : ""}
+                </div>
+              ) : null}
+              {pendingDocumentExpenseSource.possibleDuplicateTransaction ? (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                  Possible existing transaction: {pendingDocumentExpenseSource.possibleDuplicateTransaction.label}. Attach the document to that record instead unless this is a separate bill.
                 </div>
               ) : null}
               {pendingDocumentExpenseSource.nextDocumentName ? <div className="mt-1 text-xs text-blue-800">Next in queue: {pendingDocumentExpenseSource.nextDocumentName}</div> : null}

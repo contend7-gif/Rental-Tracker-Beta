@@ -183,6 +183,38 @@ test("inferDocumentExpenseSuggestion extracts invoice draft details from OCR tex
   assert.equal(suggestion?.propertyId, "p1");
   assert.equal(suggestion?.unit, "102");
   assert.equal(suggestion?.confidence, "high");
+  assert.ok(suggestion?.reasons?.some((reason) => reason.includes("Vendor matched")));
+  assert.ok(suggestion?.reasons?.some((reason) => reason.includes("amount")));
+});
+
+test("inferDocumentExpenseSuggestion matches saved vendor aliases", () => {
+  const suggestion = inferDocumentExpenseSuggestion({
+    document: {
+      name: "internet-bill.pdf",
+      type: "Scanned PDF",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: [
+        "Charter Communications",
+        "Statement Date 06/17/2026",
+        "Service Address 614 S Sample Ave",
+        "Service from Jun 17 - Jul 16",
+        "Amount Due $40.00",
+      ].join("\n"),
+    },
+    property: { id: "p1", name: "Sample Duplex", address: "614-616 S Sample Ave" },
+    candidateUnits: [{ propertyId: "p1", name: "614" }, { propertyId: "p1", name: "616" }],
+    candidateVendors: [
+      { id: "v1", name: "Spectrum", aliases: ["Charter Communications", "Spectrum Internet"], defaultCategory: "Utilities" },
+    ],
+  });
+
+  assert.equal(suggestion?.vendor, "Spectrum");
+  assert.equal(suggestion?.vendorId, "v1");
+  assert.equal(suggestion?.category, "Utilities");
+  assert.equal(suggestion?.servicePeriodStart, "2026-06-17");
+  assert.equal(suggestion?.servicePeriodEnd, "2026-07-16");
 });
 
 test("inferDocumentExpenseSuggestion carries utility billing periods into the draft", () => {
@@ -308,6 +340,87 @@ test("inferDocumentExpenseSuggestion uses linked work order context when OCR is 
   assert.equal(suggestion?.amount, 125.5);
   assert.equal(suggestion?.date, "2026-03-12");
   assert.equal(suggestion?.description, "Work order: Replace hallway light");
+});
+
+test("inferDocumentExpenseSuggestion extracts receipt total from card payment lines", () => {
+  const suggestion = inferDocumentExpenseSuggestion({
+    document: {
+      name: "fleet-farm-receipt.jpg",
+      type: "Receipt",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: [
+        "Fleet Farm",
+        "Store 511-078-0336",
+        "06/15/2026 20:52",
+        "Drill bit 16.49",
+        "Fasteners 20.75",
+        "Tax 2.76",
+        "VISA SALE 40.00",
+        "Approval 883021",
+      ].join("\n"),
+    },
+    property: { id: "p1", name: "Sample Duplex", address: "614 S Sample Ave" },
+    candidateVendors: [{ id: "v1", name: "Fleet Farm", defaultCategory: "Supplies" }],
+  });
+
+  assert.equal(suggestion?.vendor, "Fleet Farm");
+  assert.equal(suggestion?.amount, 40);
+  assert.equal(suggestion?.date, "2026-06-15");
+  assert.equal(suggestion?.category, "Supplies");
+});
+
+test("inferDocumentExpenseSuggestion handles compact receipt vendor OCR", () => {
+  const suggestion = inferDocumentExpenseSuggestion({
+    document: {
+      name: "receipt-photo.jpg",
+      type: "Receipt",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: [
+        "FleetFarm",
+        "Store 511-078-0336",
+        "Purchase Date: 06/15/2026",
+        "Materials 37.24",
+        "Tax 2.76",
+        "VISA SALE 40.00",
+      ].join("\n"),
+    },
+    property: { id: "p1", name: "Sample Duplex", address: "614 S Sample Ave" },
+    candidateVendors: [{ id: "v1", name: "Fleet Farm", defaultCategory: "Supplies" }],
+  });
+
+  assert.equal(suggestion?.vendor, "Fleet Farm");
+  assert.equal(suggestion?.vendorId, "v1");
+  assert.equal(suggestion?.amount, 40);
+  assert.equal(suggestion?.date, "2026-06-15");
+});
+
+test("inferDocumentExpenseSuggestion can use a clean OCR header as vendor fallback", () => {
+  const suggestion = inferDocumentExpenseSuggestion({
+    document: {
+      name: "unknown-store-receipt.jpg",
+      type: "Receipt",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: [
+        "Northside Hardware",
+        "Receipt Date: 06/15/2026",
+        "Paint supplies 31.50",
+        "Tax 1.89",
+        "Grand Total 33.39",
+      ].join("\n"),
+    },
+    property: { id: "p1", name: "Sample Duplex", address: "614 S Sample Ave" },
+  });
+
+  assert.equal(suggestion?.vendor, "Northside Hardware");
+  assert.equal(suggestion?.amount, 33.39);
+  assert.equal(suggestion?.date, "2026-06-15");
+  assert.equal(suggestion?.category, "Supplies");
 });
 
 test("inferDocumentExpenseSuggestion skips lease summary packets with rent and deposit amounts", () => {
@@ -604,6 +717,51 @@ test("inferDocumentUtilitySections extracts Spectrum-style spaced PDF labels", (
   assert.equal(suggestion?.servicePeriodEnd, "2026-06-16");
 });
 
+test("inferDocumentExpenseSuggestion does not prefer city plus generic utility vendor over Spectrum", () => {
+  const text = [
+    "Spectrum Hi, Sample Owner!",
+    "Amount Due $40",
+    "Statement Date Jun 17, 2026 Due by Jul 04",
+    "Service Address 614 S Sample Ave Sampleville, WI 53000",
+    "How It Adds Up",
+    "Service from Jun 17 - Jul 16",
+    "Spectrum Internet Premier $85",
+    "Promotional Discount -$55",
+    "Spectrum Internet Total $40",
+  ].join("\n");
+
+  const args = {
+    document: {
+      name: "Internet June 17, 2026.pdf",
+      type: "Scanned PDF",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: text,
+    },
+    property: { id: "p1", name: "S Sample Ave Duplex", address: "614-616 S Sample Ave" },
+    candidateProperties: [
+      { id: "p1", name: "S Sample Ave Duplex", address: "614-616 S Sample Ave" },
+    ],
+    candidateUnits: [{ propertyId: "p1", name: "614" }, { propertyId: "p1", name: "616" }],
+    candidateVendors: [
+      { id: "v-sampleville", name: "Sampleville Utilities", defaultCategory: "Utilities" },
+      { id: "v-spectrum", name: "Spectrum", defaultCategory: "Utilities" },
+    ],
+  };
+
+  const suggestion = inferDocumentExpenseSuggestion(args);
+  assert.equal(suggestion?.vendor, "Spectrum");
+  assert.equal(suggestion?.vendorId, "v-spectrum");
+  assert.equal(suggestion?.amount, 40);
+  assert.equal(suggestion?.servicePeriodStart, "2026-06-17");
+  assert.equal(suggestion?.servicePeriodEnd, "2026-07-16");
+
+  const tags = inferDocumentTags(args);
+  assert.ok(tags.includes("spectrum"));
+  assert.ok(!tags.includes("sampleville utilities"));
+});
+
 test("inferDocumentUtilitySections matches a ranged property address to the in-portfolio unit section", () => {
   const text = [
     "Example Gas Utility",
@@ -774,6 +932,58 @@ test("inferDocumentLinkSuggestions ranks the exact utility transaction above sta
 
   const transactionSuggestions = suggestions.filter((suggestion) => suggestion.kind === "transaction");
   assert.equal(transactionSuggestions[0]?.id, "tx-exact");
+  assert.equal(transactionSuggestions[0]?.confidence, "high");
+});
+
+test("inferDocumentLinkSuggestions matches receipt transactions posted near the OCR date", () => {
+  const suggestions = inferDocumentLinkSuggestions({
+    document: {
+      name: "fleet-farm-receipt.jpg",
+      type: "Receipt",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: [
+        "FleetFarm",
+        "Purchase Date: 06/15/2026",
+        "Materials 37.24",
+        "Tax 2.76",
+        "VISA SALE 40.00",
+      ].join("\n"),
+    },
+    property: { id: "p1", name: "Sample Duplex", address: "614 S Sample Ave" },
+    candidateProperties: [{ id: "p1", name: "Sample Duplex", address: "614 S Sample Ave" }],
+    candidateTransactions: [
+      {
+        id: "tx-old",
+        date: "2026-05-15",
+        vendor: "Fleet Farm",
+        category: "Supplies",
+        description: "Supplies",
+        unit: "Shared",
+        propertyId: "p1",
+        type: "Expense",
+        amount: 40,
+        invoiceRef: "",
+      },
+      {
+        id: "tx-posted",
+        date: "2026-06-17",
+        vendor: "Fleet Farm",
+        category: "Supplies",
+        description: "Supplies",
+        unit: "Shared",
+        propertyId: "p1",
+        type: "Expense",
+        amount: 40,
+        invoiceRef: "",
+      },
+    ],
+    candidateVendors: [{ id: "v1", name: "Fleet Farm", defaultCategory: "Supplies" }],
+  });
+
+  const transactionSuggestions = suggestions.filter((suggestion) => suggestion.kind === "transaction");
+  assert.equal(transactionSuggestions[0]?.id, "tx-posted");
   assert.equal(transactionSuggestions[0]?.confidence, "high");
 });
 

@@ -824,6 +824,9 @@ export function MaintenanceWorkspace({
                     <div className="font-medium text-slate-900">{vendor.name}</div>
                     <div>{vendor.phone || "No phone"}{vendor.email ? ` | ${vendor.email}` : ""}</div>
                     <div className="text-slate-500">{vendor.defaultCategory || "No default category"}</div>
+                    {Array.isArray(vendor.aliases) && vendor.aliases.length > 0 ? (
+                      <div className="mt-1 text-slate-500">Aliases: {vendor.aliases.join(", ")}</div>
+                    ) : null}
                     {linkedWorkOrderCount > 0 && (
                       <div className="mt-1 text-amber-700">This vendor is linked to existing work orders.</div>
                     )}
@@ -874,6 +877,7 @@ export function MaintenanceWorkspace({
               </div>
               <div className="mt-3 grid gap-2 md:grid-cols-2">
                 {field("Name", <Input value={vendorDraft.name} onChange={(e) => setVendorDraft((prev) => ({ ...prev, name: e.target.value }))} />)}
+                {field("Aliases", <Input value={vendorDraft.aliases} onChange={(e) => setVendorDraft((prev) => ({ ...prev, aliases: e.target.value }))} />)}
                 {field("Phone", <Input value={vendorDraft.phone} onChange={(e) => setVendorDraft((prev) => ({ ...prev, phone: formatUsPhone(e.target.value) }))} />)}
                 {field("Email", <Input value={vendorDraft.email} onChange={(e) => setVendorDraft((prev) => ({ ...prev, email: e.target.value }))} />)}
                 {field("Default category", <Input value={vendorDraft.defaultCategory} onChange={(e) => setVendorDraft((prev) => ({ ...prev, defaultCategory: e.target.value }))} />)}

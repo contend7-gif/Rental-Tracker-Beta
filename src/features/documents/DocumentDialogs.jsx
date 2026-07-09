@@ -121,8 +121,19 @@ export function DocumentImportDialog({
   const hasExpenseDraft = Boolean(documentImportExpenseSuggestion);
   const hasWorkOrderDraft = Boolean(documentImportWorkOrderSuggestion);
   const isPropertyDocumentImport = String(documentImportDraft?.tags || "").toLowerCase().split(",").map((tag) => tag.trim()).includes("property");
+  const bestTransactionLinkSuggestion = documentImportLinkSuggestions.find((suggestion) => suggestion.kind === "transaction" && suggestion.confidence === "high") || null;
+  const readyUtilitySectionCount = documentImportUtilitySections.filter((section) => (
+    !section.external &&
+    section.propertyId &&
+    section.amount != null &&
+    section.date
+  )).length;
   const readyToFinish = hasExpenseDraft || hasWorkOrderDraft || documentImportDraft.linkType !== "none" || hasText;
-  const nextActionLabel = hasExpenseDraft
+  const nextActionLabel = bestTransactionLinkSuggestion
+    ? "Link matched transaction"
+    : readyUtilitySectionCount > 1
+      ? "Create related utility transactions"
+    : hasExpenseDraft
     ? "Save transaction and attach document"
     : hasWorkOrderDraft
       ? "Save and review work order draft"
@@ -302,6 +313,11 @@ export function DocumentImportDialog({
             {documentImportLinkSuggestions.length > 0 && (
               <div>
                 <div className="font-medium text-slate-700">Suggested links</div>
+                {bestTransactionLinkSuggestion ? (
+                  <div className="mt-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-900">
+                    Best match is an existing transaction. Save the upload and link it instead of creating another ledger entry.
+                  </div>
+                ) : null}
                 <div className="mt-2 space-y-2">
                   {documentImportLinkSuggestions.slice(0, 3).map((suggestion) => (
                     <div key={`import-${suggestion.kind}-${suggestion.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2 py-1.5">
@@ -328,10 +344,16 @@ export function DocumentImportDialog({
                 <div className="font-medium text-slate-700">Detected utility sections</div>
                 <div className="mt-1 text-slate-600">
                   {documentImportUtilitySections.length > 1
-                    ? "This OCR text looks like multiple utility sections in one document. Review the matched section before saving the transaction."
+                    ? "This OCR text looks like multiple utility sections in one document. Create related transactions for matched sections, or review a single section first."
                     : "One utility section was detected from OCR text."}
                 </div>
-                <DocumentUtilitySectionsPanel sections={documentImportUtilitySections} className="mt-2" currency={currency} onReviewSection={(section) => saveImportedDocument({ reviewUtilitySection: section })} />
+                <DocumentUtilitySectionsPanel
+                  sections={documentImportUtilitySections}
+                  className="mt-2"
+                  currency={currency}
+                  onCreateReadySections={bestTransactionLinkSuggestion ? null : () => saveImportedDocument({ createUtilitySectionTransactions: true })}
+                  onReviewSection={(section) => saveImportedDocument({ reviewUtilitySection: section })}
+                />
               </div>
             )}
             {documentImportExpenseSuggestion && (
@@ -348,7 +370,13 @@ export function DocumentImportDialog({
                   {documentImportExpenseSuggestion.servicePeriodStart && documentImportExpenseSuggestion.servicePeriodEnd ? ` | Period ${documentImportExpenseSuggestion.servicePeriodStart} to ${documentImportExpenseSuggestion.servicePeriodEnd}` : ""}
                 </div>
                 <div className="mt-1 text-slate-600">{documentImportExpenseSuggestion.description}</div>
-                <div className="mt-1 rounded border border-blue-100 bg-blue-50/70 px-2 py-1 text-blue-800">Next step: review the transaction draft, then save transaction and attach document. The file will not need a second manual attach.</div>
+                {bestTransactionLinkSuggestion ? (
+                  <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
+                    Possible duplicate: {bestTransactionLinkSuggestion.label}. Use the matched transaction link unless this bill should create a separate transaction.
+                  </div>
+                ) : (
+                  <div className="mt-1 rounded border border-blue-100 bg-blue-50/70 px-2 py-1 text-blue-800">Next step: review the transaction draft, then save transaction and attach document. The file will not need a second manual attach.</div>
+                )}
               </div>
             )}
             {documentImportWorkOrderSuggestion && (
@@ -376,17 +404,27 @@ export function DocumentImportDialog({
           </section>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
+          {bestTransactionLinkSuggestion ? (
+            <Button onClick={saveImportedDocument} disabled={documentImportOcrBusy}>
+              Save upload and link matched transaction
+            </Button>
+          ) : null}
+          {!bestTransactionLinkSuggestion && readyUtilitySectionCount > 1 ? (
+            <Button onClick={() => saveImportedDocument({ createUtilitySectionTransactions: true })} disabled={documentImportOcrBusy}>
+              Save and create related utility transactions
+            </Button>
+          ) : null}
           {documentImportExpenseSuggestion ? (
-            <Button onClick={() => saveImportedDocument({ reviewExpenseDraft: true })} disabled={documentImportOcrBusy}>
+            <Button variant={bestTransactionLinkSuggestion || readyUtilitySectionCount > 1 ? "secondary" : undefined} onClick={() => saveImportedDocument({ reviewExpenseDraft: true })} disabled={documentImportOcrBusy}>
               Save transaction and attach document
             </Button>
           ) : null}
           {documentImportWorkOrderSuggestion ? (
-            <Button variant={documentImportExpenseSuggestion ? "secondary" : undefined} onClick={() => saveImportedDocument({ reviewWorkOrderDraft: true })} disabled={documentImportOcrBusy}>
+            <Button variant={bestTransactionLinkSuggestion || documentImportExpenseSuggestion ? "secondary" : undefined} onClick={() => saveImportedDocument({ reviewWorkOrderDraft: true })} disabled={documentImportOcrBusy}>
               Save and review work order draft
             </Button>
           ) : null}
-          <Button variant={documentImportExpenseSuggestion || documentImportWorkOrderSuggestion ? "secondary" : undefined} onClick={saveImportedDocument} disabled={documentImportOcrBusy}>
+          <Button variant={bestTransactionLinkSuggestion || documentImportExpenseSuggestion || documentImportWorkOrderSuggestion ? "secondary" : undefined} onClick={saveImportedDocument} disabled={documentImportOcrBusy}>
             {isPropertyDocumentImport ? "Save property document" : "Save upload only"}
           </Button>
           <Button variant="secondary" onClick={closeDocumentImportDialog}>Cancel</Button>
@@ -406,6 +444,7 @@ export function DocumentPreviewDialog({
   documentAiBusyById,
   onOpenChange,
   open,
+  createExpenseTransactionsFromUtilitySections,
   openDocumentExternally,
   openExpenseDraftFromUtilitySection,
   runDocumentAiAnalysis,
@@ -455,7 +494,13 @@ export function DocumentPreviewDialog({
                     ? "This document contains multiple utility sections. Review each matched section separately."
                     : "One utility section was detected from OCR text."}
                 </div>
-                <DocumentUtilitySectionsPanel sections={selectedDocumentUtilitySections} className="mt-2" currency={currency} onReviewSection={(section) => openExpenseDraftFromUtilitySection(selectedDocument, section)} />
+                <DocumentUtilitySectionsPanel
+                  sections={selectedDocumentUtilitySections}
+                  className="mt-2"
+                  currency={currency}
+                  onCreateReadySections={(sections) => createExpenseTransactionsFromUtilitySections?.(selectedDocument, sections)}
+                  onReviewSection={(section) => openExpenseDraftFromUtilitySection(selectedDocument, section)}
+                />
               </div>
             )}
             <DocumentFilePreview document={selectedDocument} openDocumentExternally={openDocumentExternally} />

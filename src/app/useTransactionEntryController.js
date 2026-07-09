@@ -287,8 +287,8 @@ export function useTransactionEntryController({
         ];
         actions.updateDocument(pendingDocumentExpenseSource.documentId, {
           relatedTransactionIds,
-          propertyId: sourceDocument?.propertyId || txn.propertyId,
-          unit: sourceDocument?.unit || txn.unit,
+          propertyId: txn.propertyId,
+          unit: txn.unit,
         });
       } else {
         actions.updateDocument(pendingDocumentExpenseSource.documentId, {

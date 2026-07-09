@@ -549,6 +549,7 @@ export function useDocumentReviewModel({
     focusedExpenseQueueDocumentId,
     getDocumentExpenseSuggestion,
     getDocumentExtractedFields,
+    getDocumentImportLinkSuggestions,
     getDocumentImportSuggestedTags,
     getDocumentLinkSuggestions,
     getDocumentLinkedWorkOrder,

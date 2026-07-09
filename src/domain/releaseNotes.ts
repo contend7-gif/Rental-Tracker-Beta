@@ -8,6 +8,17 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.4",
+    releaseDate: "2026-07-08",
+    title: "Smarter document OCR review",
+    summary: "Improves OCR bill suggestions, receipt matching, review warnings, and Documents cleanup workflows.",
+    changes: [
+      "Spectrum and other utility bills now match saved vendors and linked transactions more reliably, with service periods and shared/unit scopes carried into reviewed drafts.",
+      "Receipt OCR now handles card-payment totals, compact store names, and near-date bank posting matches so documents attach to the right expense more often.",
+      "Documents now has a review fix panel, health badges, grouping controls, duplicate checks, and a Missing Receipts tab for attaching candidate support to transaction gaps.",
+    ],
+  },
+  {
     version: "1.0.3",
     releaseDate: "2026-07-01",
     title: "Loan payment duplicate guard",

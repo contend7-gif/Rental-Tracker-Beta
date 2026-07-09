@@ -10,6 +10,7 @@ import { FileCheck2, FileWarning, Inbox, Link2, ReceiptText, Upload, Wrench } fr
 import { DocumentCard } from "./DocumentCard.jsx";
 import { DocumentReviewDialog } from "./DocumentReviewDialog.jsx";
 import {
+  buildDocumentDuplicateCandidates,
   buildDocumentQualityWarnings,
   buildLinkedRecordSummary,
   isSupportingOnlyDocument,
@@ -18,6 +19,7 @@ import {
   SUPPORTING_ONLY_TAG,
   isDocumentReviewed,
 } from "./documentWorkflow.js";
+import { selectDocumentsForWorkspaceTab } from "./documentWorkspaceFilters.js";
 
 const DOCUMENT_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
 const DOCUMENT_STAT_ICON_TONES = {
@@ -28,6 +30,47 @@ const DOCUMENT_STAT_ICON_TONES = {
   linked: "border-indigo-200 bg-indigo-50 text-indigo-700",
   supporting: "border-teal-200 bg-teal-50 text-teal-700",
 };
+
+function normalizeDocumentMatchText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function amountLike(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) / 100 : undefined;
+}
+
+function isoDayDiff(left, right) {
+  if (!left || !right) return Number.POSITIVE_INFINITY;
+  const leftTime = Date.parse(`${String(left).slice(0, 10)}T00:00:00Z`);
+  const rightTime = Date.parse(`${String(right).slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return Number.POSITIVE_INFINITY;
+  return Math.abs(Math.round((leftTime - rightTime) / 86400000));
+}
+
+function documentGroupLabel(document, mode, context) {
+  if (mode === "workflow") return context.workflowLabel(document);
+  if (mode === "property") return context.propertyLabel(document);
+  if (mode === "vendor") return context.vendorLabel(document);
+  if (mode === "month") return context.monthLabel(document);
+  return "";
+}
+
+function groupDocumentsForDisplay(documents, mode, context) {
+  if (mode === "none") return [{ label: "", documents }];
+  const groups = new Map();
+  documents.forEach((document) => {
+    const label = documentGroupLabel(document, mode, context) || "Unsorted";
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(document);
+  });
+  return [...groups.entries()].map(([label, groupedDocuments]) => ({ label, documents: groupedDocuments }));
+}
 
 function DocumentStatIcon({ icon: Icon, tone }) {
   return (
@@ -51,6 +94,7 @@ export function DocumentsWorkspace({
   canAutoCreateWorkOrderFromSuggestion,
   canReviewDocuments,
   confirmAndDeleteDocument,
+  createExpenseTransactionsFromUtilitySections,
   currency,
   describeDocumentOwnership,
   dismissDocumentExpenseReview,
@@ -87,6 +131,8 @@ export function DocumentsWorkspace({
   getSafeDocumentTagSuggestions,
   leaseById = {},
   leases,
+  markDocumentWarningsReviewed,
+  updateLinkedTransactionFromDocumentOcr,
   markVisibleDocumentsPendingOcr,
   onDocumentImportInputChange,
   openDocumentImportPicker,
@@ -117,6 +163,7 @@ export function DocumentsWorkspace({
   setDocumentStatusFilter,
   setExpenseQueueShowDismissed,
   transactionById = {},
+  transactionReviewInbox = [],
   transactions,
   visibleAutomaticOcrDocuments,
   visibleDocuments,
@@ -129,6 +176,7 @@ export function DocumentsWorkspace({
   propertyNameById,
 }) {
   const [documentsTab, setDocumentsTab] = useState("inbox");
+  const [documentGroupMode, setDocumentGroupMode] = useState("none");
   const [reviewDocument, setReviewDocument] = useState(null);
 
   const getDocumentLinkedSummary = (document) => {
@@ -142,9 +190,14 @@ export function DocumentsWorkspace({
 
   const getDocumentQualityWarnings = useCallback((document) => buildDocumentQualityWarnings(document, {
     currency,
+    duplicateCandidates: buildDocumentDuplicateCandidates(document, {
+      documents: filteredDocuments,
+      getDocumentExtractedFields,
+      transactionById,
+    }),
     extractedFields: getDocumentExtractedFields(document),
     linkedTransaction: document?.transactionId ? transactionById[document.transactionId] : null,
-  }), [currency, getDocumentExtractedFields, transactionById]);
+  }), [currency, filteredDocuments, getDocumentExtractedFields, transactionById]);
 
   const workflowContext = useMemo(() => ({
     currency,
@@ -235,20 +288,119 @@ export function DocumentsWorkspace({
     () => visibleDocuments.filter((document) => isSupportingOnlyDocument(document)),
     [visibleDocuments],
   );
-  const documentsForTab = documentsTab === "reviewed"
-    ? reviewedDocuments
-    : documentsTab === "all"
-      ? visibleDocuments
-      : documentsTab === "needs_review"
-        ? needsReviewDocuments
-        : documentsTab === "linked"
-          ? linkedDocuments
-          : documentsTab === "supporting"
-            ? supportingDocuments
-            : inboxDocuments;
+  const documentsForTab = selectDocumentsForWorkspaceTab({
+    documentStatusFilter,
+    documentsTab,
+    inboxDocuments,
+    linkedDocuments,
+    needsReviewDocuments,
+    reviewedDocuments,
+    supportingDocuments,
+    visibleDocuments,
+  });
+  const documentGroupContext = useMemo(() => ({
+    monthLabel: (document) => {
+      const fields = getDocumentExtractedFields(document);
+      const date = fields?.invoiceDate || fields?.serviceDate || document.documentDate || document.date || document.uploadedAt || "";
+      return date ? String(date).slice(0, 7) : "No date";
+    },
+    propertyLabel: (document) => propertyNameById[document.propertyId] || document.propertyId || "No property",
+    vendorLabel: (document) => {
+      const fields = getDocumentExtractedFields(document);
+      const suggestion = getDocumentExpenseSuggestion(document);
+      const linkedTxn = document.transactionId ? transactionById[document.transactionId] : null;
+      return fields?.vendorName || suggestion?.vendor || linkedTxn?.vendor || "No vendor";
+    },
+    workflowLabel: (document) => {
+      const status = workflowContext.getDocumentQualityWarnings(document).length > 0
+        ? "Needs review"
+        : workflowContext.hasSafeSuggestion(document)
+          ? "Suggestions"
+          : buildLinkedRecordSummary(document, { currency, getDocumentLinkedWorkOrder, leaseById, transactionById })?.kind === "transaction"
+            ? "Linked"
+            : isDocumentReviewed(document, workflowContext)
+              ? "Reviewed"
+              : "Inbox";
+      return status;
+    },
+  }), [currency, getDocumentExpenseSuggestion, getDocumentExtractedFields, getDocumentLinkedWorkOrder, leaseById, propertyNameById, transactionById, workflowContext]);
+
+  const missingReceiptRecords = useMemo(() => {
+    const gapRecords = transactionReviewInbox.filter((record) => record.issues?.some((issue) => issue.key === "missing_receipt"));
+    return gapRecords.map((record) => {
+      const transaction = record.transaction;
+      const transactionAmount = amountLike(transaction?.amount);
+      const transactionText = normalizeDocumentMatchText([transaction?.vendor, transaction?.category, transaction?.description].filter(Boolean).join(" "));
+      const candidates = filteredDocuments
+        .filter((document) => {
+          if (!document || document.transactionId === transaction.id) return false;
+          if (Array.isArray(document.relatedTransactionIds) && document.relatedTransactionIds.includes(transaction.id)) return false;
+          return true;
+        })
+        .map((document) => {
+          const fields = getDocumentExtractedFields(document);
+          const suggestion = getDocumentExpenseSuggestion(document);
+          const linkSuggestion = getDocumentLinkSuggestions(document).find((suggestedLink) => suggestedLink.kind === "transaction" && suggestedLink.id === transaction.id);
+          const documentAmount = amountLike(fields?.totalAmount ?? suggestion?.amount);
+          const documentDate = fields?.invoiceDate || fields?.serviceDate || suggestion?.date || document.documentDate || document.date || document.uploadedAt || "";
+          const documentText = normalizeDocumentMatchText([document.name, document.type, document.extractedText, fields?.vendorName, suggestion?.vendor].filter(Boolean).join(" "));
+          let score = linkSuggestion ? 100 : 0;
+          const reasons = [];
+          if (linkSuggestion) reasons.push("suggested link");
+          if (transactionAmount != null && documentAmount != null && Math.abs(transactionAmount - documentAmount) < 0.01) {
+            score += 35;
+            reasons.push("same amount");
+          }
+          const dayDiff = isoDayDiff(transaction.date, documentDate);
+          if (dayDiff <= 3) {
+            score += 25;
+            reasons.push(dayDiff === 0 ? "same date" : "near date");
+          } else if (documentDate && transaction.date && String(documentDate).slice(0, 7) === String(transaction.date).slice(0, 7)) {
+            score += 10;
+            reasons.push("same month");
+          }
+          if (transaction.propertyId && document.propertyId && transaction.propertyId === document.propertyId) {
+            score += 15;
+            reasons.push("same property");
+          }
+          if (normalizeDocumentMatchText(transaction.unit || "Shared") === normalizeDocumentMatchText(document.unit || "Shared")) {
+            score += 8;
+            reasons.push("same unit");
+          }
+          if (transactionText && documentText && transactionText.split(" ").filter((word) => word.length >= 4).some((word) => documentText.includes(word))) {
+            score += 12;
+            reasons.push("text match");
+          }
+          return { document, reasons, score };
+        })
+        .filter((candidate) => candidate.score >= 25)
+        .sort((left, right) => right.score - left.score)
+        .slice(0, 3);
+      return { ...record, candidates };
+    });
+  }, [filteredDocuments, getDocumentExpenseSuggestion, getDocumentExtractedFields, getDocumentLinkSuggestions, transactionReviewInbox]);
+
+  const attachDocumentToReceiptGap = (transaction, document) => {
+    applyDocumentLinkSuggestion(document, {
+      kind: "transaction",
+      id: transaction.id,
+      label: `${transaction.date || "No date"} | ${transaction.vendor || transaction.category || transaction.description || "Transaction"}${transaction.unit ? ` | Unit ${transaction.unit}` : ""}`,
+      propertyId: transaction.propertyId,
+      unit: transaction.unit,
+      confidence: "high",
+      sources: ["context"],
+    });
+  };
   const currentReviewDocument = reviewDocument
     ? visibleDocuments.find((document) => document.id === reviewDocument.id) || reviewDocument
     : null;
+  const currentReviewDuplicateCandidates = currentReviewDocument
+    ? buildDocumentDuplicateCandidates(currentReviewDocument, {
+        documents: filteredDocuments,
+        getDocumentExtractedFields,
+        transactionById,
+      })
+    : [];
   const nextInboxDocument = currentReviewDocument
     ? inboxDocuments.find((document) => document.id !== currentReviewDocument.id) || null
     : inboxDocuments[0] || null;
@@ -302,6 +454,31 @@ export function DocumentsWorkspace({
     if (action.key === "supporting_only") return markSupportingOnly(document);
     if (action.key === "remove") return confirmAndDeleteDocument(document);
     return setReviewDocument(document);
+  };
+
+  const renderDocumentCards = (documents) => {
+    const groups = groupDocumentsForDisplay(documents, documentGroupMode, documentGroupContext);
+    return groups.map((group) => (
+      <div key={`document-group-${group.label || "all"}`} className="space-y-2">
+        {group.label ? (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <div className="text-sm font-semibold text-slate-900">{group.label}</div>
+            <Badge variant="secondary">{group.documents.length}</Badge>
+          </div>
+        ) : null}
+        {group.documents.map((document) => (
+          <DocumentCard
+            key={document.id}
+            document={document}
+            context={workflowContext}
+            propertyLabel={propertyNameById[document.propertyId] || document.propertyId}
+            ownershipLabel={describeDocumentOwnership(document)}
+            onPrimaryAction={runAction}
+            onSecondaryAction={runAction}
+          />
+        ))}
+      </div>
+    ));
   };
 
   return (
@@ -492,7 +669,7 @@ export function DocumentsWorkspace({
         ) : null}
 
         <div className={WORKSPACE_FILTER_PANEL_CLASS}>
-          <div className="grid gap-2 md:grid-cols-3">
+          <div className="grid gap-2 md:grid-cols-4">
             <div>
               <Label className="text-xs text-slate-600">Search</Label>
               <Input className="mt-1" placeholder="Search files, tags, extracted text, tenant, vendor, work order, property, or unit" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} />
@@ -527,6 +704,19 @@ export function DocumentsWorkspace({
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label className="text-xs text-slate-600">Group</Label>
+              <Select value={documentGroupMode} onValueChange={setDocumentGroupMode}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No grouping</SelectItem>
+                  <SelectItem value="workflow">Workflow</SelectItem>
+                  <SelectItem value="vendor">Vendor</SelectItem>
+                  <SelectItem value="property">Property</SelectItem>
+                  <SelectItem value="month">Month</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -536,6 +726,7 @@ export function DocumentsWorkspace({
             <TabsTrigger value="inbox">Inbox ({inboxDocuments.length})</TabsTrigger>
             <TabsTrigger value="needs_review"><FileWarning className="mr-1 h-3.5 w-3.5 text-amber-700" />Needs Review ({needsReviewDocuments.length})</TabsTrigger>
             <TabsTrigger value="linked"><Link2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Linked ({linkedDocuments.length})</TabsTrigger>
+            <TabsTrigger value="receipt_gaps">Missing Receipts ({missingReceiptRecords.length})</TabsTrigger>
             <TabsTrigger value="supporting"><FileCheck2 className="mr-1 h-3.5 w-3.5 text-emerald-700" />Supporting ({supportingDocuments.length})</TabsTrigger>
             <TabsTrigger value="reviewed">Reviewed ({reviewedDocuments.length})</TabsTrigger>
             <TabsTrigger value="all">All Files ({visibleDocuments.length})</TabsTrigger>
@@ -559,20 +750,53 @@ export function DocumentsWorkspace({
                             : "No documents match the current search."}
                 </div>
               ) : (
-                documentsForTab.map((document) => (
-                  <DocumentCard
-                    key={document.id}
-                    document={document}
-                    context={workflowContext}
-                    propertyLabel={propertyNameById[document.propertyId] || document.propertyId}
-                    ownershipLabel={describeDocumentOwnership(document)}
-                    onPrimaryAction={runAction}
-                    onSecondaryAction={runAction}
-                  />
-                ))
+                renderDocumentCards(documentsForTab)
               )}
             </TabsContent>
           ))}
+          <TabsContent value="receipt_gaps" className="space-y-2">
+            {missingReceiptRecords.length === 0 ? (
+              <div className={DOCUMENT_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>No transactions are missing receipt support in the current review set.</div>
+            ) : (
+              missingReceiptRecords.map((record) => (
+                <div key={`receipt-gap-${record.transaction.id}`} className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-900">
+                        {record.transaction.date || "No date"} | {record.transaction.vendor || record.transaction.category || record.transaction.description || "Transaction"}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-600">
+                        {[record.transaction.category, record.transaction.amount != null ? currency(record.transaction.amount) : "", record.transaction.unit || "Shared"].filter(Boolean).join(" | ")}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={() => openDocumentLinkedRecord({ transactionId: record.transaction.id }, "transaction")}>
+                      Open transaction
+                    </Button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {record.candidates.length > 0 ? (
+                      record.candidates.map((candidate) => (
+                        <div key={`receipt-gap-${record.transaction.id}-${candidate.document.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-slate-900">{candidate.document.name}</div>
+                            <div className="mt-0.5 text-xs text-slate-600">{candidate.reasons.join(", ") || "possible support match"}</div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => setReviewDocument(candidate.document)}>Review</Button>
+                            <Button size="sm" onClick={() => attachDocumentToReceiptGap(record.transaction, candidate.document)}>Attach</Button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded border border-dashed border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
+                        No document candidates found for this transaction.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </TabsContent>
         </Tabs>
 
         <DocumentReviewDialog
@@ -591,6 +815,8 @@ export function DocumentsWorkspace({
           documentTagSuggestionSourceLabel={documentTagSuggestionSourceLabel}
           expenseSuggestionConfidenceLabel={expenseSuggestionConfidenceLabel}
           expenseSuggestionReasonSummary={expenseSuggestionReasonSummary}
+          createExpenseTransactionsFromUtilitySections={createExpenseTransactionsFromUtilitySections}
+          duplicateCandidates={currentReviewDuplicateCandidates}
           getDocumentExpenseSuggestion={getDocumentExpenseSuggestion}
           getDocumentExtractedFields={getDocumentExtractedFields}
           getDocumentLinkSuggestions={getDocumentLinkSuggestions}
@@ -610,6 +836,9 @@ export function DocumentsWorkspace({
           queueDocumentForOcr={queueDocumentForOcr}
           reopenDocumentExpenseReview={reopenDocumentExpenseReview}
           reopenDocumentWorkOrderReview={reopenDocumentWorkOrderReview}
+          markDocumentWarningsReviewed={markDocumentWarningsReviewed}
+          updateLinkedTransactionFromDocumentOcr={updateLinkedTransactionFromDocumentOcr}
+          onReviewDuplicateDocument={(duplicateDocument) => duplicateDocument && setReviewDocument(duplicateDocument)}
           removeDocumentRecordLink={removeDocumentRecordLink}
           runDocumentAiAnalysis={runDocumentAiAnalysis}
           saveDocumentExtractedText={saveDocumentExtractedText}

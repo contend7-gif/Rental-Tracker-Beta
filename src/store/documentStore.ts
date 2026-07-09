@@ -31,6 +31,8 @@ export function normalizeDocument(document: DocumentItem): DocumentItem {
   const dataUrl = String(document.dataUrl || "").trim();
   const extractedText = String(document.extractedText || "").trim();
   const ocrStatus = normalizeDocumentOcrStatus(document.ocrStatus, extractedText);
+  const reviewedWarningKeys = normalizeDocumentTags(document.reviewedWarningKeys);
+  const reviewedWarningsAt = String(document.reviewedWarningsAt || "").trim();
   const expenseReviewDismissedAt = String(document.expenseReviewDismissedAt || "").trim();
   const workOrderReviewDismissedAt = String(document.workOrderReviewDismissedAt || "").trim();
   const aiAnalysis = normalizeDocumentAiAnalysis(document.aiAnalysis);
@@ -53,6 +55,8 @@ export function normalizeDocument(document: DocumentItem): DocumentItem {
     tags: normalizeDocumentTags(document.tags),
     extractedText: extractedText || undefined,
     ocrStatus,
+    reviewedWarningKeys: reviewedWarningKeys.length > 0 ? reviewedWarningKeys : undefined,
+    reviewedWarningsAt: reviewedWarningsAt || undefined,
     expenseReviewDismissedAt: transactionId ? undefined : (expenseReviewDismissedAt || undefined),
     workOrderReviewDismissedAt: workOrderId ? undefined : (workOrderReviewDismissedAt || undefined),
     aiAnalysis,

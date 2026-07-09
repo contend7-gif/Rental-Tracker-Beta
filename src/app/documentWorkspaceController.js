@@ -37,6 +37,7 @@ export function createDocumentWorkspaceController({
   formatDocumentTags,
   getDocumentExpenseSuggestion,
   getDocumentExtractedFields,
+  getDocumentImportLinkSuggestions,
   getDocumentImportSuggestedTags,
   getDocumentLinkSuggestions,
   getDocumentLinkedWorkOrder,
@@ -85,6 +86,7 @@ export function createDocumentWorkspaceController({
   suggestDocumentType,
   todayIso,
   transactionById,
+  transactions,
   transactionVendorMemories,
   txnAttachmentInputRef,
   unitFilter,
@@ -199,6 +201,8 @@ export function createDocumentWorkspaceController({
         actions.updateDocument(document.id, {
           extractedText: normalizedText,
           ocrStatus: "completed",
+          reviewedWarningKeys: undefined,
+          reviewedWarningsAt: undefined,
           expenseReviewDismissedAt: undefined,
           workOrderReviewDismissedAt: undefined,
         });
@@ -478,13 +482,19 @@ export function createDocumentWorkspaceController({
     const nextFields = {};
     if (suggestion.kind === "lease") {
       nextFields.leaseId = suggestion.id;
+      nextFields.reviewedWarningKeys = undefined;
+      nextFields.reviewedWarningsAt = undefined;
       nextFields.expenseReviewDismissedAt = undefined;
       nextFields.workOrderReviewDismissedAt = undefined;
     } else if (suggestion.kind === "transaction") {
       nextFields.transactionId = suggestion.id;
+      nextFields.reviewedWarningKeys = undefined;
+      nextFields.reviewedWarningsAt = undefined;
       nextFields.expenseReviewDismissedAt = undefined;
     } else {
       nextFields.workOrderId = suggestion.id;
+      nextFields.reviewedWarningKeys = undefined;
+      nextFields.reviewedWarningsAt = undefined;
       nextFields.workOrderReviewDismissedAt = undefined;
     }
     if (suggestion.propertyId) nextFields.propertyId = suggestion.propertyId;
@@ -550,12 +560,23 @@ export function createDocumentWorkspaceController({
       return;
     }
 
-    const linkedLease = documentImportDraft.linkType === "lease" ? leaseById[documentImportDraft.linkedId] : null;
-    const linkedTxn = documentImportDraft.linkType === "transaction" ? transactionById[documentImportDraft.linkedId] : null;
-    const linkedWorkOrder = documentImportDraft.linkType === "workOrder" ? workOrderById[documentImportDraft.linkedId] : null;
+    const extractedText = normalizeExtractedDocumentText(documentImportDraft.extractedText);
+    const autoLinkSuggestion =
+      documentImportDraft.linkType === "none" &&
+      !options.reviewUtilitySection &&
+      !options.reviewExpenseDraft &&
+      !options.reviewWorkOrderDraft
+        ? getDocumentImportLinkSuggestions?.(documentImportDraft, extractedText).find((suggestion) => suggestion.confidence === "high") || null
+        : null;
+    const effectiveLinkType = autoLinkSuggestion
+      ? (autoLinkSuggestion.kind === "workOrder" ? "workOrder" : autoLinkSuggestion.kind)
+      : documentImportDraft.linkType;
+    const effectiveLinkedId = autoLinkSuggestion?.id || documentImportDraft.linkedId;
+    const linkedLease = effectiveLinkType === "lease" ? leaseById[effectiveLinkedId] : null;
+    const linkedTxn = effectiveLinkType === "transaction" ? transactionById[effectiveLinkedId] : null;
+    const linkedWorkOrder = effectiveLinkType === "workOrder" ? workOrderById[effectiveLinkedId] : null;
     const nextPropertyId = linkedLease?.propertyId || linkedTxn?.propertyId || linkedWorkOrder?.propertyId || documentImportDraft.propertyId;
     const nextUnit = linkedLease?.unit || linkedTxn?.unit || linkedWorkOrder?.unit || documentImportDraft.unit || "Shared";
-    const extractedText = normalizeExtractedDocumentText(documentImportDraft.extractedText);
     const ocrStatus = normalizeDocumentOcrStatus(documentImportDraft.ocrStatus, extractedText);
 
     if (!nextPropertyId) {
@@ -588,12 +609,16 @@ export function createDocumentWorkspaceController({
       propertyId: nextPropertyId,
       unit: nextUnit,
       summary: ocrStatus === "completed" ? `Imported ${name} with searchable text.` : `Imported ${name} for OCR review.`,
-      details: `Type ${type} | Link ${documentImportDraft.linkType || "none"}.`,
+      details: `Type ${type} | Link ${effectiveLinkType || "none"}.`,
       category: "document",
     });
     closeDocumentImportDialog();
     if (options.reviewUtilitySection) {
       openExpenseDraftFromDocument(importedDocument, options.reviewUtilitySection, { linkMode: "related" });
+      return;
+    }
+    if (options.createUtilitySectionTransactions) {
+      createExpenseTransactionsFromUtilitySections(importedDocument, getDocumentUtilitySections(importedDocument));
       return;
     }
     if (options.reviewExpenseDraft && documentImportExpenseSuggestion) {
@@ -604,7 +629,11 @@ export function createDocumentWorkspaceController({
       openWorkOrderDraftFromDocument(importedDocument, documentImportWorkOrderSuggestion);
       return;
     }
-    setNotice(ocrStatus === "completed" ? `Imported ${name} with searchable text.` : `Imported ${name}. OCR is queued.`);
+    if (autoLinkSuggestion) {
+      setNotice(`Imported ${name} and linked the suggested ${documentLinkSuggestionKindLabel(autoLinkSuggestion.kind).toLowerCase()}.`);
+    } else {
+      setNotice(ocrStatus === "completed" ? `Imported ${name} with searchable text.` : `Imported ${name}. OCR is queued.`);
+    }
   };
 
   const openDocumentLinkedRecord = (document, target) => {
@@ -704,6 +733,11 @@ export function createDocumentWorkspaceController({
       setExpenseQueueFocusDocumentId(nextQueueRecord?.document.id || "");
       setExpenseQueueShowDismissed(false);
     }
+    const possibleDuplicateTransaction = getDocumentLinkSuggestions(doc).find((linkSuggestion) => (
+      linkSuggestion.kind === "transaction" &&
+      linkSuggestion.confidence === "high" &&
+      String(linkSuggestion.id || "") !== String(doc.transactionId || "")
+    )) || null;
 
     setEditingTxnId("");
     setEditReturnView("documents");
@@ -715,6 +749,7 @@ export function createDocumentWorkspaceController({
       reasonSummary: expenseSuggestionReasonSummary(suggestion),
       prefilledFields,
       linkMode: options.linkMode || "primary",
+      possibleDuplicateTransaction,
       nextDocumentId: nextQueueRecord?.document.id || "",
       nextDocumentName: nextQueueRecord?.document.name || "",
     });
@@ -816,10 +851,104 @@ export function createDocumentWorkspaceController({
     if (nextExtractedText === priorExtractedText) return;
     actions.updateDocument(document.id, {
       extractedText: nextExtractedText,
+      reviewedWarningKeys: undefined,
+      reviewedWarningsAt: undefined,
       expenseReviewDismissedAt: nextExtractedText ? undefined : document.expenseReviewDismissedAt,
       workOrderReviewDismissedAt: nextExtractedText ? undefined : document.workOrderReviewDismissedAt,
     });
     setNotice("Extracted text updated.");
+  };
+
+  const markDocumentWarningsReviewed = (document, warningKeys = []) => {
+    if (!requirePermission("review_documents", "This access profile cannot resolve document warnings.")) return;
+    if (!document) return;
+    const keys = Array.from(new Set(
+      (Array.isArray(warningKeys) ? warningKeys : [])
+        .map((key) => String(key || "").trim())
+        .filter(Boolean),
+    ));
+    if (keys.length === 0) {
+      setNotice("No document warnings are available to mark reviewed.");
+      return;
+    }
+    actions.updateDocument(document.id, {
+      reviewedWarningKeys: keys,
+      reviewedWarningsAt: new Date().toISOString(),
+    });
+    setNotice(`Marked ${keys.length} document warning${keys.length === 1 ? "" : "s"} reviewed for ${document.name}.`);
+  };
+
+  const updateLinkedTransactionFromDocumentOcr = (document, warningKeys = []) => {
+    if (!requirePermission("create_edit_records", "This access profile cannot update transactions from OCR.")) return false;
+    const linkedTransaction = document?.transactionId ? transactionById[document.transactionId] : null;
+    if (!document || !linkedTransaction) {
+      setNotice("Link this document to a transaction before updating the ledger from OCR.");
+      return false;
+    }
+    const extractedFields = getDocumentExtractedFields?.(document);
+    const expenseSuggestion = getDocumentExpenseSuggestion?.(document);
+    if (!extractedFields && !expenseSuggestion) {
+      setNotice("No OCR fields are available to update the linked transaction.");
+      return false;
+    }
+
+    const nextAmount = Number(extractedFields?.totalAmount ?? expenseSuggestion?.amount ?? linkedTransaction.amount);
+    const nextDate = extractedFields?.invoiceDate || extractedFields?.serviceDate || expenseSuggestion?.date || linkedTransaction.date;
+    const nextPropertyId = extractedFields?.propertyId || expenseSuggestion?.propertyId || linkedTransaction.propertyId;
+    const nextUnit = extractedFields?.unit || expenseSuggestion?.unit || linkedTransaction.unit;
+    const preview = actions.computeTransactionPreview({
+      amount: nextAmount,
+      type: linkedTransaction.type,
+      capitalImprovement: Boolean(linkedTransaction.capitalImprovement),
+      propertyId: nextPropertyId,
+      unit: nextUnit,
+      date: nextDate,
+      ownerUsePct: Number(linkedTransaction.ownerUsePct || 0),
+      ownerUsePctOverride: Boolean(linkedTransaction.ownerUsePctOverride),
+      servicePeriodStart: extractedFields?.servicePeriodStart || expenseSuggestion?.servicePeriodStart || linkedTransaction.servicePeriodStart || "",
+      servicePeriodEnd: extractedFields?.servicePeriodEnd || expenseSuggestion?.servicePeriodEnd || linkedTransaction.servicePeriodEnd || "",
+    });
+
+    const nextTransaction = {
+      ...linkedTransaction,
+      date: nextDate,
+      propertyId: nextPropertyId,
+      unit: nextUnit,
+      category: expenseSuggestion?.category || linkedTransaction.category,
+      description: expenseSuggestion?.description || linkedTransaction.description,
+      amount: nextAmount,
+      rentalUsePct: preview.rentalUsePct,
+      deductibleAmount: preview.deductibleAmount,
+      vendor: extractedFields?.vendorName || expenseSuggestion?.vendor || linkedTransaction.vendor,
+      invoiceRef: extractedFields?.invoiceRef || expenseSuggestion?.invoiceRef || linkedTransaction.invoiceRef || "",
+      invoiceAmount: nextAmount,
+      servicePeriodStart: extractedFields?.servicePeriodStart || expenseSuggestion?.servicePeriodStart || linkedTransaction.servicePeriodStart,
+      servicePeriodEnd: extractedFields?.servicePeriodEnd || expenseSuggestion?.servicePeriodEnd || linkedTransaction.servicePeriodEnd,
+      taxChecked: false,
+    };
+    actions.addOrUpdateTransaction(nextTransaction);
+    actions.updateDocument(document.id, {
+      propertyId: nextPropertyId,
+      unit: nextUnit,
+      reviewedWarningKeys: undefined,
+      reviewedWarningsAt: undefined,
+      expenseReviewDismissedAt: undefined,
+    });
+    addAuditEntry({
+      action: "ocr-update-transaction",
+      entityType: "transaction",
+      entityId: linkedTransaction.id,
+      propertyId: nextPropertyId,
+      unit: nextUnit,
+      summary: `Updated transaction from OCR document ${document.name}.`,
+      details: `Fields reviewed from ${document.name}.`,
+      category: "document",
+    });
+    if (Array.isArray(warningKeys) && warningKeys.length > 0) {
+      markDocumentWarningsReviewed(document, warningKeys.filter((key) => key !== "amount_mismatch"));
+    }
+    setNotice(`Updated linked transaction from OCR for ${document.name}.`);
+    return true;
   };
 
   const getSafeDocumentTagSuggestions = (document) =>
@@ -960,15 +1089,150 @@ export function createDocumentWorkspaceController({
       workOrderId: linkedWorkOrder?.id || "",
       status: "active",
     });
-    actions.updateDocument(document.id, {
-      transactionId: txnId,
-      expenseReviewDismissedAt: undefined,
-    });
+      actions.updateDocument(document.id, {
+        transactionId: txnId,
+        propertyId: nextPropertyId,
+        unit: nextUnit,
+        reviewedWarningKeys: undefined,
+        reviewedWarningsAt: undefined,
+        expenseReviewDismissedAt: undefined,
+      });
     if (linkedWorkOrder?.id) {
       actions.linkWorkOrderTransaction(linkedWorkOrder.id, txnId);
     }
     if (!silent) setNotice(`Created expense transaction from ${document.name}.`);
     return txnId;
+  };
+
+  const canCreateUtilitySectionTransaction = (section) =>
+    Boolean(
+      section &&
+      !section.external &&
+      section.propertyId &&
+      section.amount != null &&
+      section.date,
+    );
+
+  const findMatchingUtilitySectionTransaction = (section) => {
+    if (!canCreateUtilitySectionTransaction(section)) return null;
+    const sectionUnit = String(section.unit || "Shared").trim() || "Shared";
+    const sectionInvoice = String(section.invoiceRef || section.accountRef || "").trim().toLowerCase();
+    const sectionVendor = String(section.vendor || "").trim().toLowerCase();
+    const existingTransactions = Array.isArray(transactions) ? transactions : Object.values(transactionById || {});
+    return existingTransactions.find((transaction) => {
+      if (!transaction || transaction.status === "deleted") return false;
+      if (transaction.type !== "Expense") return false;
+      if (String(transaction.propertyId || "") !== String(section.propertyId || "")) return false;
+      if (String(transaction.unit || "Shared").trim() !== sectionUnit) return false;
+      if (String(transaction.date || "") !== String(section.date || "")) return false;
+      if (Math.abs(Number(transaction.amount || 0) - Number(section.amount || 0)) >= 0.005) return false;
+      const transactionInvoice = String(transaction.invoiceRef || "").trim().toLowerCase();
+      if (sectionInvoice && transactionInvoice && transactionInvoice === sectionInvoice) return true;
+      const transactionVendor = String(transaction.vendor || transaction.description || "").trim().toLowerCase();
+      return Boolean(sectionVendor && transactionVendor.includes(sectionVendor));
+    }) || null;
+  };
+
+  const createExpenseTransactionsFromUtilitySections = (document, sections, options = {}) => {
+    if (!requirePermission("create_edit_records", "This access profile cannot create utility transactions from OCR sections.")) return { created: 0, skipped: 0 };
+    const silent = Boolean(options?.silent);
+    const readySections = (Array.isArray(sections) ? sections : []).filter(canCreateUtilitySectionTransaction);
+    if (!document || readySections.length === 0) {
+      if (!silent) setNotice("No matched utility sections are ready to create.");
+      return { created: 0, skipped: 0 };
+    }
+
+    const createdIds = [];
+    const matchedExistingIds = [];
+    let skipped = 0;
+    readySections.forEach((section, index) => {
+      const duplicate = findMatchingUtilitySectionTransaction(section);
+      if (duplicate) {
+        if (duplicate.id) matchedExistingIds.push(duplicate.id);
+        skipped += 1;
+        return;
+      }
+      const nextPropertyId = section.propertyId || document.propertyId;
+      const nextUnit = section.unit || "Shared";
+      const preview = actions.computeTransactionPreview({
+        amount: section.amount,
+        type: "Expense",
+        capitalImprovement: false,
+        propertyId: nextPropertyId,
+        unit: nextUnit,
+        date: section.date,
+        ownerUsePct: 0,
+        servicePeriodStart: section.servicePeriodStart || "",
+        servicePeriodEnd: section.servicePeriodEnd || "",
+      });
+      const txnId = `t-ocr-section-${Date.now()}-${index}-${Math.floor(Math.random() * 1000)}`;
+      actions.addOrUpdateTransaction({
+        id: txnId,
+        date: section.date,
+        propertyId: nextPropertyId,
+        unit: nextUnit,
+        type: "Expense",
+        category: section.category || "Utilities",
+        description: section.description || `${section.vendor || "Utility"} bill`,
+        amount: Number(section.amount),
+        ownerUsePct: 0,
+        rentalUsePct: preview.rentalUsePct,
+        deductibleAmount: preview.deductibleAmount,
+        paidFrom: "Operating account",
+        paymentMethod: "ACH",
+        reimbursable: false,
+        reimbursed: false,
+        capitalImprovement: false,
+        vendor: section.vendor || "",
+        receiptName: document.name || "",
+        notes: `Created from OCR utility section in ${document.name}.`,
+        taxChecked: false,
+        reconciled: false,
+        invoiceRef: section.invoiceRef || section.accountRef || "",
+        invoiceAmount: Number(section.amount),
+        servicePeriodStart: section.servicePeriodStart || undefined,
+        servicePeriodEnd: section.servicePeriodEnd || undefined,
+        status: "active",
+      });
+      createdIds.push(txnId);
+    });
+
+    if (createdIds.length + matchedExistingIds.length > 0) {
+      const relatedTransactionIds = [
+        ...new Set([...(document.relatedTransactionIds || []), ...createdIds, ...matchedExistingIds]),
+      ];
+      const propertyIds = Array.from(new Set(readySections.map((section) => section.propertyId).filter(Boolean)));
+      const unitsCreated = Array.from(new Set(readySections.map((section) => section.unit || "Shared").filter(Boolean)));
+      actions.updateDocument(document.id, {
+        relatedTransactionIds,
+        propertyId: propertyIds.length === 1 ? propertyIds[0] : document.propertyId,
+        unit: unitsCreated.length === 1 ? unitsCreated[0] : "Shared",
+        reviewedWarningKeys: undefined,
+        reviewedWarningsAt: undefined,
+        expenseReviewDismissedAt: undefined,
+      });
+      if (createdIds.length > 0) {
+        addAuditEntry({
+          action: "utility-section-batch",
+          entityType: "document",
+          entityId: document.id,
+          propertyId: propertyIds.length === 1 ? propertyIds[0] : document.propertyId,
+          unit: unitsCreated.length === 1 ? unitsCreated[0] : "Shared",
+          summary: `Created ${createdIds.length} utility transaction${createdIds.length === 1 ? "" : "s"} from ${document.name}.`,
+          details: `${createdIds.length} created | ${skipped} linked to existing matches.`,
+          category: "document",
+        });
+      }
+    }
+
+    if (!silent) {
+      if (createdIds.length > 0) {
+        setNotice(`Created ${createdIds.length} related utility transaction${createdIds.length === 1 ? "" : "s"} from ${document.name}.${skipped ? ` Linked ${skipped} existing match${skipped === 1 ? "" : "es"}.` : ""}`);
+      } else {
+        setNotice(`No new utility transactions created.${skipped ? ` Linked ${skipped} existing matching transaction${skipped === 1 ? "" : "s"}.` : ""}`);
+      }
+    }
+    return { created: createdIds.length, skipped };
   };
 
   const applySafeSuggestionsToDocument = (document, options = {}) => {
@@ -1204,6 +1468,7 @@ export function createDocumentWorkspaceController({
     closeDocumentImportDialog,
     confirmAndDeleteDocument,
     createExpenseFromDocumentSuggestion,
+    createExpenseTransactionsFromUtilitySections,
     createWorkOrderFromDocumentSuggestion,
     dismissDocumentExpenseReview,
     dismissDocumentWorkOrderReview,
@@ -1213,6 +1478,8 @@ export function createDocumentWorkspaceController({
     getSafeDocumentLinkSuggestion,
     getSafeDocumentTagSuggestions,
     markVisibleDocumentsPendingOcr,
+    markDocumentWarningsReviewed,
+    updateLinkedTransactionFromDocumentOcr,
     onDocumentImportInputChange,
     openDocumentExternally,
     openDocumentImportPicker,

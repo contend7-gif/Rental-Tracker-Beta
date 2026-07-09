@@ -35,6 +35,7 @@ export function createBlankForm(propertyId = "", unit = "Shared") {
 export function createBlankVendorDraft() {
   return {
     name: "",
+    aliases: "",
     phone: "",
     email: "",
     defaultCategory: "Repairs",

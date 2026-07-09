@@ -878,6 +878,7 @@ export default function App() {
     focusedExpenseQueueDocumentId,
     getDocumentExpenseSuggestion,
     getDocumentExtractedFields,
+    getDocumentImportLinkSuggestions,
     getDocumentImportSuggestedTags,
     getDocumentLinkSuggestions,
     getDocumentLinkedWorkOrder,
@@ -1627,12 +1628,15 @@ export default function App() {
     closeDocumentImportDialog,
     confirmAndDeleteDocument,
     createExpenseFromDocumentSuggestion,
+    createExpenseTransactionsFromUtilitySections,
     createWorkOrderFromDocumentSuggestion,
     dismissDocumentExpenseReview,
     dismissDocumentWorkOrderReview,
     dismissVisibleExpenseQueue,
     getSafeDocumentLinkSuggestion,
     getSafeDocumentTagSuggestions,
+    markDocumentWarningsReviewed,
+    updateLinkedTransactionFromDocumentOcr,
     markVisibleDocumentsPendingOcr,
     onDocumentImportInputChange,
     openDocumentExternally,
@@ -1685,6 +1689,7 @@ export default function App() {
     formatDocumentTags,
     getDocumentExpenseSuggestion,
     getDocumentExtractedFields,
+    getDocumentImportLinkSuggestions,
     getDocumentImportSuggestedTags,
     getDocumentLinkSuggestions,
     getDocumentLinkedWorkOrder,
@@ -1733,6 +1738,7 @@ export default function App() {
     suggestDocumentType,
     todayIso,
     transactionById,
+    transactions,
     transactionVendorMemories,
     txnAttachmentInputRef,
     unitFilter,
@@ -2117,6 +2123,8 @@ export default function App() {
     markTransactionCapitalImprovement,
     markTransactionsTaxReviewed,
     markTransactionSupportUnavailable,
+    markDocumentWarningsReviewed,
+    updateLinkedTransactionFromDocumentOcr,
     markVisibleDocumentsPendingOcr,
     mileagePreview,
     navigateWithDashboardContext,
@@ -2143,6 +2151,7 @@ export default function App() {
     openDocumentPreview,
     openDashboardQuickAddForScope,
     openExpenseDraftFromDocument,
+    createExpenseTransactionsFromUtilitySections,
     openExpenseDraftFromUtilitySection,
     openLease,
     openLeaseForUnit,
@@ -2524,6 +2533,7 @@ export default function App() {
     openAssetSourceWorkOrder,
     openDocumentExternally,
     openDocumentPreview,
+    createExpenseTransactionsFromUtilitySections,
     openExpenseDraftFromUtilitySection,
     openLeasePdfPicker,
     openLinkedTenantLedgerTransaction,
@@ -2675,12 +2685,6 @@ export default function App() {
     </div>
   );
 }
-
-
-
-
-
-
 
 
 

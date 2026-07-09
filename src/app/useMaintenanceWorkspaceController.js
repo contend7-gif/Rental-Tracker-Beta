@@ -147,6 +147,7 @@ export function useMaintenanceWorkspaceController({
     setEditingVendorId(vendor.id);
     setVendorDraft({
       name: vendor.name || "",
+      aliases: Array.isArray(vendor.aliases) ? vendor.aliases.join(", ") : "",
       phone: vendor.phone || "",
       email: vendor.email || "",
       defaultCategory: vendor.defaultCategory || "Repairs",
@@ -167,6 +168,7 @@ export function useMaintenanceWorkspaceController({
     actions.addOrUpdateVendor({
       id: vendorId,
       name,
+      aliases: String(vendorDraft.aliases || "").split(/[;,\n]/).map((alias) => alias.trim()).filter(Boolean),
       phone: formatUsPhone(vendorDraft.phone),
       email: String(vendorDraft.email || "").trim(),
       defaultCategory: String(vendorDraft.defaultCategory || "Repairs").trim() || "Repairs",

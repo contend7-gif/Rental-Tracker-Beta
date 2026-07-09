@@ -31,6 +31,7 @@ export type DocumentExpenseSuggestion = {
   servicePeriodEnd?: string;
   confidence: "high" | "medium";
   sources: DocumentTagSuggestionSource[];
+  reasons?: string[];
 };
 
 export type DocumentExtractedFields = {
@@ -53,6 +54,7 @@ export type DocumentExtractedFields = {
   serviceSummary?: string;
   confidence: "high" | "medium";
   sources: DocumentTagSuggestionSource[];
+  reasons?: string[];
 };
 
 export type DocumentUtilitySection = {
@@ -72,6 +74,7 @@ export type DocumentUtilitySection = {
   accountRef?: string;
   confidence: "high" | "medium";
   sources: DocumentTagSuggestionSource[];
+  reasons?: string[];
   external: boolean;
 };
 
@@ -87,6 +90,7 @@ export type DocumentWorkOrderSuggestion = {
   reportedOn?: string;
   confidence: "high" | "medium";
   sources: DocumentTagSuggestionSource[];
+  reasons?: string[];
 };
 
 type InferDocumentTagsArgs = {
@@ -95,8 +99,8 @@ type InferDocumentTagsArgs = {
   lease?: Pick<Lease, "id" | "tenantName" | "unit" | "propertyId"> | null;
   transaction?: Pick<Transaction, "id" | "type" | "category" | "description" | "vendor" | "unit" | "propertyId" | "date" | "amount" | "invoiceRef"> | null;
   workOrder?: Pick<WorkOrder, "id" | "title" | "description" | "priority" | "unit" | "propertyId" | "reportedOn" | "completedAt"> | null;
-  vendor?: Pick<Vendor, "id" | "name" | "phone" | "email" | "defaultCategory"> | null;
-  candidateVendors?: Array<Pick<Vendor, "id" | "name" | "phone" | "email" | "defaultCategory">>;
+  vendor?: Pick<Vendor, "id" | "name" | "aliases" | "phone" | "email" | "defaultCategory"> | null;
+  candidateVendors?: Array<Pick<Vendor, "id" | "name" | "aliases" | "phone" | "email" | "defaultCategory">>;
   candidateLeases?: Array<Pick<Lease, "id" | "tenantName" | "unit" | "propertyId">>;
   candidateProperties?: Array<Pick<Property, "id" | "name" | "address">>;
   candidateUnits?: Array<Pick<Unit, "name" | "propertyId">>;
@@ -108,6 +112,7 @@ export type DocumentOcrStatus = "not_needed" | "pending" | "completed";
 
 const SUGGESTION_SOURCE_ORDER: DocumentTagSuggestionSource[] = ["name", "context", "ocr", "ocr_match"];
 const ENTITY_STOP_WORDS = new Set(["llc", "inc", "the", "and", "for", "property", "street", "drive", "road", "avenue", "lane", "court", "place"]);
+const GENERIC_UTILITY_VENDOR_WORDS = new Set(["utility", "utilities", "water", "sewer", "electric", "electricity", "gas", "internet", "telecom", "communications", "services"]);
 const ADDRESS_TOKEN_PATTERN = "(?:[a-z][a-z0-9.'-]*|\\d{1,4}(?:st|nd|rd|th))";
 const ADDRESS_PATTERN = new RegExp(
   `\\b\\d{2,6}(?:-\\d{2,6})?\\s+(?:[nsew]\\s+)?${ADDRESS_TOKEN_PATTERN}(?:\\s+${ADDRESS_TOKEN_PATTERN}){0,4}\\s+(?:street|st|avenue|ave|drive|dr|road|rd|lane|ln|court|ct|place|pl|boulevard|blvd|way)\\b`,
@@ -126,6 +131,10 @@ function normalizeSearchText(value: unknown) {
     .replace(/[^a-z0-9# ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function compactSearchText(value: unknown) {
+  return normalizeSearchText(value).replace(/\s+/g, "");
 }
 
 function spacedOcrWordPattern(word: string) {
@@ -317,12 +326,110 @@ function matchNamedEntity(text: string, value: unknown) {
   if (!normalized) return false;
   if (text.includes(normalized)) return true;
 
+  const compactText = compactSearchText(text);
+  const compactValue = compactSearchText(value);
+  if (compactValue.length >= 6 && compactText.includes(compactValue)) return true;
+
   const words = textWords(value);
   if (words.length >= 2) {
     return words.every((word) => text.includes(word));
   }
 
   return words.length === 1 ? words[0].length >= 6 && text.includes(words[0]) : false;
+}
+
+function matchVendorName(text: string, value: unknown) {
+  const normalized = normalizeSearchText(value);
+  if (!normalized) return false;
+  if (text.includes(normalized)) return true;
+
+  const words = textWords(value);
+  const distinctiveWords = words.filter((word) => !GENERIC_UTILITY_VENDOR_WORDS.has(word));
+  if (words.length >= 2 && distinctiveWords.length <= 1 && distinctiveWords.length < words.length) {
+    return false;
+  }
+  return matchNamedEntity(text, value);
+}
+
+function vendorMatchValues(vendor: InferDocumentTagsArgs["vendor"]) {
+  if (!vendor) return [];
+  return [
+    String(vendor.name || "").trim(),
+    ...(Array.isArray(vendor.aliases) ? vendor.aliases.map((alias) => String(alias || "").trim()) : []),
+  ].filter(Boolean);
+}
+
+function findVendorMatchedValue(text: string, vendor: InferDocumentTagsArgs["vendor"]) {
+  return vendorMatchValues(vendor).find((value) => matchVendorName(text, value)) || "";
+}
+
+function vendorHeaderSearchText(text: string) {
+  const lines = normalizeExtractedDocumentText(text)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const headerLines = [];
+  for (const line of lines.slice(0, 16)) {
+    if (headerLines.length >= 8) break;
+    if (/^\s*(?:invoice|receipt|statement|bill|estimate|page\s+\d+|account|date|due|total|amount|balance)\b/i.test(line)) continue;
+    headerLines.push(line);
+  }
+  return normalizeSearchText(normalizeLooseOcrText(headerLines.join(" ")));
+}
+
+function scoreVendorCandidate(text: string, headerText: string, vendor: InferDocumentTagsArgs["vendor"]) {
+  let bestScore = 0;
+  let bestValue = "";
+  vendorMatchValues(vendor).forEach((value) => {
+    if (!matchVendorName(text, value)) return;
+    const normalizedValue = normalizeSearchText(value);
+    const compactText = compactSearchText(text);
+    const compactValue = compactSearchText(value);
+    const headerMatched = Boolean(headerText && matchVendorName(headerText, value));
+    let score = overlapWordCount(text, value) + 2;
+    if (normalizedValue && text.includes(normalizedValue)) score += 3;
+    if (compactValue.length >= 6 && compactText.includes(compactValue)) score += 2;
+    if (headerMatched) score += 4;
+    if (GENERIC_UTILITY_VENDOR_WORDS.has(textWords(value).at(-1) || "") && !headerMatched && !text.includes(normalizedValue)) score -= 2;
+    if (score > bestScore) {
+      bestScore = score;
+      bestValue = value;
+    }
+  });
+  return { score: bestScore, matchedValue: bestValue };
+}
+
+function cleanOcrVendorLine(value: string) {
+  return String(value || "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[^a-z0-9]+|[^a-z0-9&'. -]+$/gi, "")
+    .trim();
+}
+
+function looksLikeOcrVendorLine(value: string) {
+  const line = cleanOcrVendorLine(value);
+  if (!line) return false;
+  const searchLine = normalizeSearchText(line);
+  if (!/[a-z]/i.test(line)) return false;
+  if (parseDateText(line) || pickAddressLine(line) || pickVendorPhone(line) || pickVendorEmail(line)) return false;
+  if (/\$|(?:^|\s)-?\d+\.\d{2}\b/.test(line)) return false;
+  if (/\b(?:invoice|receipt|statement|bill|estimate|account|acct|date|time|store|phone|tel|fax|cashier|register|terminal|auth|approval|subtotal|total|amount|balance|tax|visa|mastercard|discover|amex|debit|credit|card|change|qty|sku|upc|barcode|thank you)\b/i.test(line)) return false;
+  if (/^\d+[\d\s#-]*$/.test(line)) return false;
+  const words = searchLine.split(" ").filter(Boolean);
+  return words.length >= 1 && words.length <= 6 && line.length >= 3 && line.length <= 60;
+}
+
+function pickOcrVendorName(text: string) {
+  const lines = normalizeExtractedDocumentText(text)
+    .split("\n")
+    .map((line) => cleanOcrVendorLine(line))
+    .filter(Boolean);
+  const candidate = lines.slice(0, 12).find((line) => looksLikeOcrVendorLine(line));
+  return candidate || "";
+}
+
+function uniqueReasons(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }
 
 function overlapWordCount(text: string, value: unknown) {
@@ -480,9 +587,13 @@ function parseCurrencyAmount(value: string) {
 function pickBestExpenseAmount(text: string) {
   const normalizedText = normalizeLooseOcrText(text);
   const candidates: Array<{ amount: number; score: number }> = [];
+  const receiptAmount = pickReceiptPaymentAmount(normalizedText);
+  const looksReceiptLike = /\b(?:receipt|visa|mastercard|master card|discover|amex|debit|credit|card|tender|cashier|register|terminal|approval)\b/i.test(normalizedText);
+  if (looksReceiptLike && receiptAmount != null) return receiptAmount;
+
   const labeledPatterns = [
-    /\b(?:invoice total|total due|amount due|balance due|payment due|total amount|amount paid|amount)\b\s*[:#-]?\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+\.[0-9]{2})/gi,
-    /\b(?:remit amount|total)\b\s*[:#-]?\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+\.[0-9]{2})/gi,
+    /\b(?:invoice total|grand total|total due|amount due|balance due|payment due|total amount|amount paid|amount)\b\s*[:#-]?\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+\.[0-9]{2})/gi,
+    /\b(?:remit amount|total sale|total)\b\s*[:#-]?\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+\.[0-9]{2})/gi,
   ];
 
   labeledPatterns.forEach((pattern, index) => {
@@ -497,12 +608,59 @@ function pickBestExpenseAmount(text: string) {
     return candidates.sort((left, right) => right.score - left.score || right.amount - left.amount)[0]?.amount;
   }
 
+  if (receiptAmount != null) return receiptAmount;
+
   const genericAmounts = [...normalizedText.matchAll(/\$([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+\.[0-9]{2})/g)]
     .map((match) => parseCurrencyAmount(match[1]))
     .filter((amount): amount is number => amount != null && amount <= 999999.99);
 
   if (genericAmounts.length === 0) return undefined;
   return genericAmounts.sort((left, right) => right - left)[0];
+}
+
+function parseReceiptLineAmount(value: string) {
+  if (/-\s*(?:\$|\busd\b)?\s*[0-9]/i.test(String(value || ""))) return undefined;
+  const match = String(value || "").match(/(?:\$|\busd\b)?\s*([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]{1,4})\b(?!\s*%)/i);
+  if (!match) return undefined;
+  const amount = parseCurrencyAmount(match[1]);
+  if (amount == null || amount > 20000) return undefined;
+  return amount;
+}
+
+function pickReceiptPaymentAmount(text: string) {
+  const lines = normalizeExtractedDocumentText(text)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const candidates: Array<{ amount: number; score: number; lineIndex: number }> = [];
+  const paymentLabel = /\b(?:total|sale|amount|balance|visa|mastercard|master card|discover|amex|debit|credit|card|tender|paid|charge)\b/i;
+  const rejectLabel = /\b(?:subtotal|sub total|tax|change|cash back|savings|discount|coupon|points|rewards|qty|item|sku|upc|phone|auth|approval)\b/i;
+
+  lines.forEach((line, lineIndex) => {
+    if (!paymentLabel.test(line) || rejectLabel.test(line)) return;
+    const amount = parseReceiptLineAmount(line);
+    if (amount == null) return;
+    const lowerLine = line.toLowerCase();
+    let score = 2;
+    if (/\b(?:total|amount|balance)\b/.test(lowerLine)) score += 2;
+    if (/\b(?:visa|mastercard|master card|discover|amex|debit|credit|card|paid|tender|sale)\b/.test(lowerLine)) score += 1;
+    if (lineIndex > lines.length * 0.45) score += 1;
+    candidates.push({ amount, score, lineIndex });
+  });
+
+  if (candidates.length > 0) {
+    return candidates.sort((left, right) => right.score - left.score || right.lineIndex - left.lineIndex || right.amount - left.amount)[0]?.amount;
+  }
+
+  const tailLines = lines.slice(Math.max(0, Math.floor(lines.length * 0.55)));
+  const tailAmounts = tailLines
+    .map((line, lineIndex) => {
+      if (rejectLabel.test(line)) return null;
+      const amount = parseReceiptLineAmount(line);
+      return amount == null ? null : { amount, lineIndex };
+    })
+    .filter((item): item is { amount: number; lineIndex: number } => Boolean(item));
+  return tailAmounts.length > 0 ? tailAmounts.sort((left, right) => right.lineIndex - left.lineIndex)[0]?.amount : undefined;
 }
 
 function normalizeYear(year: string) {
@@ -567,6 +725,14 @@ function pickContextYear(text: string) {
   return isoYearMatch?.[1] || "";
 }
 
+function isoDateDayDiff(left: string, right: string) {
+  if (!left || !right) return Number.POSITIVE_INFINITY;
+  const leftTime = Date.parse(`${left.slice(0, 10)}T00:00:00Z`);
+  const rightTime = Date.parse(`${right.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(leftTime) || !Number.isFinite(rightTime)) return Number.POSITIVE_INFINITY;
+  return Math.abs(Math.round((leftTime - rightTime) / 86400000));
+}
+
 function isMeterReadDateLine(value: string) {
   return /\b(?:next\s+meter\s+read|next\s+read|meter\s+read|read\s+date|previous\s+read|current\s+read)\b/i.test(String(value || ""));
 }
@@ -594,7 +760,7 @@ function pickFirstNonMeterReadDateLine(text: string) {
 
 function pickBestExpenseDate(text: string) {
   const labeledPatterns = [
-    /\b(?:bill(?:ing)? date|invoice date|statement date|date issued|issued on|completed on)\b\s*[:#-]?\s*([^\n]+)/i,
+    /\b(?:bill(?:ing)? date|invoice date|statement date|transaction date|purchase date|receipt date|order date|date issued|issued on|completed on)\b\s*[:#-]?\s*([^\n]+)/i,
     /\b(?:due date|payment due|pay by|due on|balance due by)\b\s*[:#-]?\s*([^\n]+)/i,
     /\b(?:service date|date of service|service performed|completed on|performed on)\b\s*[:#-]?\s*([^\n]+)/i,
   ];
@@ -703,10 +869,28 @@ function pickTotalForSectionAmount(text: string, address: string) {
 }
 
 function pickInvoiceReference(text: string) {
-  const match = text.match(/\b(?:invoice|inv)\s*(?:no|number|#)?\s*[:#-]?\s*([a-z0-9-]{3,})\b/i);
-  if (!match) return "";
-  const value = String(match[1] || "").trim();
-  return /\d/.test(value) ? value : "";
+  const patterns = [
+    /\b(?:invoice|inv)\s*(?:no\.?|number|#)?\s*[:#-]?\s*([a-z0-9][a-z0-9 -]{2,40})\b/i,
+    /\b(?:receipt|transaction|trans|order|reference|ref)\s*(?:no\.?|number|#|id)?\s*[:#-]?\s*([a-z0-9][a-z0-9 -]{2,40})\b/i,
+    /\b(?:account|acct\.?)\s*(?:no\.?|number|#)?\s*[:#-]?\s*([a-z0-9][a-z0-9 -]{2,40})\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const value = normalizeReferenceValue(match?.[1] || "");
+    if (value) return value;
+  }
+  return "";
+}
+
+function normalizeReferenceValue(value: string) {
+  const cleaned = String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\b(?:invoice|receipt|statement|date|due|amount|total|service|address)\b.*$/i, "")
+    .replace(/[^a-z0-9 -]/gi, "")
+    .trim();
+  if (!cleaned || !/\d/.test(cleaned) || parseDateText(cleaned)) return "";
+  return cleaned.length > 32 ? cleaned.slice(0, 32).trim() : cleaned;
 }
 
 function normalizePhoneNumber(value: string) {
@@ -855,6 +1039,7 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
   const extractedSearchText = normalizeSearchText(normalizeLooseOcrText(extractedText));
   const { vendorName, matchedVendorId } = inferVendorContext({
     extractedSearchText,
+    extractedText,
     vendor: args.vendor,
     transaction: args.transaction,
     candidateVendors,
@@ -882,6 +1067,15 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
       pickBestExpenseDate(sectionText);
     const accountRef = pickAccountReference(sectionText) || pickAccountReference(headerContext);
     const unit = inferSectionUnit(args, sectionText, anchor.address, propertyId);
+    const reasons = uniqueReasons([
+      propertyId ? `Property matched from service address ${anchor.address}.` : `Address ${anchor.address} is outside saved properties.`,
+      vendorName ? `Vendor matched saved vendor ${vendorName}.` : "Vendor treated as a utility bill from OCR context.",
+      amount != null ? `Amount selected from the utility section near ${anchor.address}.` : "",
+      date ? "Bill date selected from the utility section or nearby header." : "",
+      servicePeriod.startDate && servicePeriod.endDate ? "Service period selected from the utility section text." : "",
+      accountRef ? "Account reference selected from the utility section or nearby header." : "",
+      unit ? `Unit scope resolved as ${unit}.` : "",
+    ]);
     const confidenceScore =
       (propertyId ? 2 : 0) +
       (amount != null ? 2 : 0) +
@@ -905,6 +1099,7 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
       accountRef: accountRef || undefined,
       confidence: confidenceScore >= 4 ? "high" : "medium",
       sources: propertyId || matchedVendorId ? ["ocr", "ocr_match"] : ["ocr"],
+      reasons,
       external: !propertyId,
       __sortScore: confidenceScore + (totalForAmount != null ? 3 : 0),
     };
@@ -1002,6 +1197,7 @@ function buildExpenseDescription(args: {
 
 function inferVendorContext(args: {
   extractedSearchText: string;
+  extractedText?: string;
   vendor?: InferDocumentTagsArgs["vendor"];
   transaction?: InferDocumentTagsArgs["transaction"];
   candidateVendors?: InferDocumentTagsArgs["candidateVendors"];
@@ -1011,11 +1207,13 @@ function inferVendorContext(args: {
   let vendorSource: DocumentTagSuggestionSource = vendorName ? "context" : "ocr";
   let matchedVendorId = String(args.vendor?.id || "").trim();
   let matchedVendorScore = matchedVendorId ? 2 : 0;
+  const headerText = vendorHeaderSearchText(args.extractedText || args.extractedSearchText);
 
   if (args.extractedSearchText) {
     (args.candidateVendors || []).forEach((candidateVendor) => {
-      if (!candidateVendor?.name || !matchNamedEntity(args.extractedSearchText, candidateVendor.name)) return;
-      const score = overlapWordCount(args.extractedSearchText, candidateVendor.name) + (normalizeSearchText(candidateVendor.name).length > 0 ? 2 : 0);
+      if (!candidateVendor?.name) return;
+      const { matchedValue, score } = scoreVendorCandidate(args.extractedSearchText, headerText, candidateVendor);
+      if (!matchedValue) return;
       if (score <= matchedVendorScore) return;
       matchedVendorScore = score;
       matchedVendorId = String(candidateVendor.id || "");
@@ -1023,6 +1221,14 @@ function inferVendorContext(args: {
       vendorDefaultCategory = String(candidateVendor.defaultCategory || "");
       vendorSource = "ocr_match";
     });
+  }
+
+  if (!vendorName) {
+    const ocrVendorName = pickOcrVendorName(args.extractedText || "");
+    if (ocrVendorName) {
+      vendorName = ocrVendorName;
+      vendorSource = "ocr";
+    }
   }
 
   return {
@@ -1052,6 +1258,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
     vendorEmail: contextualVendorEmail,
   } = inferVendorContext({
     extractedSearchText,
+    extractedText,
     vendor,
     transaction,
     candidateVendors,
@@ -1059,7 +1266,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
 
   const genericDate = pickBestExpenseDate(extractedText);
   const invoiceDate =
-    pickLabeledDate(extractedText, /\b(?:bill(?:ing)? date|invoice date|statement date|date issued|issued on)\b\s*[:#-]?\s*([^\n]+)/i) ||
+    pickLabeledDate(extractedText, /\b(?:bill(?:ing)? date|invoice date|statement date|transaction date|purchase date|receipt date|order date|date issued|issued on)\b\s*[:#-]?\s*([^\n]+)/i) ||
     genericDate ||
     "";
   const serviceDate =
@@ -1103,6 +1310,16 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
   if (property || lease || transaction || workOrder || matchedVendorId) {
     sources.add(vendorSource === "ocr_match" ? "ocr_match" : "context");
   }
+  const reasons = uniqueReasons([
+    vendorName ? (matchedVendorId ? `Vendor matched saved vendor ${vendorName}.` : `Vendor came from ${vendorSource === "context" ? "linked context" : "OCR text"}.`) : "",
+    totalAmount != null ? "Total amount was selected from amount/total due text." : "",
+    invoiceDate ? "Invoice date was selected from bill, invoice, or statement date text." : "",
+    dueDate ? "Due date was selected from due/payment date text." : "",
+    servicePeriod.startDate && servicePeriod.endDate ? "Service period was selected from billing/service period text." : "",
+    unit ? `Unit scope resolved as ${unit}.` : "",
+    propertyAddress ? "Location was selected from a matched property or address line." : "",
+    invoiceRef ? "Reference was selected from invoice/reference text." : "",
+  ]);
 
   return {
     propertyId,
@@ -1124,6 +1341,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
     serviceSummary: serviceSummary || undefined,
     confidence: score >= 6 ? "high" : "medium",
     sources: sortSuggestionSources(sources),
+    reasons,
   };
 }
 
@@ -1230,6 +1448,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
     matchedVendorId,
   } = inferVendorContext({
     extractedSearchText,
+    extractedText,
     vendor,
     transaction,
     candidateVendors,
@@ -1277,6 +1496,15 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
   if (extractedFields?.sources?.length) extractedFields.sources.forEach((source) => sources.add(source));
   if (vendorName) sources.add(vendorSource);
   if (workOrder || transaction || lease || property || matchedVendorId) sources.add(vendorSource === "ocr_match" ? "ocr_match" : "context");
+  const reasons = uniqueReasons([
+    utilitySection ? `Draft based on matched utility section ${utilitySection.address}.` : "",
+    utilitySection?.reasons || [],
+    extractedFields?.reasons || [],
+    amount != null ? "Expense amount was selected from OCR total/amount due text." : "",
+    date ? "Transaction date was selected from bill, invoice, statement, or service date text." : "",
+    category !== "Other expenses" ? `Category resolved as ${category}.` : "",
+    resolvedUnit ? `Unit scope resolved as ${resolvedUnit}.` : "",
+  ].flat());
 
   return {
     propertyId: resolvedPropertyId,
@@ -1292,6 +1520,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
     servicePeriodEnd: utilitySection?.servicePeriodEnd || extractedFields?.servicePeriodEnd || undefined,
     confidence: score >= 6 ? "high" : "medium",
     sources: sortSuggestionSources(sources),
+    reasons,
   };
 }
 
@@ -1316,6 +1545,7 @@ export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs): D
     matchedVendorId,
   } = inferVendorContext({
     extractedSearchText,
+    extractedText,
     vendor,
     transaction,
     candidateVendors,
@@ -1428,7 +1658,7 @@ export function inferDocumentTagSuggestions(args: InferDocumentTagsArgs): Docume
 
     for (const candidateVendor of candidateVendors) {
       if (!candidateVendor?.name) continue;
-      if (!matchNamedEntity(extractedSearchText, candidateVendor.name)) continue;
+      if (!findVendorMatchedValue(extractedSearchText, candidateVendor)) continue;
       pushSuggestion(suggestions, candidateVendor.name, "ocr_match");
       pushSuggestion(suggestions, "vendor", "ocr_match");
     }
@@ -1562,15 +1792,27 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
     const invoiceRefMatched =
       extractedInvoiceRef &&
       normalizeSearchText(candidateTransaction.invoiceRef || "") === extractedInvoiceRef;
-    const exactDateMatched = Boolean(extractedInvoiceDate && String(candidateTransaction.date || "").trim() === extractedInvoiceDate);
+    const candidateDate = String(candidateTransaction.date || "").trim();
+    const exactDateMatched = Boolean(extractedInvoiceDate && candidateDate === extractedInvoiceDate);
+    const closeDateMatched = Boolean(!exactDateMatched && extractedInvoiceDate && candidateDate && isoDateDayDiff(extractedInvoiceDate, candidateDate) <= 3);
+    const sameMonthDateMatched = Boolean(
+      !exactDateMatched &&
+      !closeDateMatched &&
+      amountMatched &&
+      extractedInvoiceDate &&
+      candidateDate &&
+      extractedInvoiceDate.slice(0, 7) === candidateDate.slice(0, 7)
+    );
     const servicePeriodEndMatched = Boolean(
       extractedServicePeriodEnd &&
-      String(candidateTransaction.date || "").trim() === extractedServicePeriodEnd
+      candidateDate === extractedServicePeriodEnd
     );
     const preciseDocumentScore =
       (amountMatched ? 4 : 0) +
       (invoiceRefMatched ? 4 : 0) +
       (exactDateMatched ? 4 : 0) +
+      (closeDateMatched ? 3 : 0) +
+      (sameMonthDateMatched ? 1 : 0) +
       (servicePeriodEndMatched ? 1 : 0);
     const sectionScore = internalUtilitySections.reduce((best, section) => {
       const sectionUnitMatched = Boolean(section.unit && candidateTransaction.unit && normalizeUnitValue(candidateTransaction.unit) === normalizeUnitValue(section.unit));
@@ -1607,7 +1849,7 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
       unit: candidateTransaction.unit,
     }, finalScore, [
       ...(vendorMatched || invoiceRefMatched ? ["ocr_match"] : []),
-      ...((unitMatched || amountMatched || exactDateMatched || servicePeriodEndMatched || sectionScore > 0) ? ["ocr"] : []),
+      ...((unitMatched || amountMatched || exactDateMatched || closeDateMatched || sameMonthDateMatched || servicePeriodEndMatched || sectionScore > 0) ? ["ocr"] : []),
     ]);
   });
 

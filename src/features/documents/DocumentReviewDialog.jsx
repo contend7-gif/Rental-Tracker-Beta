@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, FileWarning, Sparkles, X } from "lucide-react";
+import { Eye, FileWarning, Link2, Sparkles, X } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
@@ -72,6 +72,130 @@ function ReviewSection({ children, className = "", defaultOpen = false, title })
   );
 }
 
+function DocumentFixPanel({
+  applyDocumentLinkSuggestion,
+  currency,
+  document,
+  documentLinkSuggestionKindLabel,
+  documentOcrBusy,
+  documentTagSuggestionSourceLabel,
+  duplicateCandidates,
+  extractedFields,
+  handleWarningAction,
+  markCurrentWarningsReviewed,
+  onReviewDuplicateDocument,
+  openDocumentLinkedRecord,
+  qualityWarnings,
+  suggestedLinks,
+  updateLinkedTransactionFromOcr,
+  warningActionLabel,
+}) {
+  const fieldRows = [
+    extractedFields?.vendorName ? ["Vendor", extractedFields.vendorName] : null,
+    extractedFields?.totalAmount != null ? ["Amount", currency(extractedFields.totalAmount)] : null,
+    extractedFields?.invoiceDate || extractedFields?.serviceDate ? ["Date", extractedFields.invoiceDate || extractedFields.serviceDate] : null,
+    extractedFields?.servicePeriodStart && extractedFields?.servicePeriodEnd ? ["Service", `${extractedFields.servicePeriodStart} to ${extractedFields.servicePeriodEnd}`] : null,
+    extractedFields?.unit ? ["Unit", formatDocumentUnitLabel(extractedFields.unit)] : null,
+  ].filter(Boolean);
+  const topSuggestedLinks = suggestedLinks.slice(0, 2);
+
+  return (
+    <aside className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 lg:sticky lg:top-0">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-semibold text-slate-900">Fix panel</div>
+        {qualityWarnings.length > 0 ? <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-800">{qualityWarnings.length}</Badge> : <Badge variant="secondary">Ready</Badge>}
+      </div>
+
+      {qualityWarnings.length > 0 ? (
+        <div className="space-y-2">
+          {qualityWarnings.map((warning) => (
+            <div key={`fix-${warning.key}`} className="rounded-md border border-amber-200 bg-white p-2">
+              <div className="text-xs font-semibold text-amber-900">{warning.label}</div>
+              <div className="mt-0.5 line-clamp-2 text-xs text-amber-800">{warning.detail}</div>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="mt-2 h-7 px-2 text-xs"
+                onClick={() => handleWarningAction(warning)}
+                disabled={warning.key === "no_text" && documentOcrBusy}
+              >
+                {warningActionLabel(warning)}
+              </Button>
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={markCurrentWarningsReviewed}>
+              Accept warnings
+            </Button>
+            {document?.transactionId ? (
+              <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={updateLinkedTransactionFromOcr}>
+                Update linked
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {fieldRows.length > 0 ? (
+        <div className="rounded-md border border-slate-200 bg-white p-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">OCR fields</div>
+          <div className="mt-2 space-y-1.5">
+            {fieldRows.map(([label, value]) => (
+              <div key={`fix-field-${label}`} className="grid grid-cols-[4.5rem_1fr] gap-2 text-xs">
+                <span className="text-slate-500">{label}</span>
+                <span className="min-w-0 truncate font-medium text-slate-800">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {topSuggestedLinks.length > 0 ? (
+        <div className="rounded-md border border-blue-200 bg-white p-2">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
+            <Link2 className="h-3.5 w-3.5" />
+            Suggested links
+          </div>
+          <div className="mt-2 space-y-2">
+            {topSuggestedLinks.map((suggestion) => (
+              <div key={`fix-link-${suggestion.kind}-${suggestion.id}`} className="rounded border border-blue-100 bg-blue-50/60 p-2 text-xs">
+                <div className="line-clamp-2 font-medium text-slate-900">{documentLinkSuggestionKindLabel(suggestion.kind)}: {suggestion.label}</div>
+                <div className="mt-0.5 text-slate-500">{suggestion.confidence === "high" ? "High confidence" : "Possible match"} | {documentTagSuggestionSourceLabel(suggestion)}</div>
+                <Button size="sm" variant="secondary" className="mt-2 h-7 px-2 text-xs" onClick={() => applyDocumentLinkSuggestion(document, suggestion)}>
+                  Apply link
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {duplicateCandidates.length > 0 ? (
+        <div className="rounded-md border border-amber-200 bg-white p-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Duplicates</div>
+          <div className="mt-2 space-y-2">
+            {duplicateCandidates.slice(0, 2).map((candidate) => (
+              <div key={`fix-duplicate-${candidate.document.id}`} className="rounded border border-amber-100 bg-amber-50/60 p-2 text-xs">
+                <div className="line-clamp-1 font-medium text-slate-900">{candidate.document.name}</div>
+                <div className="mt-0.5 text-slate-600">{candidate.reasons.join(", ") || "similar details"}</div>
+                <Button size="sm" variant="secondary" className="mt-2 h-7 px-2 text-xs" onClick={() => onReviewDuplicateDocument?.(candidate.document)}>
+                  Review
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {document?.transactionId ? (
+        <Button size="sm" variant="secondary" className="w-full" onClick={() => openDocumentLinkedRecord(document, "transaction")}>
+          Open linked transaction
+        </Button>
+      ) : null}
+    </aside>
+  );
+}
+
 export function DocumentReviewDialog({
   aiDocumentCopilotConfigured,
   aiDocumentCopilotReady,
@@ -86,6 +210,7 @@ export function DocumentReviewDialog({
   documentLinkSuggestionKindLabel,
   documentOcrBusyById,
   documentTagSuggestionSourceLabel,
+  duplicateCandidates = [],
   expenseSuggestionConfidenceLabel,
   expenseSuggestionReasonSummary,
   getDocumentExpenseSuggestion,
@@ -100,9 +225,12 @@ export function DocumentReviewDialog({
   leaseById,
   leases = [],
   markSupportingOnly,
+  markDocumentWarningsReviewed,
   nextDocumentName,
   onClose,
   onNextDocument,
+  onReviewDuplicateDocument,
+  createExpenseTransactionsFromUtilitySections,
   openDocumentPreview,
   openDocumentLinkedRecord,
   openExpenseDraftFromDocument,
@@ -117,15 +245,18 @@ export function DocumentReviewDialog({
   saveDocumentTags,
   transactionById,
   transactions = [],
+  updateLinkedTransactionFromDocumentOcr,
   workOrderSuggestionConfidenceLabel,
   workOrderSuggestionReasonSummary,
   workOrders = [],
 }) {
   const [manualLinkKind, setManualLinkKind] = useState("transaction");
   const [manualLinkId, setManualLinkId] = useState("");
+  const [textEditorOpen, setTextEditorOpen] = useState(false);
   useEffect(() => {
     setManualLinkKind("transaction");
     setManualLinkId("");
+    setTextEditorOpen(false);
   }, [document?.id]);
   if (!document) return null;
 
@@ -148,6 +279,7 @@ export function DocumentReviewDialog({
   const linkedTransaction = document.transactionId ? transactionById?.[document.transactionId] : null;
   const qualityWarnings = buildDocumentQualityWarnings(document, {
     currency,
+    duplicateCandidates,
     extractedFields,
     linkedTransaction,
   });
@@ -253,7 +385,34 @@ export function DocumentReviewDialog({
       sources: ["context"],
     });
   };
-  const recommendedAction = expenseSuggestion
+  const safeTransactionLinkSuggestion = suggestedLinks.find((suggestion) => suggestion.kind === "transaction" && suggestion.confidence === "high") || null;
+  const focusExtractedTextEditor = () => {
+    setTextEditorOpen(true);
+    window.requestAnimationFrame(() => {
+      globalThis.document?.getElementById(`document-text-editor-${document.id}`)?.focus?.();
+    });
+  };
+  const handleWarningAction = (warning) => {
+    if (!warning) return;
+    if (warning.key === "no_text") return queueDocumentForOcr(document);
+    if (warning.key === "amount_mismatch" && linkedTransaction) return openDocumentLinkedRecord(document, "transaction");
+    return focusExtractedTextEditor();
+  };
+  const warningActionLabel = (warning) => {
+    if (warning?.key === "no_text") return documentOcrBusy ? "Running OCR..." : "Extract text";
+    if (warning?.key === "amount_mismatch" && linkedTransaction) return "Review transaction";
+    return "Edit extracted text";
+  };
+  const markCurrentWarningsReviewed = () => markDocumentWarningsReviewed?.(document, qualityWarnings.map((warning) => warning.key));
+  const updateLinkedTransactionFromOcr = () => updateLinkedTransactionFromDocumentOcr?.(document, qualityWarnings.map((warning) => warning.key));
+  const recommendedAction = safeTransactionLinkSuggestion
+    ? {
+        title: "Attach to existing transaction",
+        body: `${documentLinkSuggestionKindLabel(safeTransactionLinkSuggestion.kind)}: ${safeTransactionLinkSuggestion.label}. This prevents creating a duplicate ledger entry from the same bill.`,
+        button: "Apply link",
+        onClick: () => applyDocumentLinkSuggestion(document, safeTransactionLinkSuggestion),
+      }
+    : expenseSuggestion
     ? {
         title: "Review expense draft",
         body: `${expenseSuggestion.category}${expenseSuggestion.amount != null ? ` | ${currency(expenseSuggestion.amount)}` : ""}${expenseSuggestion.date ? ` | ${expenseSuggestion.date}` : ""}. Saving the reviewed transaction attaches this document automatically.`,
@@ -317,6 +476,8 @@ export function DocumentReviewDialog({
         </DialogHeader>
 
         <div className="-mx-2 flex-1 space-y-3 overflow-y-auto px-2 py-3">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="space-y-3">
         <section className="rounded-lg border border-slate-200 bg-white p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -339,9 +500,47 @@ export function DocumentReviewDialog({
                 <div key={warning.key} className="rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs text-amber-900">
                   <div className="font-semibold">{warning.label}</div>
                   <div className="mt-0.5">{warning.detail}</div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => handleWarningAction(warning)}
+                      disabled={warning.key === "no_text" && documentOcrBusy}
+                    >
+                      {warningActionLabel(warning)}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-3">
+              <div className="text-xs text-amber-900">
+                After correcting the source text or checking the linked record, mark these reviewed to remove them from the warning queue.
+              </div>
+              <Button size="sm" variant="secondary" onClick={markCurrentWarningsReviewed}>
+                Mark warnings reviewed
+              </Button>
+            </div>
+            {linkedTransaction ? (
+              <div className="mt-3 rounded-md border border-amber-200 bg-white px-3 py-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Resolve by linked transaction</div>
+                <div className="mt-1 text-xs text-amber-900">
+                  Use these when the receipt is already attached and the ledger record is the source you trust.
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => openDocumentLinkedRecord(document, "transaction")}>
+                    Open linked transaction
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={updateLinkedTransactionFromOcr}>
+                    Update transaction from OCR
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={markCurrentWarningsReviewed}>
+                    Accept linked transaction
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -400,6 +599,26 @@ export function DocumentReviewDialog({
             </Button>
           ) : null}
         </div>
+        </div>
+        <DocumentFixPanel
+          applyDocumentLinkSuggestion={applyDocumentLinkSuggestion}
+          currency={currency}
+          document={document}
+          documentLinkSuggestionKindLabel={documentLinkSuggestionKindLabel}
+          documentOcrBusy={documentOcrBusy}
+          documentTagSuggestionSourceLabel={documentTagSuggestionSourceLabel}
+          duplicateCandidates={duplicateCandidates}
+          extractedFields={extractedFields}
+          handleWarningAction={handleWarningAction}
+          markCurrentWarningsReviewed={markCurrentWarningsReviewed}
+          onReviewDuplicateDocument={onReviewDuplicateDocument}
+          openDocumentLinkedRecord={openDocumentLinkedRecord}
+          qualityWarnings={qualityWarnings}
+          suggestedLinks={suggestedLinks}
+          updateLinkedTransactionFromOcr={updateLinkedTransactionFromOcr}
+          warningActionLabel={warningActionLabel}
+        />
+        </div>
 
         <div className="grid gap-3 lg:grid-cols-2">
           {extractedFields ? (
@@ -422,6 +641,11 @@ export function DocumentReviewDialog({
               </div>
               <div className="mt-2">{expenseSuggestion.category}{expenseSuggestion.amount != null ? ` | ${currency(expenseSuggestion.amount)}` : ""}{expenseSuggestion.date ? ` | ${expenseSuggestion.date}` : ""}</div>
               <div className="mt-1 text-xs text-slate-600">{expenseSuggestionReasonSummary(expenseSuggestion)}</div>
+              {safeTransactionLinkSuggestion ? (
+                <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-900">
+                  Existing transaction match: {safeTransactionLinkSuggestion.label}. Apply the link instead of creating another transaction unless this bill really needs a separate ledger entry.
+                </div>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => openExpenseDraftFromDocument(document, expenseSuggestion)}>Save transaction and attach document</Button>
                 {document.expenseReviewDismissedAt ? (
@@ -449,6 +673,24 @@ export function DocumentReviewDialog({
             </ReviewSection>
           ) : null}
         </div>
+
+        {duplicateCandidates.length > 0 ? (
+          <ReviewSection title="Possible duplicate files" defaultOpen className="border-amber-200 bg-amber-50/70 text-sm">
+            <div className="space-y-2">
+              {duplicateCandidates.map((candidate) => (
+                <div key={`${document.id}-duplicate-${candidate.document.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white px-3 py-2">
+                  <div>
+                    <div className="font-medium text-slate-900">{candidate.document.name}</div>
+                    <div className="mt-0.5 text-xs text-slate-600">{candidate.reasons.join(", ") || "similar document details"}</div>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={() => onReviewDuplicateDocument?.(candidate.document)}>
+                    Review duplicate
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </ReviewSection>
+        ) : null}
 
         <ReviewSection title="Record links" defaultOpen className="text-sm">
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -546,7 +788,12 @@ export function DocumentReviewDialog({
 
         {utilitySections.length > 0 ? (
           <ReviewSection title="Detected utility sections" className="border-amber-200 bg-amber-50/70">
-            <DocumentUtilitySectionsPanel sections={utilitySections} currency={currency} onReviewSection={(section) => openExpenseDraftFromUtilitySection(document, section)} />
+            <DocumentUtilitySectionsPanel
+              sections={utilitySections}
+              currency={currency}
+              onCreateReadySections={(sections) => createExpenseTransactionsFromUtilitySections?.(document, sections)}
+              onReviewSection={(section) => openExpenseDraftFromUtilitySection(document, section)}
+            />
           </ReviewSection>
         ) : null}
 
@@ -573,10 +820,11 @@ export function DocumentReviewDialog({
           </div>
         </ReviewSection>
 
-        <details className="rounded-lg border border-slate-200 bg-white p-3">
+        <details open={textEditorOpen} onToggle={(event) => setTextEditorOpen(event.currentTarget.open)} className="rounded-lg border border-slate-200 bg-white p-3">
           <summary className="cursor-pointer text-sm font-semibold text-slate-900">Extracted text editor</summary>
           <Label className="mt-3 block text-xs text-slate-600">Extracted text</Label>
           <textarea
+            id={`document-text-editor-${document.id}`}
             className="mt-1 h-36 w-full rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-700"
             defaultValue={document.extractedText || ""}
             onBlur={(event) => saveDocumentExtractedText(document, event.target.value)}

@@ -354,6 +354,7 @@ export type MaintenanceAccountingTreatment =
 export type Vendor = {
   id: string;
   name: string;
+  aliases?: string[];
   phone?: string;
   email?: string;
   defaultCategory?: string;
@@ -451,6 +452,8 @@ export type DocumentItem = {
   tags?: string[];
   extractedText?: string;
   ocrStatus?: DocumentOcrStatus;
+  reviewedWarningKeys?: string[];
+  reviewedWarningsAt?: string;
   expenseReviewDismissedAt?: string;
   workOrderReviewDismissedAt?: string;
   aiAnalysis?: DocumentAiAnalysis;

@@ -42,6 +42,9 @@ export function expenseSuggestionConfidenceLabel(confidence) {
 
 export function expenseSuggestionReasonSummary(suggestion) {
   if (!suggestion) return "";
+  if (Array.isArray(suggestion.reasons) && suggestion.reasons.length > 0) {
+    return suggestion.reasons.slice(0, 3).join(" ");
+  }
   const parts = [];
   if (suggestion.vendor) parts.push("vendor");
   if (suggestion.amount != null) parts.push("amount");

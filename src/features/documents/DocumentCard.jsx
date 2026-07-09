@@ -3,6 +3,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { AuditReadinessBadge } from "../shared/AuditReadinessBadge.jsx";
 import {
+  buildDocumentHealthBadges,
   buildLinkedRecordSummary,
   formatDocumentDate,
   formatDocumentScope,
@@ -26,6 +27,16 @@ const STATUS_BADGE_CLASS = {
   supporting_only: "border-slate-200 bg-white text-slate-700 hover:bg-white",
 };
 
+const HEALTH_BADGE_CLASS = {
+  amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50",
+  blue: "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-50",
+  emerald: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-50",
+  indigo: "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-50",
+  sky: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-50",
+  slate: "border-slate-200 bg-white text-slate-700 hover:bg-white",
+  teal: "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-50",
+};
+
 export function DocumentCard({
   document,
   context,
@@ -45,6 +56,7 @@ export function DocumentCard({
     transactionById: context.transactionById,
   });
   const warnings = context.getDocumentQualityWarnings?.(document) || [];
+  const healthBadges = buildDocumentHealthBadges(document, context);
   const supportingOnly = isSupportingOnlyDocument(document);
   const linked = Boolean(linkedSummary && linkedSummary.kind !== "supporting");
   const extracted = document.ocrStatus === "completed" || Boolean(document.extractedText);
@@ -77,7 +89,12 @@ export function DocumentCard({
               status={status === "reviewed" || status === "supporting_only" ? { key: "ready", label: documentWorkflowStatusLabel(status) } : { key: "needs_review", label: documentWorkflowStatusLabel(status) }}
               className={STATUS_BADGE_CLASS[status] || ""}
             />
-            {!extracted ? <Badge variant="secondary">{extractionLabel}</Badge> : null}
+            {healthBadges.map((badge) => (
+              <Badge key={`${document.id}-health-${badge.key}`} variant="secondary" className={HEALTH_BADGE_CLASS[badge.tone] || HEALTH_BADGE_CLASS.slate}>
+                {badge.label}
+              </Badge>
+            ))}
+            {!extracted && healthBadges.every((badge) => badge.label !== extractionLabel && badge.label !== "Needs OCR") ? <Badge variant="secondary">{extractionLabel}</Badge> : null}
           </div>
         </div>
 

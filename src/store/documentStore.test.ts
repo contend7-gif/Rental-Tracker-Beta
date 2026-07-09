@@ -25,3 +25,17 @@ test("normalizeDocument removes an empty renewal date", () => {
 
   assert.equal(document.expiresOn, undefined);
 });
+
+test("normalizeDocument preserves reviewed warning acknowledgements", () => {
+  const document = normalizeDocument({
+    id: "doc-1",
+    propertyId: "p1",
+    name: "Receipt",
+    type: "Transaction Receipt",
+    reviewedWarningKeys: [" missing_amount ", "missing_amount", "low_confidence"],
+    reviewedWarningsAt: " 2026-07-08T12:00:00.000Z ",
+  });
+
+  assert.deepEqual(document.reviewedWarningKeys, ["missing_amount", "low_confidence"]);
+  assert.equal(document.reviewedWarningsAt, "2026-07-08T12:00:00.000Z");
+});
