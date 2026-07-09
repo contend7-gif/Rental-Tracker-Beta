@@ -188,16 +188,36 @@ export function DocumentsWorkspace({
     })?.label || "";
   };
 
-  const getDocumentQualityWarnings = useCallback((document) => buildDocumentQualityWarnings(document, {
-    currency,
-    duplicateCandidates: buildDocumentDuplicateCandidates(document, {
-      documents: filteredDocuments,
-      getDocumentExtractedFields,
-      transactionById,
-    }),
-    extractedFields: getDocumentExtractedFields(document),
-    linkedTransaction: document?.transactionId ? transactionById[document.transactionId] : null,
-  }), [currency, filteredDocuments, getDocumentExtractedFields, transactionById]);
+  const documentQualityWarningsById = useMemo(() => new Map(), [currency, filteredDocuments, getDocumentExtractedFields, transactionById]);
+  const safeSuggestionByDocumentId = useMemo(() => new Map(), [
+    canAutoCreateExpenseFromSuggestion,
+    canAutoCreateWorkOrderFromSuggestion,
+    documentExpenseReviewRecordById,
+    documentWorkOrderReviewRecordById,
+    getDocumentExpenseSuggestion,
+    getDocumentWorkOrderSuggestion,
+    getSafeDocumentLinkSuggestion,
+    getSafeDocumentTagSuggestions,
+  ]);
+
+  const getDocumentQualityWarnings = useCallback((document) => {
+    const cacheKey = document?.id;
+    if (cacheKey && documentQualityWarningsById.has(cacheKey)) {
+      return documentQualityWarningsById.get(cacheKey);
+    }
+    const warnings = buildDocumentQualityWarnings(document, {
+      currency,
+      duplicateCandidates: buildDocumentDuplicateCandidates(document, {
+        documents: filteredDocuments,
+        getDocumentExtractedFields,
+        transactionById,
+      }),
+      extractedFields: getDocumentExtractedFields(document),
+      linkedTransaction: document?.transactionId ? transactionById[document.transactionId] : null,
+    });
+    if (cacheKey) documentQualityWarningsById.set(cacheKey, warnings);
+    return warnings;
+  }, [currency, documentQualityWarningsById, filteredDocuments, getDocumentExtractedFields, transactionById]);
 
   const workflowContext = useMemo(() => ({
     currency,
@@ -216,16 +236,22 @@ export function DocumentsWorkspace({
     leaseById,
     transactionById,
     hasSafeSuggestion: (document) => {
+      const cacheKey = document?.id;
+      if (cacheKey && safeSuggestionByDocumentId.has(cacheKey)) {
+        return safeSuggestionByDocumentId.get(cacheKey);
+      }
       const expenseRecord = documentExpenseReviewRecordById[document.id];
       const workOrderRecord = documentWorkOrderReviewRecordById[document.id];
       const expenseSuggestion = expenseRecord?.suggestion || getDocumentExpenseSuggestion(document);
       const workOrderSuggestion = workOrderRecord?.suggestion || getDocumentWorkOrderSuggestion(document);
-      return (
+      const hasSuggestion = (
         getSafeDocumentTagSuggestions(document).length > 0 ||
         Boolean(getSafeDocumentLinkSuggestion(document)) ||
         canAutoCreateExpenseFromSuggestion(document, expenseSuggestion) ||
         canAutoCreateWorkOrderFromSuggestion(document, workOrderSuggestion)
       );
+      if (cacheKey) safeSuggestionByDocumentId.set(cacheKey, hasSuggestion);
+      return hasSuggestion;
     },
   }), [
     canAutoCreateExpenseFromSuggestion,
@@ -239,11 +265,12 @@ export function DocumentsWorkspace({
     getDocumentLinkedWorkOrder,
     getDocumentLinkSuggestions,
     getDocumentSuggestedTags,
-    getDocumentExtractedFields,
+    getDocumentQualityWarnings,
     getDocumentWorkOrderSuggestion,
     getSafeDocumentLinkSuggestion,
     getSafeDocumentTagSuggestions,
     leaseById,
+    safeSuggestionByDocumentId,
     transactionById,
   ]);
 
@@ -325,9 +352,14 @@ export function DocumentsWorkspace({
     },
   }), [currency, getDocumentExpenseSuggestion, getDocumentExtractedFields, getDocumentLinkedWorkOrder, leaseById, propertyNameById, transactionById, workflowContext]);
 
+  const missingReceiptGapRecords = useMemo(
+    () => transactionReviewInbox.filter((record) => record.issues?.some((issue) => issue.key === "missing_receipt")),
+    [transactionReviewInbox],
+  );
+
   const missingReceiptRecords = useMemo(() => {
-    const gapRecords = transactionReviewInbox.filter((record) => record.issues?.some((issue) => issue.key === "missing_receipt"));
-    return gapRecords.map((record) => {
+    if (documentsTab !== "receipt_gaps") return [];
+    return missingReceiptGapRecords.map((record) => {
       const transaction = record.transaction;
       const transactionAmount = amountLike(transaction?.amount);
       const transactionText = normalizeDocumentMatchText([transaction?.vendor, transaction?.category, transaction?.description].filter(Boolean).join(" "));
@@ -378,7 +410,7 @@ export function DocumentsWorkspace({
         .slice(0, 3);
       return { ...record, candidates };
     });
-  }, [filteredDocuments, getDocumentExpenseSuggestion, getDocumentExtractedFields, getDocumentLinkSuggestions, transactionReviewInbox]);
+  }, [documentsTab, filteredDocuments, getDocumentExpenseSuggestion, getDocumentExtractedFields, getDocumentLinkSuggestions, missingReceiptGapRecords]);
 
   const attachDocumentToReceiptGap = (transaction, document) => {
     applyDocumentLinkSuggestion(document, {
@@ -726,7 +758,7 @@ export function DocumentsWorkspace({
             <TabsTrigger value="inbox">Inbox ({inboxDocuments.length})</TabsTrigger>
             <TabsTrigger value="needs_review"><FileWarning className="mr-1 h-3.5 w-3.5 text-amber-700" />Needs Review ({needsReviewDocuments.length})</TabsTrigger>
             <TabsTrigger value="linked"><Link2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Linked ({linkedDocuments.length})</TabsTrigger>
-            <TabsTrigger value="receipt_gaps">Missing Receipts ({missingReceiptRecords.length})</TabsTrigger>
+            <TabsTrigger value="receipt_gaps">Missing Receipts ({missingReceiptGapRecords.length})</TabsTrigger>
             <TabsTrigger value="supporting"><FileCheck2 className="mr-1 h-3.5 w-3.5 text-emerald-700" />Supporting ({supportingDocuments.length})</TabsTrigger>
             <TabsTrigger value="reviewed">Reviewed ({reviewedDocuments.length})</TabsTrigger>
             <TabsTrigger value="all">All Files ({visibleDocuments.length})</TabsTrigger>

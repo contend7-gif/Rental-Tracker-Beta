@@ -8,6 +8,17 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.5",
+    releaseDate: "2026-07-09",
+    title: "Documents loading hotfix",
+    summary: "Speeds up the Documents workspace by deferring expensive receipt matching until the Missing Receipts tab is opened.",
+    changes: [
+      "Documents now avoids running Missing Receipts candidate matching during the initial workspace load.",
+      "Document review warning and safe-suggestion calculations are cached during each render so counts, cards, and health badges do not repeat the same OCR parsing work.",
+      "The Missing Receipts tab still shows the gap count immediately and builds attach candidates only when you open that tab.",
+    ],
+  },
+  {
     version: "1.0.4",
     releaseDate: "2026-07-08",
     title: "Smarter document OCR review",
