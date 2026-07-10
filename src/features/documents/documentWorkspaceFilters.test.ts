@@ -33,3 +33,18 @@ test("all-documents mode still respects the selected workspace tab", () => {
     [reviewed],
   );
 });
+
+test("OCR quality tab selects only documents needing field corrections", () => {
+  const qualityDocument = { id: "doc-ocr-quality" };
+
+  assert.deepEqual(
+    selectDocumentsForWorkspaceTab({
+      documentStatusFilter: "all",
+      documentsTab: "ocr_quality",
+      inboxDocuments: [],
+      ocrQualityDocuments: [qualityDocument],
+      visibleDocuments: [qualityDocument],
+    }),
+    [qualityDocument],
+  );
+});

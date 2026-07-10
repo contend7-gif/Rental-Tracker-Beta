@@ -97,6 +97,8 @@ export function useDocumentReviewModel({
             extractedText: document.extractedText,
             propertyId: document.propertyId,
             unit: document.unit,
+            unitScopeOverride: document.unitScopeOverride,
+            ocrFieldOverrides: document.ocrFieldOverrides,
           }
         : {
             name: draft.name,
@@ -105,6 +107,8 @@ export function useDocumentReviewModel({
             extractedText,
             propertyId: draft.propertyId,
             unit: draft.unit,
+            unitScopeOverride: draft.unitScopeOverride,
+            ocrFieldOverrides: draft.ocrFieldOverrides,
           },
       property,
       lease: linkedLease,

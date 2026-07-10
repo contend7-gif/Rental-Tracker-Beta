@@ -445,12 +445,19 @@ export type DocumentItem = {
   relatedTransactionIds?: string[];
   workOrderId?: string;
   unit?: UnitScope;
+  unitScopeOverride?: boolean;
   uploadedAt?: string;
   expiresOn?: string;
   mimeType?: string;
   dataUrl?: string;
   tags?: string[];
   extractedText?: string;
+  ocrFieldOverrides?: {
+    vendorName?: string;
+    totalAmount?: number;
+    servicePeriodStart?: string;
+    servicePeriodEnd?: string;
+  };
   ocrStatus?: DocumentOcrStatus;
   reviewedWarningKeys?: string[];
   reviewedWarningsAt?: string;

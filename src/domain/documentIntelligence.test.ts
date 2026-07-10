@@ -16,6 +16,7 @@ import {
   normalizeExtractedDocumentText,
   suggestDocumentType,
 } from "./documentIntelligence.ts";
+import { DOCUMENT_OCR_FIXTURES } from "./documentOcrFixtures.ts";
 
 test("documentNeedsTags and documentNeedsIndexing flag missing metadata", () => {
   assert.equal(documentNeedsTags({ tags: [] }), true);
@@ -1124,4 +1125,85 @@ test("inferDocumentWorkOrderSuggestion skips personal property schedules", () =>
   });
 
   assert.equal(suggestion, null);
+});
+
+test("OCR regression fixture prefers a Spectrum header and keeps a clean billing period", () => {
+  const fixture = DOCUMENT_OCR_FIXTURES.spectrumInternetStatement;
+  const args = {
+    document: {
+      name: fixture.name,
+      type: "Scanned PDF",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: fixture.text,
+    },
+    property: { id: "p1", name: "S Sample Ave Duplex", address: "614-616 S Sample Ave" },
+    transaction: { id: "t1", propertyId: "p1", unit: "616", vendor: "Sampleville Utilities", date: "2026-06-17", amount: 40, type: "Expense", category: "Utilities", description: "Internet" },
+  };
+
+  const fields = inferDocumentExtractedFields(args);
+  const suggestion = inferDocumentExpenseSuggestion(args);
+
+  assert.equal(fields?.vendorName, "Spectrum");
+  assert.equal(fields?.servicePeriodStart, "2026-06-17");
+  assert.equal(fields?.servicePeriodEnd, "2026-07-16");
+  assert.ok(!fields?.serviceSummary?.toLowerCase().includes("billing period"));
+  assert.equal(suggestion?.vendor, "Spectrum");
+});
+
+test("manual shared document scope overrides OCR and linked transaction unit context", () => {
+  const args = {
+    document: {
+      name: "internet.pdf",
+      type: "Scanned PDF",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      unitScopeOverride: true,
+      extractedText: "Spectrum\nStatement Date Jun 17, 2026\nService Address 614 S Sample Ave\nAmount Due $40",
+    },
+    property: { id: "p1", name: "S Sample Ave Duplex", address: "614-616 S Sample Ave" },
+    transaction: { id: "t1", propertyId: "p1", unit: "616", vendor: "Spectrum", date: "2026-06-17", amount: 40, type: "Expense", category: "Utilities", description: "Internet" },
+  };
+
+  const fields = inferDocumentExtractedFields(args);
+  const suggestion = inferDocumentExpenseSuggestion(args);
+
+  assert.equal(fields?.unit, "Shared");
+  assert.ok(fields?.reasons?.includes("Unit scope was manually set as Shared."));
+  assert.equal(suggestion?.unit, "Shared");
+});
+
+test("confirmed OCR field overrides take precedence in extracted fields and expense drafts", () => {
+  const args = {
+    document: {
+      name: "internet.pdf",
+      type: "Scanned PDF",
+      tags: [],
+      propertyId: "p1",
+      unit: "Shared",
+      extractedText: "Sampleville Utilities\nStatement Date Jun 17, 2026\nBilling Period Jun 17 - Jul 16\nAmount Due $40",
+      ocrFieldOverrides: {
+        vendorName: "Spectrum",
+        totalAmount: 42.5,
+        servicePeriodStart: "2026-06-18",
+        servicePeriodEnd: "2026-07-17",
+      },
+    },
+    property: { id: "p1", name: "S Sample Ave Duplex", address: "614-616 S Sample Ave" },
+  };
+
+  const fields = inferDocumentExtractedFields(args);
+  const suggestion = inferDocumentExpenseSuggestion(args);
+
+  assert.equal(fields?.vendorName, "Spectrum");
+  assert.equal(fields?.totalAmount, 42.5);
+  assert.equal(fields?.servicePeriodStart, "2026-06-18");
+  assert.equal(fields?.servicePeriodEnd, "2026-07-17");
+  assert.ok(fields?.reasons?.includes("Vendor was corrected as Spectrum."));
+  assert.equal(suggestion?.vendor, "Spectrum");
+  assert.equal(suggestion?.amount, 42.5);
+  assert.equal(suggestion?.servicePeriodStart, "2026-06-18");
+  assert.equal(suggestion?.servicePeriodEnd, "2026-07-17");
 });

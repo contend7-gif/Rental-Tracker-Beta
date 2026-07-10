@@ -17,6 +17,20 @@ export function normalizeDocumentTags(value: unknown): string[] {
   return tags;
 }
 
+function normalizeDocumentOcrFieldOverrides(value: DocumentItem["ocrFieldOverrides"]) {
+  const vendorName = String(value?.vendorName || "").trim();
+  const totalAmount = Number(value?.totalAmount);
+  const servicePeriodStart = String(value?.servicePeriodStart || "").trim();
+  const servicePeriodEnd = String(value?.servicePeriodEnd || "").trim();
+  const normalized = {
+    vendorName: vendorName || undefined,
+    totalAmount: Number.isFinite(totalAmount) && totalAmount >= 0 ? Math.round(totalAmount * 100) / 100 : undefined,
+    servicePeriodStart: servicePeriodStart || undefined,
+    servicePeriodEnd: servicePeriodEnd || undefined,
+  };
+  return Object.values(normalized).some((item) => item != null) ? normalized : undefined;
+}
+
 export function normalizeDocument(document: DocumentItem): DocumentItem {
   const leaseId = String(document.leaseId || "").trim();
   const transactionId = String(document.transactionId || "").trim();
@@ -25,11 +39,13 @@ export function normalizeDocument(document: DocumentItem): DocumentItem {
     : [];
   const workOrderId = String(document.workOrderId || "").trim();
   const unit = String(document.unit || "").trim();
+  const unitScopeOverride = Boolean(document.unitScopeOverride);
   const uploadedAt = String(document.uploadedAt || "").trim();
   const expiresOn = String(document.expiresOn || "").trim();
   const mimeType = String(document.mimeType || "").trim();
   const dataUrl = String(document.dataUrl || "").trim();
   const extractedText = String(document.extractedText || "").trim();
+  const ocrFieldOverrides = normalizeDocumentOcrFieldOverrides(document.ocrFieldOverrides);
   const ocrStatus = normalizeDocumentOcrStatus(document.ocrStatus, extractedText);
   const reviewedWarningKeys = normalizeDocumentTags(document.reviewedWarningKeys);
   const reviewedWarningsAt = String(document.reviewedWarningsAt || "").trim();
@@ -48,12 +64,14 @@ export function normalizeDocument(document: DocumentItem): DocumentItem {
     relatedTransactionIds: relatedTransactionIds.length > 0 ? relatedTransactionIds : undefined,
     workOrderId: workOrderId || undefined,
     unit: unit || undefined,
+    unitScopeOverride: unitScopeOverride || undefined,
     uploadedAt: uploadedAt || undefined,
     expiresOn: expiresOn || undefined,
     mimeType: mimeType || undefined,
     dataUrl: dataUrl || undefined,
     tags: normalizeDocumentTags(document.tags),
     extractedText: extractedText || undefined,
+    ocrFieldOverrides,
     ocrStatus,
     reviewedWarningKeys: reviewedWarningKeys.length > 0 ? reviewedWarningKeys : undefined,
     reviewedWarningsAt: reviewedWarningsAt || undefined,

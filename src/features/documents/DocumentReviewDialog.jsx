@@ -242,27 +242,38 @@ export function DocumentReviewDialog({
   removeDocumentRecordLink,
   runDocumentAiAnalysis,
   saveDocumentExtractedText,
+  saveDocumentOcrFieldCorrections,
   saveDocumentTags,
   transactionById,
   transactions = [],
+  units = [],
   updateLinkedTransactionFromDocumentOcr,
   workOrderSuggestionConfidenceLabel,
   workOrderSuggestionReasonSummary,
   workOrders = [],
 }) {
+  const currentExtractedFields = document ? getDocumentExtractedFields(document) : null;
   const [manualLinkKind, setManualLinkKind] = useState("transaction");
   const [manualLinkId, setManualLinkId] = useState("");
+  const [ocrCorrectionDraft, setOcrCorrectionDraft] = useState({ vendorName: "", totalAmount: "", servicePeriodStart: "", servicePeriodEnd: "", unit: "Shared" });
   const [textEditorOpen, setTextEditorOpen] = useState(false);
   useEffect(() => {
     setManualLinkKind("transaction");
     setManualLinkId("");
     setTextEditorOpen(false);
+    setOcrCorrectionDraft({
+      vendorName: currentExtractedFields?.vendorName || "",
+      totalAmount: currentExtractedFields?.totalAmount != null ? String(currentExtractedFields.totalAmount) : "",
+      servicePeriodStart: currentExtractedFields?.servicePeriodStart || "",
+      servicePeriodEnd: currentExtractedFields?.servicePeriodEnd || "",
+      unit: currentExtractedFields?.unit || document?.unit || "Shared",
+    });
   }, [document?.id]);
   if (!document) return null;
 
   const suggestedTags = getDocumentSuggestedTags(document);
   const suggestedLinks = getDocumentLinkSuggestions(document);
-  const extractedFields = getDocumentExtractedFields(document);
+  const extractedFields = currentExtractedFields;
   const utilitySections = getDocumentUtilitySections(document);
   const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
   const expenseSuggestion = !document.transactionId ? getDocumentExpenseSuggestion(document) : null;
@@ -337,6 +348,12 @@ export function DocumentReviewDialog({
       : null,
   ].filter(Boolean);
   const hasLinkedRecord = currentLinks.length > 0;
+  const unitOptions = Array.from(new Set([
+    "Shared",
+    document.unit,
+    extractedFields?.unit,
+    ...units.filter((unit) => !document.propertyId || unit.propertyId === document.propertyId).map((unit) => unit.name),
+  ].map((unit) => String(unit || "").trim()).filter(Boolean)));
   const manualLinkOptions = (() => {
     if (manualLinkKind === "lease") {
       return sortDocumentAttachOptions(document, leases.map((lease) => ({
@@ -673,6 +690,66 @@ export function DocumentReviewDialog({
             </ReviewSection>
           ) : null}
         </div>
+
+        <ReviewSection title="Correct OCR fields" defaultOpen={qualityWarnings.length > 0} className="border-blue-200 bg-blue-50/60 text-sm">
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+                <Label htmlFor={`document-ocr-vendor-${document.id}`}>Vendor</Label>
+                <Input
+                  id={`document-ocr-vendor-${document.id}`}
+                  className="mt-1"
+                  value={ocrCorrectionDraft.vendorName}
+                  onChange={(event) => setOcrCorrectionDraft((current) => ({ ...current, vendorName: event.target.value }))}
+                />
+            </div>
+            <div>
+                <Label htmlFor={`document-ocr-total-${document.id}`}>Total amount</Label>
+                <Input
+                  id={`document-ocr-total-${document.id}`}
+                  className="mt-1"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={ocrCorrectionDraft.totalAmount}
+                  onChange={(event) => setOcrCorrectionDraft((current) => ({ ...current, totalAmount: event.target.value }))}
+                />
+            </div>
+            <div>
+                <Label htmlFor={`document-ocr-period-start-${document.id}`}>Service period start</Label>
+                <Input
+                  id={`document-ocr-period-start-${document.id}`}
+                  className="mt-1"
+                  type="date"
+                  value={ocrCorrectionDraft.servicePeriodStart}
+                  onChange={(event) => setOcrCorrectionDraft((current) => ({ ...current, servicePeriodStart: event.target.value }))}
+                />
+            </div>
+            <div>
+                <Label htmlFor={`document-ocr-period-end-${document.id}`}>Service period end</Label>
+                <Input
+                  id={`document-ocr-period-end-${document.id}`}
+                  className="mt-1"
+                  type="date"
+                  value={ocrCorrectionDraft.servicePeriodEnd}
+                  onChange={(event) => setOcrCorrectionDraft((current) => ({ ...current, servicePeriodEnd: event.target.value }))}
+                />
+            </div>
+            <div>
+                <Label>Unit</Label>
+                <Select value={ocrCorrectionDraft.unit || "Shared"} onValueChange={(value) => setOcrCorrectionDraft((current) => ({ ...current, unit: value }))}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {unitOptions.map((unit) => <SelectItem key={`document-ocr-unit-${document.id}-${unit}`} value={unit}>{formatDocumentUnitLabel(unit)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button size="sm" onClick={() => saveDocumentOcrFieldCorrections(document, ocrCorrectionDraft)}>
+              Save corrections
+            </Button>
+          </div>
+        </ReviewSection>
 
         {duplicateCandidates.length > 0 ? (
           <ReviewSection title="Possible duplicate files" defaultOpen className="border-amber-200 bg-amber-50/70 text-sm">

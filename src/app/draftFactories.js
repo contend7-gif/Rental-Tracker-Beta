@@ -49,6 +49,7 @@ export function createBlankDocumentImportDraft(propertyId = "", unit = "Shared")
     type: "Scanned PDF",
     propertyId,
     unit,
+    unitScopeOverride: false,
     linkType: "none",
     linkedId: "",
     tags: "",

@@ -94,7 +94,7 @@ export type DocumentWorkOrderSuggestion = {
 };
 
 type InferDocumentTagsArgs = {
-  document: Pick<DocumentItem, "name" | "type" | "tags" | "extractedText"> & Partial<Pick<DocumentItem, "propertyId" | "unit">>;
+  document: Pick<DocumentItem, "name" | "type" | "tags" | "extractedText"> & Partial<Pick<DocumentItem, "propertyId" | "unit" | "unitScopeOverride" | "ocrFieldOverrides">>;
   property?: Pick<Property, "id" | "name" | "address"> | null;
   lease?: Pick<Lease, "id" | "tenantName" | "unit" | "propertyId"> | null;
   transaction?: Pick<Transaction, "id" | "type" | "category" | "description" | "vendor" | "unit" | "propertyId" | "date" | "amount" | "invoiceRef"> | null;
@@ -244,6 +244,11 @@ function pickPreferredUnit(...values: unknown[]) {
     .map((value) => String(value || "").trim())
     .filter(Boolean);
   return units.find((unit) => normalizeUnitValue(unit) !== "shared") || units[0] || "";
+}
+
+function documentScopeOverride(document: InferDocumentTagsArgs["document"]) {
+  if (!document?.unitScopeOverride) return "";
+  return String(document.unit || "").trim();
 }
 
 function extractPossibleUnits(text: string, knownUnits: string[] = []) {
@@ -401,6 +406,7 @@ function scoreVendorCandidate(text: string, headerText: string, vendor: InferDoc
 
 function cleanOcrVendorLine(value: string) {
   return String(value || "")
+    .replace(/\b(?:hi|hello|dear)\b[,:!]?.*$/i, "")
     .replace(/\s{2,}/g, " ")
     .replace(/^[^a-z0-9]+|[^a-z0-9&'. -]+$/gi, "")
     .trim();
@@ -426,6 +432,10 @@ function pickOcrVendorName(text: string) {
     .filter(Boolean);
   const candidate = lines.slice(0, 12).find((line) => looksLikeOcrVendorLine(line));
   return candidate || "";
+}
+
+function isGenericUtilityVendorName(value: string) {
+  return textWords(value).some((word) => GENERIC_UTILITY_VENDOR_WORDS.has(word));
 }
 
 function uniqueReasons(values: Array<string | undefined | null>) {
@@ -805,7 +815,7 @@ function pickServicePeriod(text: string) {
     }
   }
 
-  const shortNamedMonthMatch = normalizedText.match(/\b(?:service\s+from|from)\s+([a-z]{3,9}\s+\d{1,2})\s*(?:to|through|thru|-)\s*([a-z]{3,9}\s+\d{1,2})\b/i);
+  const shortNamedMonthMatch = normalizedText.match(/\b(?:bill(?:ing)?\s+period|service\s+period|usage\s+period|service\s+from|from)\b\s*[:#-]?\s*([a-z]{3,9}\s+\d{1,2})\s*(?:to|through|thru|-)\s*([a-z]{3,9}\s+\d{1,2})\b/i);
   if (shortNamedMonthMatch) {
     const year = pickContextYear(normalizedText);
     const startDate = year ? parseDateText(`${shortNamedMonthMatch[1]}, ${year}`) : "";
@@ -1141,6 +1151,7 @@ function pickServiceSummary(text: string, vendorName = "") {
     .filter(Boolean)
     .filter((line) => !/\b(invoice|receipt|estimate|proposal|quote|bill)\b/i.test(line))
     .filter((line) => !/\b(total due|amount due|balance due|payment due|subtotal|tax)\b/i.test(line))
+    .filter((line) => !/\b(?:billing|service|usage)\s+period\b/i.test(line))
     .filter((line) => !parseDateText(line))
     .filter((line) => !pickAddressLine(line));
 
@@ -1223,12 +1234,11 @@ function inferVendorContext(args: {
     });
   }
 
-  if (!vendorName) {
-    const ocrVendorName = pickOcrVendorName(args.extractedText || "");
-    if (ocrVendorName) {
-      vendorName = ocrVendorName;
-      vendorSource = "ocr";
-    }
+  const ocrVendorName = pickOcrVendorName(args.extractedText || "");
+  if (ocrVendorName && (!vendorName || (isGenericUtilityVendorName(vendorName) && !matchVendorName(ocrVendorName, vendorName)))) {
+    vendorName = ocrVendorName;
+    vendorSource = "ocr";
+    matchedVendorId = "";
   }
 
   return {
@@ -1283,20 +1293,30 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
   const totalAmount = pickBestExpenseAmount(extractedText);
   const invoiceRef = pickInvoiceReference(extractedText) || String(transaction?.invoiceRef || "").trim();
   const detectedUnits = extractPossibleUnits(extractedText, knownUnits);
+  const manualDocumentUnit = documentScopeOverride(document);
   const explicitDocumentUnit = normalizeUnitValue(document.unit) !== "shared" ? String(document.unit || "").trim() : "";
-  const unit = pickPreferredUnit(workOrder?.unit, transaction?.unit, lease?.unit, explicitDocumentUnit, detectedUnits[0], document.unit) || undefined;
+  const unit = manualDocumentUnit || pickPreferredUnit(workOrder?.unit, transaction?.unit, lease?.unit, explicitDocumentUnit, detectedUnits[0], document.unit) || undefined;
   const propertyAddress =
     (property?.address && matchAddress(extractedSearchText, property.address) ? String(property.address).trim() : "") ||
     pickAddressLine(extractedText);
   const vendorEmail = pickVendorEmail(extractedText) || contextualVendorEmail;
   const vendorPhone = pickVendorPhone(extractedText) || contextualVendorPhone;
   const serviceSummary = pickServiceSummary(extractedText, vendorName);
+  const overrides = document.ocrFieldOverrides || {};
+  const correctedVendorName = String(overrides.vendorName || "").trim();
+  const correctedTotalAmount = Number(overrides.totalAmount);
+  const correctedServicePeriodStart = String(overrides.servicePeriodStart || "").trim();
+  const correctedServicePeriodEnd = String(overrides.servicePeriodEnd || "").trim();
+  const resolvedVendorName = correctedVendorName || vendorName;
+  const resolvedTotalAmount = Number.isFinite(correctedTotalAmount) && correctedTotalAmount >= 0 ? correctedTotalAmount : totalAmount;
+  const resolvedServicePeriodStart = correctedServicePeriodStart || servicePeriod.startDate;
+  const resolvedServicePeriodEnd = correctedServicePeriodEnd || servicePeriod.endDate;
 
   const score =
-    (vendorName ? 2 : 0) +
+    (resolvedVendorName ? 2 : 0) +
     (invoiceRef ? 1 : 0) +
     ((invoiceDate || serviceDate || dueDate) ? 2 : 0) +
-    ((subtotal != null || taxAmount != null || totalAmount != null) ? 2 : 0) +
+    ((subtotal != null || taxAmount != null || resolvedTotalAmount != null) ? 2 : 0) +
     (propertyId || propertyAddress ? 1 : 0) +
     (unit ? 1 : 0) +
     ((vendorEmail || vendorPhone) ? 1 : 0) +
@@ -1306,17 +1326,17 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
 
   const sources = new Set<DocumentTagSuggestionSource>();
   sources.add("ocr");
-  if (vendorName) sources.add(vendorSource);
+  if (resolvedVendorName) sources.add(vendorSource);
   if (property || lease || transaction || workOrder || matchedVendorId) {
     sources.add(vendorSource === "ocr_match" ? "ocr_match" : "context");
   }
   const reasons = uniqueReasons([
-    vendorName ? (matchedVendorId ? `Vendor matched saved vendor ${vendorName}.` : `Vendor came from ${vendorSource === "context" ? "linked context" : "OCR text"}.`) : "",
-    totalAmount != null ? "Total amount was selected from amount/total due text." : "",
+    correctedVendorName ? `Vendor was corrected as ${correctedVendorName}.` : resolvedVendorName ? (matchedVendorId ? `Vendor matched saved vendor ${resolvedVendorName}.` : `Vendor came from ${vendorSource === "context" ? "linked context" : "OCR text"}.`) : "",
+    resolvedTotalAmount != null ? (Number.isFinite(correctedTotalAmount) ? "Total amount was corrected." : "Total amount was selected from amount/total due text.") : "",
     invoiceDate ? "Invoice date was selected from bill, invoice, or statement date text." : "",
     dueDate ? "Due date was selected from due/payment date text." : "",
-    servicePeriod.startDate && servicePeriod.endDate ? "Service period was selected from billing/service period text." : "",
-    unit ? `Unit scope resolved as ${unit}.` : "",
+    correctedServicePeriodStart || correctedServicePeriodEnd ? "Service period was corrected." : servicePeriod.startDate && servicePeriod.endDate ? "Service period was selected from billing/service period text." : "",
+    manualDocumentUnit ? `Unit scope was manually set as ${manualDocumentUnit}.` : unit ? `Unit scope resolved as ${unit}.` : "",
     propertyAddress ? "Location was selected from a matched property or address line." : "",
     invoiceRef ? "Reference was selected from invoice/reference text." : "",
   ]);
@@ -1325,7 +1345,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
     propertyId,
     propertyAddress: propertyAddress || undefined,
     unit: unit || undefined,
-    vendorName: vendorName || undefined,
+    vendorName: resolvedVendorName || undefined,
     vendorId: matchedVendorId || undefined,
     vendorPhone: vendorPhone || undefined,
     vendorEmail: vendorEmail || undefined,
@@ -1333,11 +1353,11 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
     invoiceDate: invoiceDate || undefined,
     serviceDate: serviceDate || undefined,
     dueDate: dueDate || undefined,
-    servicePeriodStart: servicePeriod.startDate || undefined,
-    servicePeriodEnd: servicePeriod.endDate || undefined,
+    servicePeriodStart: resolvedServicePeriodStart || undefined,
+    servicePeriodEnd: resolvedServicePeriodEnd || undefined,
     subtotal,
     taxAmount,
-    totalAmount,
+    totalAmount: resolvedTotalAmount,
     serviceSummary: serviceSummary || undefined,
     confidence: score >= 6 ? "high" : "medium",
     sources: sortSuggestionSources(sources),
@@ -1454,7 +1474,10 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
     candidateVendors,
   });
   const extractedFields = inferDocumentExtractedFields(args);
-  const amount = utilitySection?.amount ?? extractedFields?.totalAmount ?? pickBestExpenseAmount(extractedText);
+  const hasCorrectedAmount = Number.isFinite(Number(document.ocrFieldOverrides?.totalAmount));
+  const amount = hasCorrectedAmount
+    ? extractedFields?.totalAmount
+    : utilitySection?.amount ?? extractedFields?.totalAmount ?? pickBestExpenseAmount(extractedText);
   const date =
     utilitySection?.date ||
     extractedFields?.invoiceDate ||
@@ -1466,15 +1489,17 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
     String(utilitySection?.propertyId || extractedFields?.propertyId || workOrder?.propertyId || transaction?.propertyId || lease?.propertyId || property?.id || document.propertyId || "").trim() || undefined;
   const knownUnits = collectKnownUnits(args, resolvedPropertyId);
   const detectedUnits = extractPossibleUnits(extractedText, knownUnits);
+  const manualDocumentUnit = documentScopeOverride(document);
   const explicitDocumentUnit = normalizeUnitValue(document.unit) !== "shared" ? String(document.unit || "").trim() : "";
   const resolvedUnit =
+    manualDocumentUnit ||
     utilitySection?.unit ||
     pickPreferredUnit(extractedFields?.unit, workOrder?.unit, transaction?.unit, lease?.unit, explicitDocumentUnit, detectedUnits[0], document.unit) ||
     "Shared";
   const category = utilitySection?.category || inferExpenseCategory(combinedText, vendorDefaultCategory, workOrder);
   const description = buildExpenseDescription({
     category,
-    vendorName: utilitySection?.vendor || extractedFields?.vendorName || vendorName,
+    vendorName: extractedFields?.vendorName || utilitySection?.vendor || vendorName,
     documentType: String(document.type || document.name || ""),
     workOrder,
     invoiceRef,
@@ -1509,15 +1534,15 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
   return {
     propertyId: resolvedPropertyId,
     unit: resolvedUnit,
-    vendor: utilitySection?.vendor || extractedFields?.vendorName || vendorName,
+    vendor: extractedFields?.vendorName || utilitySection?.vendor || vendorName,
     vendorId: extractedFields?.vendorId || matchedVendorId || undefined,
     category,
     description: utilitySection?.description || description,
     amount,
     date: date || undefined,
     invoiceRef: invoiceRef || undefined,
-    servicePeriodStart: utilitySection?.servicePeriodStart || extractedFields?.servicePeriodStart || undefined,
-    servicePeriodEnd: utilitySection?.servicePeriodEnd || extractedFields?.servicePeriodEnd || undefined,
+    servicePeriodStart: extractedFields?.servicePeriodStart || utilitySection?.servicePeriodStart || undefined,
+    servicePeriodEnd: extractedFields?.servicePeriodEnd || utilitySection?.servicePeriodEnd || undefined,
     confidence: score >= 6 ? "high" : "medium",
     sources: sortSuggestionSources(sources),
     reasons,
@@ -1567,8 +1592,10 @@ export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs): D
     String(extractedFields?.propertyId || transaction?.propertyId || lease?.propertyId || property?.id || document.propertyId || "").trim() || undefined;
   const knownUnits = collectKnownUnits(args, resolvedPropertyId);
   const detectedUnits = extractPossibleUnits(extractedText, knownUnits);
+  const manualDocumentUnit = documentScopeOverride(document);
   const explicitDocumentUnit = normalizeUnitValue(document.unit) !== "shared" ? String(document.unit || "").trim() : "";
   const resolvedUnit =
+    manualDocumentUnit ||
     pickPreferredUnit(extractedFields?.unit, transaction?.unit, lease?.unit, explicitDocumentUnit, detectedUnits[0], document.unit) ||
     "Shared";
   const priority = inferWorkOrderPriority(combinedText);

@@ -289,12 +289,14 @@ export function useTransactionEntryController({
           relatedTransactionIds,
           propertyId: txn.propertyId,
           unit: txn.unit,
+          unitScopeOverride: true,
         });
       } else {
         actions.updateDocument(pendingDocumentExpenseSource.documentId, {
           transactionId: txn.id,
           propertyId: txn.propertyId,
           unit: txn.unit,
+          unitScopeOverride: true,
         });
       }
     }

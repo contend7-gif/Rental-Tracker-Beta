@@ -1655,6 +1655,7 @@ export default function App() {
     runDocumentAiAnalysis,
     runVisibleDocumentOcr,
     saveDocumentExtractedText,
+    saveDocumentOcrFieldCorrections,
     saveDocumentTags,
     saveImportedDocument,
   } = createDocumentWorkspaceController({
@@ -1748,6 +1749,7 @@ export default function App() {
     visibleDocumentsMissingIndex,
     visibleExpenseReviewRecords,
     visibleWorkOrderReviewRecords,
+    vendors,
     workOrderById,
     workOrderSuggestionReasonSummary,
   });
@@ -2303,6 +2305,7 @@ export default function App() {
     runLeaseAutomationNow,
     runVisibleDocumentOcr,
     saveDocumentExtractedText,
+    saveDocumentOcrFieldCorrections,
     saveDocumentTags,
     saveEscrowDisbursement,
     savePlanningManualProject,
@@ -2685,7 +2688,6 @@ export default function App() {
     </div>
   );
 }
-
 
 
 

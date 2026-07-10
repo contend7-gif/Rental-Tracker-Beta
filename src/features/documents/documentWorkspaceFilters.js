@@ -4,6 +4,7 @@ export function selectDocumentsForWorkspaceTab({
   inboxDocuments = [],
   linkedDocuments = [],
   needsReviewDocuments = [],
+  ocrQualityDocuments = [],
   reviewedDocuments = [],
   supportingDocuments = [],
   visibleDocuments = [],
@@ -12,6 +13,7 @@ export function selectDocumentsForWorkspaceTab({
   if (documentsTab === "reviewed") return reviewedDocuments;
   if (documentsTab === "all") return visibleDocuments;
   if (documentsTab === "needs_review") return needsReviewDocuments;
+  if (documentsTab === "ocr_quality") return ocrQualityDocuments;
   if (documentsTab === "linked") return linkedDocuments;
   if (documentsTab === "supporting") return supportingDocuments;
   return inboxDocuments;

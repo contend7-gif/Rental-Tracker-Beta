@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.6",
+    releaseDate: "2026-07-09",
+    title: "OCR correction workflow",
+    summary: "Makes document OCR fixes actionable, persistent, and reusable across future bill reviews.",
+    changes: [
+      "Documents now includes an OCR fixes queue for files with missing or low-confidence vendor, amount, date, and service details.",
+      "Review details now provides direct correction fields for vendor, total, service period, and unit, including an explicit Shared unit choice.",
+      "Saved OCR corrections take precedence in future drafts, and confirmed vendor corrections strengthen vendor matching with reusable profiles and aliases.",
+      "Spectrum-style utility OCR now favors the provider header and clean billing period over generic city or utility context.",
+    ],
+  },
+  {
     version: "1.0.5",
     releaseDate: "2026-07-09",
     title: "Documents loading hotfix",

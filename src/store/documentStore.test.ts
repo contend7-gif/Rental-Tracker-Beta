@@ -39,3 +39,25 @@ test("normalizeDocument preserves reviewed warning acknowledgements", () => {
   assert.deepEqual(document.reviewedWarningKeys, ["missing_amount", "low_confidence"]);
   assert.equal(document.reviewedWarningsAt, "2026-07-08T12:00:00.000Z");
 });
+
+test("normalizeDocument preserves OCR field corrections", () => {
+  const document = normalizeDocument({
+    id: "doc-4",
+    propertyId: "p1",
+    name: "internet.pdf",
+    type: "Scanned PDF",
+    ocrFieldOverrides: {
+      vendorName: " Spectrum ",
+      totalAmount: 42.505,
+      servicePeriodStart: "2026-06-18",
+      servicePeriodEnd: "2026-07-17",
+    },
+  });
+
+  assert.deepEqual(document.ocrFieldOverrides, {
+    vendorName: "Spectrum",
+    totalAmount: 42.51,
+    servicePeriodStart: "2026-06-18",
+    servicePeriodEnd: "2026-07-17",
+  });
+});

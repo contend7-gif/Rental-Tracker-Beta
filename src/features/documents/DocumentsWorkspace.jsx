@@ -22,6 +22,7 @@ import {
 import { selectDocumentsForWorkspaceTab } from "./documentWorkspaceFilters.js";
 
 const DOCUMENT_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
+const OCR_FIELD_WARNING_KEYS = new Set(["low_confidence", "missing_vendor", "missing_date", "missing_amount", "service_amount_text"]);
 const DOCUMENT_STAT_ICON_TONES = {
   inbox: "border-blue-200 bg-blue-50 text-blue-700",
   text: "border-sky-200 bg-sky-50 text-sky-700",
@@ -155,6 +156,7 @@ export function DocumentsWorkspace({
   runDocumentAiAnalysis,
   runVisibleDocumentOcr,
   saveDocumentExtractedText,
+  saveDocumentOcrFieldCorrections,
   saveDocumentTags,
   selectExpenseQueueFilter,
   selectWorkOrderQueueFilter,
@@ -165,6 +167,7 @@ export function DocumentsWorkspace({
   transactionById = {},
   transactionReviewInbox = [],
   transactions,
+  units = [],
   visibleAutomaticOcrDocuments,
   visibleDocuments,
   visibleDocumentsMissingIndex,
@@ -295,6 +298,10 @@ export function DocumentsWorkspace({
     () => visibleDocuments.filter((document) => getDocumentQualityWarnings(document).length > 0),
     [getDocumentQualityWarnings, visibleDocuments],
   );
+  const ocrQualityDocuments = useMemo(
+    () => visibleDocuments.filter((document) => getDocumentQualityWarnings(document).some((warning) => OCR_FIELD_WARNING_KEYS.has(warning.key))),
+    [getDocumentQualityWarnings, visibleDocuments],
+  );
   const reviewedDocuments = useMemo(
     () => visibleDocuments.filter((document) => isDocumentReviewed(document, workflowContext)),
     [visibleDocuments, workflowContext],
@@ -321,6 +328,7 @@ export function DocumentsWorkspace({
     inboxDocuments,
     linkedDocuments,
     needsReviewDocuments,
+    ocrQualityDocuments,
     reviewedDocuments,
     supportingDocuments,
     visibleDocuments,
@@ -625,9 +633,9 @@ export function DocumentsWorkspace({
                   Apply {recommendationSummary.safe} safe recommendations
                 </Button>
               ) : null}
-              {recommendationSummary.flagged > 0 ? (
-                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => setDocumentsTab("needs_review")}>
-                  Review {recommendationSummary.flagged} flagged
+              {ocrQualityDocuments.length > 0 ? (
+                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => setDocumentsTab("ocr_quality")}>
+                  Review OCR fixes ({ocrQualityDocuments.length})
                 </Button>
               ) : null}
             </div>
@@ -756,6 +764,7 @@ export function DocumentsWorkspace({
           <TabsList className={DOCUMENT_MUTED_PANEL_CLASS + " h-auto w-full justify-start overflow-x-auto p-1 sm:w-auto"}>
             <Inbox className="ml-1 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
             <TabsTrigger value="inbox">Inbox ({inboxDocuments.length})</TabsTrigger>
+            <TabsTrigger value="ocr_quality"><FileWarning className="mr-1 h-3.5 w-3.5 text-amber-700" />OCR fixes ({ocrQualityDocuments.length})</TabsTrigger>
             <TabsTrigger value="needs_review"><FileWarning className="mr-1 h-3.5 w-3.5 text-amber-700" />Needs Review ({needsReviewDocuments.length})</TabsTrigger>
             <TabsTrigger value="linked"><Link2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Linked ({linkedDocuments.length})</TabsTrigger>
             <TabsTrigger value="receipt_gaps">Missing Receipts ({missingReceiptGapRecords.length})</TabsTrigger>
@@ -763,7 +772,7 @@ export function DocumentsWorkspace({
             <TabsTrigger value="reviewed">Reviewed ({reviewedDocuments.length})</TabsTrigger>
             <TabsTrigger value="all">All Files ({visibleDocuments.length})</TabsTrigger>
           </TabsList>
-          {["inbox", "needs_review", "linked", "supporting", "reviewed", "all"].map((tab) => (
+          {["inbox", "ocr_quality", "needs_review", "linked", "supporting", "reviewed", "all"].map((tab) => (
             <TabsContent key={tab} value={tab} className="space-y-2">
               {filteredDocuments.length === 0 ? (
                 <div className={DOCUMENT_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>No documents for the current property/unit filter.</div>
@@ -771,6 +780,8 @@ export function DocumentsWorkspace({
                 <div className={DOCUMENT_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>
                   {tab === "inbox"
                     ? "No documents need review in the current search/filter."
+                    : tab === "ocr_quality"
+                      ? "No OCR field corrections are waiting in the current search/filter."
                     : tab === "needs_review"
                       ? "No flagged documents match the current search/filter."
                       : tab === "linked"
@@ -874,11 +885,13 @@ export function DocumentsWorkspace({
           removeDocumentRecordLink={removeDocumentRecordLink}
           runDocumentAiAnalysis={runDocumentAiAnalysis}
           saveDocumentExtractedText={saveDocumentExtractedText}
+          saveDocumentOcrFieldCorrections={saveDocumentOcrFieldCorrections}
           saveDocumentTags={saveDocumentTags}
           markSupportingOnly={markSupportingOnly}
           nextDocumentName={nextInboxDocument?.name || ""}
           transactionById={transactionById}
           transactions={transactions}
+          units={units}
           leaseById={leaseById}
           leases={leases}
           workOrderSuggestionConfidenceLabel={workOrderSuggestionConfidenceLabel}

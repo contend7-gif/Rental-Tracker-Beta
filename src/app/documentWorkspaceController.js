@@ -96,6 +96,7 @@ export function createDocumentWorkspaceController({
   visibleDocumentsMissingIndex,
   visibleExpenseReviewRecords,
   visibleWorkOrderReviewRecords,
+  vendors = [],
   workOrderById,
   workOrderSuggestionReasonSummary,
 }) {
@@ -576,7 +577,9 @@ export function createDocumentWorkspaceController({
     const linkedTxn = effectiveLinkType === "transaction" ? transactionById[effectiveLinkedId] : null;
     const linkedWorkOrder = effectiveLinkType === "workOrder" ? workOrderById[effectiveLinkedId] : null;
     const nextPropertyId = linkedLease?.propertyId || linkedTxn?.propertyId || linkedWorkOrder?.propertyId || documentImportDraft.propertyId;
-    const nextUnit = linkedLease?.unit || linkedTxn?.unit || linkedWorkOrder?.unit || documentImportDraft.unit || "Shared";
+    const nextUnit = documentImportDraft.unitScopeOverride
+      ? documentImportDraft.unit || "Shared"
+      : linkedLease?.unit || linkedTxn?.unit || linkedWorkOrder?.unit || documentImportDraft.unit || "Shared";
     const ocrStatus = normalizeDocumentOcrStatus(documentImportDraft.ocrStatus, extractedText);
 
     if (!nextPropertyId) {
@@ -593,6 +596,7 @@ export function createDocumentWorkspaceController({
       leaseId: linkedLease?.id,
       transactionId: linkedTxn?.id,
       workOrderId: linkedWorkOrder?.id,
+      unitScopeOverride: Boolean(documentImportDraft.unitScopeOverride),
       mimeType: documentImportDraft.mimeType || undefined,
       uploadedAt: new Date().toISOString(),
       dataUrl: documentImportDraft.dataUrl,
@@ -857,6 +861,78 @@ export function createDocumentWorkspaceController({
       workOrderReviewDismissedAt: nextExtractedText ? undefined : document.workOrderReviewDismissedAt,
     });
     setNotice("Extracted text updated.");
+  };
+
+  const saveDocumentOcrFieldCorrections = (document, corrections = {}) => {
+    if (!requirePermission("review_documents", "This access profile cannot correct OCR fields.")) return;
+    if (!document) return;
+
+    const currentFields = getDocumentExtractedFields?.(document) || {};
+    const vendorName = String(corrections.vendorName || "").trim();
+    const totalAmountText = String(corrections.totalAmount || "").trim();
+    const totalAmount = totalAmountText ? Number(totalAmountText) : undefined;
+    const servicePeriodStart = String(corrections.servicePeriodStart || "").trim();
+    const servicePeriodEnd = String(corrections.servicePeriodEnd || "").trim();
+    const unit = String(corrections.unit || document.unit || "Shared").trim() || "Shared";
+
+    if (totalAmountText && (!Number.isFinite(totalAmount) || totalAmount < 0)) {
+      setNotice("Enter a valid non-negative total amount.");
+      return;
+    }
+    if (servicePeriodStart && servicePeriodEnd && servicePeriodEnd < servicePeriodStart) {
+      setNotice("Service period end must be on or after its start date.");
+      return;
+    }
+
+    const currentOverrides = document.ocrFieldOverrides || {};
+    const nextOverrides = {
+      ...currentOverrides,
+      vendorName: vendorName || undefined,
+      totalAmount: totalAmountText ? Math.round(totalAmount * 100) / 100 : undefined,
+      servicePeriodStart: servicePeriodStart || undefined,
+      servicePeriodEnd: servicePeriodEnd || undefined,
+    };
+
+    actions.updateDocument(document.id, {
+      ocrFieldOverrides: nextOverrides,
+      unit,
+      unitScopeOverride: true,
+      reviewedWarningKeys: undefined,
+      reviewedWarningsAt: undefined,
+      expenseReviewDismissedAt: undefined,
+      workOrderReviewDismissedAt: undefined,
+    });
+
+    const originalVendorName = String(currentFields.vendorName || "").trim();
+    if (vendorName && vendorName.toLowerCase() !== originalVendorName.toLowerCase()) {
+      const normalizedVendorName = vendorName.toLowerCase();
+      const matchedVendor = vendors.find((vendor) => {
+        const names = [vendor.name, ...(Array.isArray(vendor.aliases) ? vendor.aliases : [])]
+          .map((value) => String(value || "").trim().toLowerCase())
+          .filter(Boolean);
+        return names.includes(normalizedVendorName);
+      });
+      const alias = originalVendorName && originalVendorName.toLowerCase() !== normalizedVendorName ? originalVendorName : "";
+      if (matchedVendor) {
+        actions.addOrUpdateVendor({
+          ...matchedVendor,
+          aliases: Array.from(new Set([...(matchedVendor.aliases || []), alias].filter(Boolean))),
+        });
+      } else {
+        actions.addOrUpdateVendor({
+          id: `vendor-${Date.now()}`,
+          name: vendorName,
+          aliases: alias ? [alias] : [],
+          phone: "",
+          email: "",
+          defaultCategory: getDocumentExpenseSuggestion?.(document)?.category || "Other expenses",
+          notes: "Created from a confirmed OCR vendor correction.",
+          active: true,
+        });
+      }
+    }
+
+    setNotice(`OCR corrections saved for ${document.name}.`);
   };
 
   const markDocumentWarningsReviewed = (document, warningKeys = []) => {
@@ -1497,6 +1573,7 @@ export function createDocumentWorkspaceController({
     runDocumentAiAnalysis,
     runVisibleDocumentOcr,
     saveDocumentExtractedText,
+    saveDocumentOcrFieldCorrections,
     saveDocumentTags,
     saveImportedDocument,
   };

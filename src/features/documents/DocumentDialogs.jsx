@@ -189,7 +189,7 @@ export function DocumentImportDialog({
               )}
               {field(
                 "Unit",
-                <Select value={documentImportDraft.unit || "Shared"} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, unit: value }))}>
+                <Select value={documentImportDraft.unit || "Shared"} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, unit: value, unitScopeOverride: true }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {documentImportUnitOptions.map((unitName) => <SelectItem key={`import-unit-${unitName}`} value={unitName}>{unitName}</SelectItem>)}
