@@ -1545,6 +1545,7 @@ export default function App() {
     formatStatementMonthLabel,
     formatStatementPresetLabel,
     formatUnitLabel,
+    isTaxActive: view === "tax",
     leaseActualEndLabel,
     leaseDraft,
     leaseTenantLedgerSummary,

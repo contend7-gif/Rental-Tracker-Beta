@@ -35,6 +35,7 @@ export function useStatementReportingController({
   formatStatementMonthLabel,
   formatStatementPresetLabel,
   formatUnitLabel,
+  isTaxActive,
   leaseActualEndLabel,
   leaseDraft,
   leaseTenantLedgerSummary,
@@ -125,8 +126,9 @@ export function useStatementReportingController({
   }, [ownerStatementCustomEnd, ownerStatementCustomStart, ownerStatementPreset, todayIso, yearFilter, monthStartIso, quarterStartIso, formatStatementPresetLabel]);
 
   const ownerMonthlyRows = useMemo(
-    () =>
-      buildOwnerMonthlyReport({
+    () => {
+      if (!isTaxActive) return [];
+      return buildOwnerMonthlyReport({
         year: yearFilter,
         transactions: activeTx,
         loanPayments,
@@ -136,15 +138,17 @@ export function useStatementReportingController({
         usePeriods,
         leases,
         units,
-      }),
-    [yearFilter, activeTx, loanPayments, loans, propertyFilter, unitFilter, usePeriods, leases, units],
+      });
+    },
+    [yearFilter, activeTx, loanPayments, loans, propertyFilter, unitFilter, usePeriods, leases, units, isTaxActive],
   );
 
   const ownerMonthlyTotals = useMemo(() => summarizeOwnerMonthlyReport(ownerMonthlyRows), [ownerMonthlyRows]);
 
   const ownerStatementRows = useMemo(
-    () =>
-      buildOwnerPeriodReport({
+    () => {
+      if (!isTaxActive) return [];
+      return buildOwnerPeriodReport({
         startDate: ownerStatementRange.startDate,
         endDate: ownerStatementRange.endDate,
         transactions: activeTx,
@@ -155,8 +159,9 @@ export function useStatementReportingController({
         usePeriods,
         leases,
         units,
-      }),
-    [activeTx, loanPayments, loans, ownerStatementRange.endDate, ownerStatementRange.startDate, propertyFilter, unitFilter, usePeriods, leases, units],
+      });
+    },
+    [activeTx, loanPayments, loans, ownerStatementRange.endDate, ownerStatementRange.startDate, propertyFilter, unitFilter, usePeriods, leases, units, isTaxActive],
   );
 
   const ownerStatementTotals = useMemo(() => summarizeOwnerMonthlyReport(ownerStatementRows), [ownerStatementRows]);
