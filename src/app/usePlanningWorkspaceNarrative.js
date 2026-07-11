@@ -17,6 +17,7 @@ export function usePlanningWorkspaceNarrative({
   appSettings,
   currency,
   formatPropertyLabel,
+  isPlanningActive,
   isHistoricalDashboard,
   planningActionItems,
   planningActiveScenario,
@@ -230,6 +231,7 @@ export function usePlanningWorkspaceNarrative({
   }, [planningGoalStatus.length, planningHorizonDisplayMetrics.cashFlow, planningHorizonShortLabel, planningNextCapitalTarget, planningOpenActionItems.length, planningReviewInbox, planningTriggerAlerts, todayIso, currency]);
 
   const planningMemoText = useMemo(() => {
+    if (!isPlanningActive) return "";
     const lines = [
       `Planning memo - ${planningScopeLabel}`,
       `Prepared: ${todayIso}`,
@@ -320,9 +322,11 @@ export function usePlanningWorkspaceNarrative({
     planningCapitalTargetsMerged,
     currency,
     formatPropertyLabel,
+    isPlanningActive,
   ]);
 
   const planningMemoHtml = useMemo(() => {
+    if (!isPlanningActive) return "";
     const recommendationHtml = planningRecommendations
       .map((item) => `<div class="detail-item"><div class="detail-label">${escapeHtml(item.priority.toUpperCase())}</div><div class="detail-value"><strong>${escapeHtml(item.title)}</strong><br />${escapeHtml(item.detail)}</div></div>`)
       .join("");
@@ -423,6 +427,7 @@ export function usePlanningWorkspaceNarrative({
     planningScenarioNotesDraft,
     currency,
     formatPropertyLabel,
+    isPlanningActive,
   ]);
 
   return {

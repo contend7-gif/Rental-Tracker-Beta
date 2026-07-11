@@ -16,6 +16,8 @@ import {
 import { parseDocumentTags } from "./documentShared.js";
 
 export function useDocumentReviewModel({
+  isActive,
+  isDocumentImportOpen,
   documentImportDraft,
   documentSearch,
   documentSort,
@@ -39,6 +41,11 @@ export function useDocumentReviewModel({
   workOrderById,
   workOrders,
 }) {
+  const shouldPrepareDocumentReview = Boolean(isActive || isDocumentImportOpen || selectedDocument);
+  const shouldAnalyzeImportDraft = Boolean(
+    isDocumentImportOpen
+    && (documentImportDraft?.name || documentImportDraft?.dataUrl || documentImportDraft?.extractedText),
+  );
   const candidateWorkOrders = useMemo(
     () =>
       workOrders.map((workOrder) => ({
@@ -294,12 +301,12 @@ export function useDocumentReviewModel({
     };
   };
 
-  const documentImportSuggestedTags = getDocumentImportSuggestedTags(documentImportDraft);
-  const documentImportLinkSuggestions = getDocumentImportLinkSuggestions(documentImportDraft);
-  const documentImportExtractedFields = getDocumentImportExtractedFields(documentImportDraft);
-  const documentImportExpenseSuggestion = getDocumentImportExpenseSuggestion(documentImportDraft);
-  const documentImportWorkOrderSuggestion = getDocumentImportWorkOrderSuggestion(documentImportDraft);
-  const documentImportUtilitySections = getDocumentImportUtilitySections(documentImportDraft);
+  const documentImportSuggestedTags = shouldAnalyzeImportDraft ? getDocumentImportSuggestedTags(documentImportDraft) : [];
+  const documentImportLinkSuggestions = shouldAnalyzeImportDraft ? getDocumentImportLinkSuggestions(documentImportDraft) : [];
+  const documentImportExtractedFields = shouldAnalyzeImportDraft ? getDocumentImportExtractedFields(documentImportDraft) : null;
+  const documentImportExpenseSuggestion = shouldAnalyzeImportDraft ? getDocumentImportExpenseSuggestion(documentImportDraft) : null;
+  const documentImportWorkOrderSuggestion = shouldAnalyzeImportDraft ? getDocumentImportWorkOrderSuggestion(documentImportDraft) : null;
+  const documentImportUtilitySections = shouldAnalyzeImportDraft ? getDocumentImportUtilitySections(documentImportDraft) : [];
   const selectedDocumentExtractedFields = selectedDocument ? getDocumentExtractedFields(selectedDocument) : null;
   const selectedDocumentAiAnalysis = selectedDocument?.aiAnalysis || null;
   const selectedDocumentUtilitySections = selectedDocument ? getDocumentUtilitySections(selectedDocument) : [];
@@ -348,6 +355,7 @@ export function useDocumentReviewModel({
   }, [documents, workOrders]);
 
   const documentExpenseReviewRecords = useMemo(() => {
+    if (!shouldPrepareDocumentReview) return [];
     const records = filteredDocuments
       .map((document) => {
         const suggestion = getDocumentExpenseSuggestion(document);
@@ -367,9 +375,10 @@ export function useDocumentReviewModel({
     });
 
     return records;
-  }, [candidateWorkOrders, filteredDocuments, transactions, leases, workOrders, properties, vendors]);
+  }, [candidateWorkOrders, filteredDocuments, transactions, leases, workOrders, properties, shouldPrepareDocumentReview, vendors]);
 
   const documentWorkOrderReviewRecords = useMemo(() => {
+    if (!shouldPrepareDocumentReview) return [];
     const records = filteredDocuments
       .map((document) => {
         const suggestion = getDocumentWorkOrderSuggestion(document);
@@ -389,7 +398,7 @@ export function useDocumentReviewModel({
     });
 
     return records;
-  }, [candidateWorkOrders, filteredDocuments, transactions, leases, workOrders, properties, vendors]);
+  }, [candidateWorkOrders, filteredDocuments, transactions, leases, workOrders, properties, shouldPrepareDocumentReview, vendors]);
 
   const documentExpenseReviewRecordById = useMemo(
     () => Object.fromEntries(documentExpenseReviewRecords.map((record) => [record.document.id, record])),
@@ -432,6 +441,7 @@ export function useDocumentReviewModel({
   );
 
   const visibleDocuments = useMemo(() => {
+    if (!shouldPrepareDocumentReview) return [];
     const query = documentSearch.trim().toLowerCase();
     const scoped = filteredDocuments.filter((document) => {
       const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
@@ -505,7 +515,7 @@ export function useDocumentReviewModel({
       return (a.name || "").localeCompare(b.name || "");
     });
     return sorted;
-  }, [documentSearch, documentSort, documentStatusFilter, filteredDocuments, propertyNameById, transactionById, leaseById, vendorById, workOrderById, workOrders, documentExpenseReviewRecordById, documentWorkOrderReviewRecordById, expenseQueueShowDismissed]);
+  }, [documentSearch, documentSort, documentStatusFilter, filteredDocuments, propertyNameById, transactionById, leaseById, vendorById, workOrderById, workOrders, documentExpenseReviewRecordById, documentWorkOrderReviewRecordById, expenseQueueShowDismissed, shouldPrepareDocumentReview]);
 
   const visibleDocumentsMissingIndex = useMemo(
     () => visibleDocuments.filter((document) => documentNeedsOcr(document) || documentNeedsIndexing(document)),

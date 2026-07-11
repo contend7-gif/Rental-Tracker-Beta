@@ -138,6 +138,8 @@ import { useVisibleSafeSuggestionCount } from "./app/useVisibleSafeSuggestionCou
 import { useWorkspaceFilterOptions } from "./app/useWorkspaceFilterOptions.js";
 import packageMeta from "../package.json";
 
+const EMPTY_DOCUMENTS = [];
+
 export default function App() {
   const { appSettings, settingsSavedVisible, setSetting: persistSetting, setDashboardCardSetting: persistDashboardCardSetting, resetToDefaults: resetStoredSettings, replaceSettings } = useAppSettings();
   const [view, setView] = useState(() => appSettings.defaultView || "dashboard");
@@ -907,6 +909,8 @@ export default function App() {
     visibleWorkOrderReviewRecords,
     workOrderDocumentCountById,
   } = useDocumentReviewModel({
+    isActive: view === "documents" || view === "review",
+    isDocumentImportOpen: documentImportDialogOpen,
     documentImportDraft,
     documentSearch,
     documentSort,
@@ -1319,6 +1323,7 @@ export default function App() {
     activeTx,
     currency,
     formatPropertyLabel,
+    isPlanningActive: view === "planning",
     leases,
     loans,
     planningActiveScenario,
@@ -1362,6 +1367,7 @@ export default function App() {
     appSettings,
     currency,
     formatPropertyLabel,
+    isPlanningActive: view === "planning",
     isHistoricalDashboard,
     planningActionItems,
     planningActiveScenario,
@@ -1770,7 +1776,7 @@ export default function App() {
     getSafeDocumentLinkSuggestion,
     getSafeDocumentTagSuggestions,
     transactionById,
-    visibleDocuments,
+    visibleDocuments: view === "review" ? visibleDocuments : EMPTY_DOCUMENTS,
   });
 
   const {

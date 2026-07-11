@@ -124,6 +124,7 @@ export function usePlanningWorkspaceAnalytics({
   activeTx,
   currency,
   formatPropertyLabel,
+  isPlanningActive,
   leases,
   loans,
   planningActiveScenario,
@@ -156,8 +157,9 @@ export function usePlanningWorkspaceAnalytics({
   usePeriods,
 }) {
   const planningScenarioComparisons = useMemo(
-    () =>
-      [
+    () => {
+      if (!isPlanningActive) return [];
+      return [
         { key: "conservative", label: "Conservative" },
         { key: "base", label: "Base" },
         { key: "growth", label: "Growth" },
@@ -179,13 +181,15 @@ export function usePlanningWorkspaceAnalytics({
           turnoverInputs: toProjectionTurnoverInputs(planningTurnoverInputs),
           forecastOptions: planningForecastOptionInputs,
         }),
-      })),
-    [todayIso, propertyFilter, properties, activeTx, leases, loans, usePeriods, units, planningRentStrategies, planningTurnoverInputs, planningForecastOptionInputs],
+      }));
+    },
+    [todayIso, propertyFilter, properties, activeTx, leases, loans, usePeriods, units, planningRentStrategies, planningTurnoverInputs, planningForecastOptionInputs, isPlanningActive],
   );
 
   const planningSensitivityRows = useMemo(
-    () =>
-      buildPlanningSensitivity({
+    () => {
+      if (!isPlanningActive) return [];
+      return buildPlanningSensitivity({
         today: todayIso,
         propertyId: propertyFilter === "all" ? undefined : propertyFilter,
         properties,
@@ -200,7 +204,8 @@ export function usePlanningWorkspaceAnalytics({
         rentStrategies: toProjectionRentStrategies(planningRentStrategies),
         turnoverInputs: toProjectionTurnoverInputs(planningTurnoverInputs),
         forecastOptions: planningForecastOptionInputs,
-      }),
+      });
+    },
     [
       todayIso,
       propertyFilter,
@@ -216,10 +221,12 @@ export function usePlanningWorkspaceAnalytics({
       planningRentStrategies,
       planningTurnoverInputs,
       planningForecastOptionInputs,
+      isPlanningActive,
     ],
   );
 
   const planningScenarioComparisonsExtended = useMemo(() => {
+    if (!isPlanningActive) return [];
     const rows = [
       {
         key: "current",
@@ -319,6 +326,7 @@ export function usePlanningWorkspaceAnalytics({
     planningTurnoverInputs,
     planningForecastOptionInputs,
     formatPropertyLabel,
+    isPlanningActive,
   ]);
 
   const planningOutcomeHighlights = useMemo(() => {
@@ -337,18 +345,21 @@ export function usePlanningWorkspaceAnalytics({
   }, [planningScenarioComparisonsExtended, currency]);
 
   const planningScenarioRange = useMemo(
-    () =>
-      buildPlanningScenarioRange({
+    () => {
+      if (!isPlanningActive) return [];
+      return buildPlanningScenarioRange({
         scenarios: planningScenarioComparisons.map((scenario) => ({
           key: scenario.key,
           label: scenario.label,
           summary: scenario.projection.summary,
         })),
-      }),
-    [planningScenarioComparisons],
+      });
+    },
+    [planningScenarioComparisons, isPlanningActive],
   );
 
   const planningScenarioDiffRows = useMemo(() => {
+    if (!isPlanningActive) return [];
     const baselineAssumptions = planningBaselineScenario?.assumptions || getPlanningPresetValues("base");
     const baselineSummary = planningBaselineScenario
       ? buildScenarioProjection({
@@ -399,6 +410,7 @@ export function usePlanningWorkspaceAnalytics({
     loans,
     usePeriods,
     units,
+    isPlanningActive,
   ]);
 
   const planningScenarioTimelineRows = useMemo(() => {
