@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.8",
+    releaseDate: "2026-07-11",
+    title: "Faster startup and on-demand workspace analysis",
+    summary: "Keeps the dashboard responsive by preparing large workspace analysis and export data only when you open the related workspace.",
+    changes: [
+      "Startup now prefetches only one likely next workspace after initial data hydration instead of loading several large screens at once.",
+      "Document review analysis stays dormant until Documents, Review Center, or a document dialog needs it.",
+      "Planning scenario comparisons and printable planning memos are generated only while Planning is open.",
+      "Tax worksheets, CPA handoff notes, and owner statement reports are prepared only while Tax Center is open, while dashboard tax figures stay current.",
+    ],
+  },
+  {
     version: "1.0.7",
     releaseDate: "2026-07-11",
     title: "Faster Documents and desktop responsiveness",
