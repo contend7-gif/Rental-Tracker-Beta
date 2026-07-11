@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.7",
+    releaseDate: "2026-07-11",
+    title: "Faster Documents and desktop responsiveness",
+    summary: "Speeds up opening the app and Documents by deferring file work and keeping common lookups ready in memory.",
+    changes: [
+      "Documents no longer loads every stored file into memory when the workspace opens; preview data is read only when you review a document.",
+      "Document review now reuses property, vendor, work-order, and analysis lookups instead of recalculating them for each render.",
+      "Activity history loads in the background through a paged SQLite query, letting the main workspace become interactive sooner.",
+      "Settings now includes lightweight timing diagnostics for startup, history hydration, workspace switching, and document reads.",
+    ],
+  },
+  {
     version: "1.0.6",
     releaseDate: "2026-07-09",
     title: "OCR correction workflow",
