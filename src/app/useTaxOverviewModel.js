@@ -16,6 +16,7 @@ export function useTaxOverviewModel({
   effectiveLoanPaymentDeductibleInterest,
   effectiveTransactionDeductibleAmount,
   getScheduleELineIdForTransaction,
+  isTaxActive,
   leases,
   loans,
   propertyFilter,
@@ -232,6 +233,7 @@ export function useTaxOverviewModel({
   const dashboardFiltersSummary = buildDashboardFiltersSummary(yearFilter, propertyFilterLabel, unitFilterLabel);
 
   const taxReviewCpaNotes = useMemo(() => {
+    if (!isTaxActive) return "";
     const totalFlagged = taxReviewSections.reduce((sum, section) => sum + section.flaggedItems.length, 0);
     const totalChecked = taxReviewSections.reduce(
       (sum, section) => sum + section.flaggedItems.filter((item) => item.taxChecked).length,
@@ -303,6 +305,7 @@ export function useTaxOverviewModel({
     deMinimisThreshold,
     currency,
     effectiveTransactionDeductibleAmount,
+    isTaxActive,
   ]);
 
   const copyTaxReviewNotes = async () => {

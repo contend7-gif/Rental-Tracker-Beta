@@ -67,6 +67,7 @@ export function useTaxPacketReportingController({
   escapeHtml,
   formatPropertyLabel,
   formatUnitLabel,
+  isTaxActive,
   leases,
   loanPayments,
   loans,
@@ -119,8 +120,8 @@ export function useTaxPacketReportingController({
   };
 
   const scheduleEPropertyWorksheet = useMemo(
-    () => buildScheduleEPropertyWorksheet({ properties, propertyFilter, propertyNameById, taxReportingSummary, taxSnapshot }),
-    [properties, propertyFilter, propertyNameById, taxReportingSummary, taxSnapshot],
+    () => (isTaxActive ? buildScheduleEPropertyWorksheet({ properties, propertyFilter, propertyNameById, taxReportingSummary, taxSnapshot }) : { columns: [], rows: [] }),
+    [properties, propertyFilter, propertyNameById, taxReportingSummary, taxSnapshot, isTaxActive],
   );
 
   const exportScheduleEReport = () => {
