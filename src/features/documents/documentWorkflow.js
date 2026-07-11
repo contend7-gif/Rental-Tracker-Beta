@@ -40,7 +40,8 @@ export function getDocumentWorkflowStatus(document, context = {}) {
   if (hasLinkedRecord(document, context)) return "reviewed";
   if (hasSupportingOnlyTag(document)) return "supporting_only";
 
-  const canExtractText = Boolean(document?.dataUrl && context.documentSupportsAutomaticOcr?.(document.name, document.mimeType));
+  const hasStoredFile = Boolean(document?.dataUrl || document?.relativePath || document?.filePath);
+  const canExtractText = Boolean(hasStoredFile && context.documentSupportsAutomaticOcr?.(document.name, document.mimeType));
   if ((documentNeedsOcr(document || {}) || documentNeedsIndexing(document || {})) && canExtractText) return "needs_ocr";
 
   const expenseRecord = getExpenseRecord(document, context);

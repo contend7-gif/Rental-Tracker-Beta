@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { backupDocumentArchivePath, buildBackupZipBuffer, inspectBackupZipBuffer, readBackupZipBuffer, ZIP_BACKUP_FORMAT } from "./backupArchive.mjs";
-import { ensureRentalTrackerDataDirs, getFileSize, getRentalTrackerDataPaths, hydrateDocumentDataUrl, safeRelativeDocumentPath, writeDocumentBlob } from "./fileStore.mjs";
+import { ensureRentalTrackerDataDirs, getFileSize, getRentalTrackerDataPaths, readDocumentAsDataUrl, safeRelativeDocumentPath, writeDocumentBlob } from "./fileStore.mjs";
 
 export const DATABASE_SCHEMA_VERSION = 1;
 export const BACKUP_SCHEMA_VERSION = 5;
@@ -202,7 +202,6 @@ const COLLECTIONS = [
       ai_analysis_json: (item) => jsonText(item.aiAnalysis),
     },
     prepare: async (item, paths) => writeDocumentBlob(item, paths.documentsDir),
-    hydrate: async (item, paths, errors) => hydrateDocumentDataUrl(item, paths.documentsDir, errors),
   },
   {
     key: "activityLog",
@@ -529,6 +528,8 @@ export function runDatabaseMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_documents_property_uploaded ON documents(property_id, uploaded_at);
     CREATE INDEX IF NOT EXISTS idx_leases_property_status ON leases(property_id, status);
     CREATE INDEX IF NOT EXISTS idx_work_orders_property_status ON work_orders(property_id, status);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_scope_at ON activity_log(property_id, unit, at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_filters_at ON activity_log(action, category, entity_type, at DESC);
   `);
 
   setMeta(db, "databaseSchemaVersion", String(DATABASE_SCHEMA_VERSION));
@@ -676,14 +677,63 @@ function getCollectionCounts(db) {
   );
 }
 
-export async function loadAppDataFromDatabase({ db, paths, appVersion = "" }) {
-  const errors = [];
+function boundedPageNumber(value, fallback, maximum) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.min(Math.floor(parsed), maximum));
+}
+
+export function queryActivityLogPage({ db, filters = {}, limit = 100, offset = 0 } = {}) {
+  const normalizedFilters = isRecord(filters) ? filters : {};
+  const where = [];
+  const params = [];
+  const addExactFilter = (column, value) => {
+    if (!value || value === "all") return;
+    where.push(`${column} = ?`);
+    params.push(String(value));
+  };
+
+  addExactFilter("property_id", normalizedFilters.propertyId);
+  addExactFilter("unit", normalizedFilters.unit);
+  addExactFilter("action", normalizedFilters.action);
+  addExactFilter("category", normalizedFilters.category);
+  addExactFilter("entity_type", normalizedFilters.entityType);
+  const year = String(normalizedFilters.year || "").trim();
+  if (/^\d{4}$/.test(year)) {
+    where.push("at >= ? AND at < ?");
+    params.push(`${year}-01-01`, `${Number(year) + 1}-01-01`);
+  }
+  const search = String(normalizedFilters.search || "").trim();
+  if (search) {
+    where.push("json LIKE ?");
+    params.push(`%${search.replace(/[%_\\]/g, "\\$&")}%`);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const pageLimit = boundedPageNumber(limit, 100, 500);
+  const pageOffset = boundedPageNumber(offset, 0, 1000000);
+  const rows = db.prepare(`SELECT json FROM activity_log ${whereClause} ORDER BY at DESC, rowid DESC LIMIT ? OFFSET ?`).all(...params, pageLimit, pageOffset);
+  const total = db.prepare(`SELECT COUNT(*) AS count FROM activity_log ${whereClause}`).get(...params).count;
+  return {
+    rows: rows.map((row) => parseJson(row.json, {})).filter(isRecord),
+    total: Number(total || 0),
+    limit: pageLimit,
+    offset: pageOffset,
+    hasMore: pageOffset + rows.length < Number(total || 0),
+  };
+}
+
+function normalizeDeferredCollectionKeys(value) {
+  const requestedKeys = Array.isArray(value) ? value : [];
+  const availableKeys = new Set(COLLECTIONS.map((collection) => collection.key));
+  return [...new Set(requestedKeys.map((key) => String(key || "")).filter((key) => availableKeys.has(key)))];
+}
+
+export async function loadAppDataFromDatabase({ db, paths, appVersion = "", deferredCollectionKeys = [] }) {
+  const deferredKeys = new Set(normalizeDeferredCollectionKeys(deferredCollectionKeys));
   const coreData = {};
   for (const collection of COLLECTIONS) {
-    const items = readCollection(db, collection);
-    coreData[collection.key] = collection.hydrate
-      ? await Promise.all(items.map((item) => collection.hydrate(item, paths, errors)))
-      : items;
+    coreData[collection.key] = deferredKeys.has(collection.key) ? [] : readCollection(db, collection);
   }
   const workspaceRow = db.prepare("SELECT value FROM app_data WHERE key = 'workspaceData'").get();
   const settingsRow = db.prepare("SELECT value FROM app_data WHERE key = 'settings'").get();
@@ -700,9 +750,19 @@ export async function loadAppDataFromDatabase({ db, paths, appVersion = "" }) {
       settings: sanitizeSettingsForPersistence(parseJson(settingsRow?.value, {})),
       data,
     },
-    meta: getAllMeta(db),
-    errors,
+    meta: { ...getAllMeta(db), deferredCollectionKeys: [...deferredKeys] },
+    errors: [],
   };
+}
+
+export function loadDeferredCollectionsFromDatabase({ db, collectionKeys = [] }) {
+  const deferredKeys = normalizeDeferredCollectionKeys(collectionKeys);
+  return Object.fromEntries(
+    deferredKeys.map((key) => {
+      const collection = COLLECTIONS.find((entry) => entry.key === key);
+      return [key, collection ? readCollection(db, collection) : []];
+    }),
+  );
 }
 
 export async function importLegacyLocalStorageData({ db, paths, payload, appVersion = "" }) {
@@ -1017,8 +1077,17 @@ export async function createPersistenceService({ userDataPath, appVersion = "" }
   return {
     paths,
     db,
-    async loadAppData() {
-      return loadAppDataFromDatabase({ db, paths, appVersion });
+    async loadAppData(options = {}) {
+      return loadAppDataFromDatabase({ db, paths, appVersion, deferredCollectionKeys: options?.deferredCollectionKeys });
+    },
+    async loadDeferredCollections(collectionKeys) {
+      return { ok: true, collections: loadDeferredCollectionsFromDatabase({ db, collectionKeys }) };
+    },
+    async queryActivityLogPage(options) {
+      return { ok: true, ...queryActivityLogPage({ db, ...options }) };
+    },
+    async readDocumentDataUrl(document) {
+      return readDocumentAsDataUrl(document, paths.documentsDir);
     },
     async saveAppData(payload) {
       return saveAppDataToDatabase({ db, paths, backup: payload, appVersion });

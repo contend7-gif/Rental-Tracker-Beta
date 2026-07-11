@@ -92,6 +92,7 @@ import { useDashboardStatCards } from "./app/useDashboardStatCards.js";
 import { useDataSafetyWorkspaceModel } from "./app/useDataSafetyWorkspaceModel.js";
 import { useDataReplacementWorkflowController } from "./app/useDataReplacementWorkflowController.js";
 import { useDesktopPersistenceController } from "./app/useDesktopPersistenceController.js";
+import { useRuntimePerformanceMetrics } from "./app/performanceMetrics.js";
 import { createDocumentWorkspaceController } from "./app/documentWorkspaceController.js";
 import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.js";
 import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.js";
@@ -140,6 +141,7 @@ import packageMeta from "../package.json";
 export default function App() {
   const { appSettings, settingsSavedVisible, setSetting: persistSetting, setDashboardCardSetting: persistDashboardCardSetting, resetToDefaults: resetStoredSettings, replaceSettings } = useAppSettings();
   const [view, setView] = useState(() => appSettings.defaultView || "dashboard");
+  const runtimePerformanceMetrics = useRuntimePerformanceMetrics(view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => appSettings.sidebarCollapsedByDefault);
   const {
     activityFilters,
@@ -264,6 +266,7 @@ export default function App() {
     desktopDocumentOcrApi,
     desktopDocumentOcrState,
     desktopDocumentOpenApi,
+    desktopPersistenceApi,
     desktopStatementPdfApi,
     desktopUpdaterAvailable,
     runDesktopDiagnostics,
@@ -466,6 +469,7 @@ export default function App() {
     openUpdateReleaseNotesDialog,
     persistenceHealth,
     persistenceLastError,
+    performanceMetrics,
     reloadDesktopPersistenceData,
     releaseNotesDialog,
     restorePointBusy,
@@ -1642,6 +1646,7 @@ export default function App() {
     openDocumentExternally,
     openDocumentImportPicker,
     openDocumentLinkedRecord,
+    loadDocumentForReview,
     openDocumentPreview,
     openExpenseDraftFromDocument,
     openExpenseDraftFromUtilitySection,
@@ -1674,6 +1679,7 @@ export default function App() {
     createBlankForm,
     desktopDocumentAiApi,
     desktopDocumentOpenApi,
+    desktopPersistenceApi,
     documentExpenseReviewRecords,
     documentImportDraft,
     documentImportExpenseSuggestion,
@@ -2150,6 +2156,7 @@ export default function App() {
     openDesktopDataFolder,
     openDocumentImportPicker,
     openDocumentLinkedRecord,
+    loadDocumentForReview,
     openDocumentPreview,
     openDashboardQuickAddForScope,
     openExpenseDraftFromDocument,
@@ -2187,6 +2194,7 @@ export default function App() {
     pendingWorkOrderReviewCount,
     persistenceHealth,
     persistenceLastError,
+    performanceMetrics: { ...performanceMetrics, ...runtimePerformanceMetrics },
     planningActionItems,
     addPlanningActionItem,
     planningActiveScenario,
@@ -2688,7 +2696,3 @@ export default function App() {
     </div>
   );
 }
-
-
-
-

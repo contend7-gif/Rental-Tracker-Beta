@@ -11,6 +11,9 @@ const STATEMENT_PDF_SAVE_CHANNEL = "statement-pdf:save";
 const DESKTOP_DIAGNOSTICS_RUN_CHANNEL = "desktop-diagnostics:run";
 const PERSISTENCE_IS_AVAILABLE_CHANNEL = "persistence:is-available";
 const PERSISTENCE_LOAD_APP_DATA_CHANNEL = "persistence:load-app-data";
+const PERSISTENCE_LOAD_DEFERRED_COLLECTIONS_CHANNEL = "persistence:load-deferred-collections";
+const PERSISTENCE_QUERY_ACTIVITY_LOG_PAGE_CHANNEL = "persistence:query-activity-log-page";
+const PERSISTENCE_READ_DOCUMENT_DATA_URL_CHANNEL = "persistence:read-document-data-url";
 const PERSISTENCE_SAVE_APP_DATA_CHANNEL = "persistence:save-app-data";
 const PERSISTENCE_CREATE_RESTORE_POINT_CHANNEL = "persistence:create-restore-point";
 const PERSISTENCE_IMPORT_LEGACY_LOCAL_STORAGE_DATA_CHANNEL = "persistence:import-legacy-local-storage-data";
@@ -74,7 +77,10 @@ contextBridge.exposeInMainWorld("desktopDiagnostics", {
 
 contextBridge.exposeInMainWorld("desktopPersistence", {
   isAvailable: () => ipcRenderer.invoke(PERSISTENCE_IS_AVAILABLE_CHANNEL),
-  loadAppData: () => ipcRenderer.invoke(PERSISTENCE_LOAD_APP_DATA_CHANNEL),
+  loadAppData: (options) => ipcRenderer.invoke(PERSISTENCE_LOAD_APP_DATA_CHANNEL, options),
+  loadDeferredCollections: (collectionKeys) => ipcRenderer.invoke(PERSISTENCE_LOAD_DEFERRED_COLLECTIONS_CHANNEL, collectionKeys),
+  queryActivityLogPage: (options) => ipcRenderer.invoke(PERSISTENCE_QUERY_ACTIVITY_LOG_PAGE_CHANNEL, options),
+  readDocumentDataUrl: (document) => ipcRenderer.invoke(PERSISTENCE_READ_DOCUMENT_DATA_URL_CHANNEL, document),
   saveAppData: (payload) => ipcRenderer.invoke(PERSISTENCE_SAVE_APP_DATA_CHANNEL, payload),
   createRestorePoint: (payload) => ipcRenderer.invoke(PERSISTENCE_CREATE_RESTORE_POINT_CHANNEL, payload),
   importLegacyLocalStorageData: (payload) => ipcRenderer.invoke(PERSISTENCE_IMPORT_LEGACY_LOCAL_STORAGE_DATA_CHANNEL, payload),

@@ -105,6 +105,40 @@ test("saving and loading app data round-trips core rental records", async (t) =>
   assert.deepEqual(loaded.backup.data.taxDayOverrides, { p1: true });
 });
 
+test("activity history can load after the primary app data", async (t) => {
+  const service = await withPersistence(t);
+  await service.saveAppData(sampleBackup());
+
+  const initial = await service.loadAppData({ deferredCollectionKeys: ["activityLog"] });
+  assert.deepEqual(initial.backup.data.activityLog, []);
+  assert.deepEqual(initial.meta.deferredCollectionKeys, ["activityLog"]);
+
+  const deferred = await service.loadDeferredCollections(["activityLog"]);
+  assert.equal(deferred.ok, true);
+  assert.equal(deferred.collections.activityLog[0].id, "ale1");
+});
+
+test("activity history supports indexed filters and pages", async (t) => {
+  const service = await withPersistence(t);
+  const backup = sampleBackup({
+    data: {
+      activityLog: [
+        { id: "a-new", at: "2026-05-04T12:00:00.000Z", action: "update", category: "record", entityType: "transaction", entityId: "t1", propertyId: "p1", unit: "A", summary: "Newest" },
+        { id: "a-old", at: "2026-04-04T12:00:00.000Z", action: "create", category: "record", entityType: "document", entityId: "d1", propertyId: "p1", unit: "Shared", summary: "Older" },
+      ],
+    },
+  });
+  await service.saveAppData(backup);
+
+  const firstPage = await service.queryActivityLogPage({ filters: { year: "2026", propertyId: "p1" }, limit: 1 });
+  assert.equal(firstPage.total, 2);
+  assert.equal(firstPage.rows[0].id, "a-new");
+  assert.equal(firstPage.hasMore, true);
+
+  const nextPage = await service.queryActivityLogPage({ filters: { action: "create" }, limit: 1, offset: 0 });
+  assert.equal(nextPage.rows[0].id, "a-old");
+});
+
 test("persistence health reports non-sensitive collection counts", async (t) => {
   const service = await withPersistence(t);
   await service.saveAppData(sampleBackup());
@@ -163,7 +197,8 @@ test("document metadata and file-backed blobs survive round-trip", async (t) => 
   assert.equal(document.fileHash.length, 64);
   assert.equal(document.fileSize, 5);
   assert.match(document.relativePath, /d1-invoice/);
-  assert.equal(document.dataUrl, "data:application/pdf;base64,SGVsbG8=");
+  assert.equal(document.dataUrl, undefined);
+  assert.equal(await service.readDocumentDataUrl(document), "data:application/pdf;base64,SGVsbG8=");
 });
 
 test("secret settings are excluded from persisted settings and backups", async (t) => {
@@ -198,7 +233,8 @@ test("zip backup archives include document files and restore them into a fresh d
   assert.equal(imported.ok, true);
   assert.equal(imported.restoredDocumentFiles.length, 1);
   assert.deepEqual(imported.missingDocumentFiles, []);
-  assert.equal(document.dataUrl, "data:application/pdf;base64,SGVsbG8=");
+  assert.equal(document.dataUrl, undefined);
+  assert.equal(await target.readDocumentDataUrl(document), "data:application/pdf;base64,SGVsbG8=");
   assert.equal(document.aiAnalysis.summary, "Plumbing repair invoice");
 });
 
@@ -241,7 +277,8 @@ test("zip backup archives include existing file-backed documents and restore exa
   assert.equal(imported.ok, true);
   assert.equal(imported.restoredDocumentFiles.length, 1);
   assert.deepEqual(restoredBytes, documentBytes);
-  assert.equal(document.dataUrl, `data:application/pdf;base64,${documentBytes.toString("base64")}`);
+  assert.equal(document.dataUrl, undefined);
+  assert.equal(await target.readDocumentDataUrl(document), `data:application/pdf;base64,${documentBytes.toString("base64")}`);
   assert.deepEqual(document.relatedTransactionIds, ["t1"]);
   assert.equal(document.aiAnalysis.summary, "Existing file document");
 });
@@ -264,7 +301,8 @@ test("zip backup archives report missing document files without blocking structu
   assert.equal(imported.missingDocumentFiles.length, 1);
   assert.equal(restored.backup.data.documents[0].id, "d1");
   assert.equal(restored.backup.data.documents[0].dataUrl, undefined);
-  assert.equal(restored.errors.length, 1);
+  assert.deepEqual(restored.errors, []);
+  await assert.rejects(() => target.readDocumentDataUrl(restored.backup.data.documents[0]));
 });
 
 test("manual restore points force a fresh managed backup with the latest data", async (t) => {

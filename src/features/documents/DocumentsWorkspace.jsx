@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { FileCheck2, FileWarning, Inbox, Link2, ReceiptText, Upload, Wrench } from "lucide-react";
 import { DocumentCard } from "./DocumentCard.jsx";
-import { DocumentReviewDialog } from "./DocumentReviewDialog.jsx";
 import {
   buildDocumentDuplicateCandidates,
   buildDocumentQualityWarnings,
@@ -20,6 +19,8 @@ import {
   isDocumentReviewed,
 } from "./documentWorkflow.js";
 import { selectDocumentsForWorkspaceTab } from "./documentWorkspaceFilters.js";
+
+const DocumentReviewDialog = lazy(() => import("./DocumentReviewDialog.jsx").then((module) => ({ default: module.DocumentReviewDialog })));
 
 const DOCUMENT_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
 const OCR_FIELD_WARNING_KEYS = new Set(["low_confidence", "missing_vendor", "missing_date", "missing_amount", "service_amount_text"]);
@@ -132,6 +133,7 @@ export function DocumentsWorkspace({
   getSafeDocumentTagSuggestions,
   leaseById = {},
   leases,
+  loadDocumentForReview,
   markDocumentWarningsReviewed,
   updateLinkedTransactionFromDocumentOcr,
   markVisibleDocumentsPendingOcr,
@@ -181,6 +183,11 @@ export function DocumentsWorkspace({
   const [documentsTab, setDocumentsTab] = useState("inbox");
   const [documentGroupMode, setDocumentGroupMode] = useState("none");
   const [reviewDocument, setReviewDocument] = useState(null);
+
+  const showDocumentReview = async (document) => {
+    const documentWithFile = await loadDocumentForReview?.(document);
+    setReviewDocument(documentWithFile || document);
+  };
 
   const getDocumentLinkedSummary = (document) => {
     return buildLinkedRecordSummary(document, {
@@ -466,7 +473,7 @@ export function DocumentsWorkspace({
     if (document.transactionId) return openDocumentLinkedRecord(document, "transaction");
     if (document.leaseId) return openDocumentLinkedRecord(document, "lease");
     if (document.workOrderId || getDocumentLinkedWorkOrder(document)) return openDocumentLinkedRecord(document, "workOrder");
-    return setReviewDocument(document);
+    return showDocumentReview(document);
   };
 
   const showInboxStatus = (status) => {
@@ -493,7 +500,7 @@ export function DocumentsWorkspace({
     if (action.key === "not_work_order") return dismissDocumentWorkOrderReview(document);
     if (action.key === "supporting_only") return markSupportingOnly(document);
     if (action.key === "remove") return confirmAndDeleteDocument(document);
-    return setReviewDocument(document);
+    return showDocumentReview(document);
   };
 
   const renderDocumentCards = (documents) => {
@@ -842,7 +849,7 @@ export function DocumentsWorkspace({
           </TabsContent>
         </Tabs>
 
-        <DocumentReviewDialog
+        {currentReviewDocument && <Suspense fallback={null}><DocumentReviewDialog
           aiDocumentCopilotConfigured={aiDocumentCopilotConfigured}
           aiDocumentCopilotReady={aiDocumentCopilotReady}
           applyDocumentLinkSuggestion={applyDocumentLinkSuggestion}
@@ -870,7 +877,7 @@ export function DocumentsWorkspace({
           getDocumentWorkOrderSuggestion={getDocumentWorkOrderSuggestion}
           getSafeDocumentTagSuggestions={getSafeDocumentTagSuggestions}
           onClose={() => setReviewDocument(null)}
-          onNextDocument={() => nextInboxDocument && setReviewDocument(nextInboxDocument)}
+          onNextDocument={() => { if (nextInboxDocument) void showDocumentReview(nextInboxDocument); }}
           openDocumentPreview={openDocumentPreview}
           openDocumentLinkedRecord={openDocumentLinkedRecord}
           openExpenseDraftFromDocument={openExpenseDraftFromDocument}
@@ -881,7 +888,7 @@ export function DocumentsWorkspace({
           reopenDocumentWorkOrderReview={reopenDocumentWorkOrderReview}
           markDocumentWarningsReviewed={markDocumentWarningsReviewed}
           updateLinkedTransactionFromDocumentOcr={updateLinkedTransactionFromDocumentOcr}
-          onReviewDuplicateDocument={(duplicateDocument) => duplicateDocument && setReviewDocument(duplicateDocument)}
+          onReviewDuplicateDocument={(duplicateDocument) => { if (duplicateDocument) void showDocumentReview(duplicateDocument); }}
           removeDocumentRecordLink={removeDocumentRecordLink}
           runDocumentAiAnalysis={runDocumentAiAnalysis}
           saveDocumentExtractedText={saveDocumentExtractedText}
@@ -897,7 +904,7 @@ export function DocumentsWorkspace({
           workOrderSuggestionConfidenceLabel={workOrderSuggestionConfidenceLabel}
           workOrderSuggestionReasonSummary={workOrderSuggestionReasonSummary}
           workOrders={workOrders}
-        />
+        /></Suspense>}
       </CardContent>
     </Card>
   );

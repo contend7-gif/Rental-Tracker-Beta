@@ -94,11 +94,13 @@ export function useDesktopPersistenceController({
     return readLastAutoBackupAt(window.localStorage.getItem(AUTO_BACKUP_META_STORAGE_KEY));
   });
   const [isDataHydrated, setIsDataHydrated] = useState(false);
+  const [isDeferredDataHydrated, setIsDeferredDataHydrated] = useState(false);
   const [leaseAutomationReminders, setLeaseAutomationReminders] = useState([]);
   const [leaseAutomationLastRunAt, setLeaseAutomationLastRunAt] = useState("");
   const [persistenceHealth, setPersistenceHealth] = useState(null);
   const [persistenceLastError, setPersistenceLastError] = useState("");
   const [restorePointBusy, setRestorePointBusy] = useState(false);
+  const [performanceMetrics, setPerformanceMetrics] = useState({ initialDataLoadMs: null, deferredActivityLoadMs: null });
   const leaseReminderSignatureRef = useRef("");
   const hydrationStartedRef = useRef(false);
   const hydrationInputsRef = useRef({});
@@ -582,15 +584,21 @@ export function useDesktopPersistenceController({
 
     async function hydrateData() {
       const hydrationInputs = hydrationInputsRef.current;
+      setIsDeferredDataHydrated(false);
       if (typeof window === "undefined") {
-        if (mounted) setIsDataHydrated(true);
+        if (mounted) {
+          setIsDataHydrated(true);
+          setIsDeferredDataHydrated(true);
+        }
         return;
       }
 
       try {
         const desktopPersistence = window.desktopPersistence;
         if (desktopPersistence?.loadAppData) {
-          const loaded = await desktopPersistence.loadAppData();
+          const loadStartedAt = performance.now();
+          const loaded = await desktopPersistence.loadAppData({ deferredCollectionKeys: ["activityLog"] });
+          setPerformanceMetrics((previous) => ({ ...previous, initialDataLoadMs: Math.round(performance.now() - loadStartedAt) }));
           if (!mounted) return;
 
           if (loaded?.ok && loaded.hasData && loaded.backup) {
@@ -603,6 +611,26 @@ export function useDesktopPersistenceController({
               setLastAutoBackupAt,
               setPersistenceLastError,
             });
+            const deferredKeys = Array.isArray(loaded?.meta?.deferredCollectionKeys) ? loaded.meta.deferredCollectionKeys : [];
+            if (deferredKeys.includes("activityLog") && (desktopPersistence.queryActivityLogPage || desktopPersistence.loadDeferredCollections)) {
+              const loadDeferredActivity = async () => {
+                try {
+                  const deferredStartedAt = performance.now();
+                  const result = desktopPersistence.queryActivityLogPage
+                    ? await desktopPersistence.queryActivityLogPage({ limit: 500 })
+                    : await desktopPersistence.loadDeferredCollections(["activityLog"]);
+                  if (!mounted || result?.ok === false) return;
+                  hydrationInputs.actions.mergeActivityLog?.(result.rows || result.collections?.activityLog || []);
+                  setPerformanceMetrics((previous) => ({ ...previous, deferredActivityLoadMs: Math.round(performance.now() - deferredStartedAt) }));
+                } finally {
+                  if (mounted) setIsDeferredDataHydrated(true);
+                }
+              };
+              if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(() => { void loadDeferredActivity(); }, { timeout: 1500 });
+              else window.setTimeout(() => { void loadDeferredActivity(); }, 250);
+            } else {
+              setIsDeferredDataHydrated(true);
+            }
           } else {
             const legacyMigration = hydrationInputs.loadLegacyLocalStorageBackup();
             if (legacyMigration?.backup) {
@@ -626,6 +654,7 @@ export function useDesktopPersistenceController({
               await hydrationInputs.actions.loadDemoData();
             }
           }
+          if (!loaded?.ok || !loaded.hasData || !loaded.backup) setIsDeferredDataHydrated(true);
         } else {
           const legacyMigration = hydrationInputs.loadLegacyLocalStorageBackup();
           if (legacyMigration?.backup) {
@@ -636,12 +665,14 @@ export function useDesktopPersistenceController({
           } else {
             await hydrationInputs.actions.loadDemoData();
           }
+          setIsDeferredDataHydrated(true);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error || "Could not load saved data.");
         setPersistenceLastError(message);
         hydrationInputs.setNotice(`Could not load saved data: ${message}`);
         await hydrationInputs.actions.loadDemoData();
+        setIsDeferredDataHydrated(true);
       } finally {
         if (mounted) setIsDataHydrated(true);
       }
@@ -655,7 +686,7 @@ export function useDesktopPersistenceController({
   }, []);
 
   useEffect(() => {
-    if (!isDataHydrated || typeof window === "undefined") return;
+    if (!isDataHydrated || !isDeferredDataHydrated || typeof window === "undefined") return;
     if (!hasAnyData) return;
 
     const snapshot = {
@@ -723,6 +754,7 @@ export function useDesktopPersistenceController({
     escrowDisbursements,
     hasAnyData,
     isDataHydrated,
+    isDeferredDataHydrated,
     leases,
     loanPayments,
     loans,
@@ -1036,6 +1068,7 @@ export function useDesktopPersistenceController({
     openUpdateReleaseNotesDialog,
     persistenceHealth,
     persistenceLastError,
+    performanceMetrics,
     reloadDesktopPersistenceData,
     releaseNotesDialog,
     restorePointBusy,

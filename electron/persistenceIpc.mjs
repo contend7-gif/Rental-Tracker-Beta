@@ -5,6 +5,9 @@ import { createSecretStore } from "./secrets.mjs";
 export const PERSISTENCE_CHANNELS = {
   isAvailable: "persistence:is-available",
   loadAppData: "persistence:load-app-data",
+  loadDeferredCollections: "persistence:load-deferred-collections",
+  queryActivityLogPage: "persistence:query-activity-log-page",
+  readDocumentDataUrl: "persistence:read-document-data-url",
   saveAppData: "persistence:save-app-data",
   createRestorePoint: "persistence:create-restore-point",
   importLegacyLocalStorageData: "persistence:import-legacy-local-storage-data",
@@ -83,8 +86,24 @@ export function registerPersistenceIpc({ app, recordDesktopHealthEvent } = {}) {
     })),
   );
 
-  ipcMain.handle(PERSISTENCE_CHANNELS.loadAppData, async () =>
-    safely("SQLite app data load failed.", servicePromise, recordDesktopHealthEvent, (service) => service.loadAppData()),
+  ipcMain.handle(PERSISTENCE_CHANNELS.loadAppData, async (_event, options) =>
+    safely("SQLite app data load failed.", servicePromise, recordDesktopHealthEvent, (service) => service.loadAppData(isPlainObject(options) ? options : {})),
+  );
+
+  ipcMain.handle(PERSISTENCE_CHANNELS.loadDeferredCollections, async (_event, collectionKeys) =>
+    safely("Deferred SQLite data load failed.", servicePromise, recordDesktopHealthEvent, (service) => service.loadDeferredCollections(Array.isArray(collectionKeys) ? collectionKeys : [])),
+  );
+
+  ipcMain.handle(PERSISTENCE_CHANNELS.queryActivityLogPage, async (_event, options) =>
+    safely("Activity history query failed.", servicePromise, recordDesktopHealthEvent, (service) => service.queryActivityLogPage(isPlainObject(options) ? options : {})),
+  );
+
+  ipcMain.handle(PERSISTENCE_CHANNELS.readDocumentDataUrl, async (_event, document) =>
+    safely("Document file read failed.", servicePromise, recordDesktopHealthEvent, async (service) => {
+      if (!isPlainObject(document)) return { ok: false, message: "Invalid document reference." };
+      const dataUrl = await service.readDocumentDataUrl(document);
+      return { ok: true, dataUrl };
+    }),
   );
 
   ipcMain.handle(PERSISTENCE_CHANNELS.saveAppData, async (_event, payload) =>

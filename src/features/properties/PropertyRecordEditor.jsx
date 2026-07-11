@@ -395,7 +395,7 @@ export function PropertyRecordEditor({
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {linkedDocument ? (
-                                <Button size="sm" variant="secondary" onClick={() => openDocumentPreview?.(linkedDocument)} disabled={!linkedDocument.dataUrl}>
+                                <Button size="sm" variant="secondary" onClick={() => openDocumentPreview?.(linkedDocument)} disabled={!linkedDocument.dataUrl && !linkedDocument.relativePath && !linkedDocument.filePath}>
                                   View doc
                                 </Button>
                               ) : null}
@@ -526,7 +526,7 @@ export function PropertyRecordEditor({
                               size="sm"
                               variant="secondary"
                               onClick={() => openDocumentPreview?.(document)}
-                              disabled={!document.dataUrl}
+                              disabled={!document.dataUrl && !document.relativePath && !document.filePath}
                             >
                               View
                             </Button>

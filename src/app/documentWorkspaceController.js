@@ -1,5 +1,6 @@
 import { removeSupportingOnlyTag } from "../features/documents/documentWorkflow.js";
 import { buildDocumentQualityWarnings } from "../features/documents/documentPresentation.js";
+import { publishPerformanceMetric } from "./performanceMetrics.js";
 import {
   applyTransactionVendorMemoryToDraft,
   findTransactionVendorMemoryForDraft,
@@ -21,6 +22,7 @@ export function createDocumentWorkspaceController({
   createBlankForm,
   desktopDocumentAiApi,
   desktopDocumentOpenApi,
+  desktopPersistenceApi,
   documentExpenseReviewRecords,
   documentImportDraft,
   documentImportExpenseSuggestion,
@@ -100,6 +102,21 @@ export function createDocumentWorkspaceController({
   workOrderById,
   workOrderSuggestionReasonSummary,
 }) {
+  const loadDocumentDataUrl = async (document) => {
+    if (!document || document.dataUrl || !desktopPersistenceApi?.readDocumentDataUrl) return document;
+    try {
+      const readStartedAt = performance.now();
+      const result = await desktopPersistenceApi.readDocumentDataUrl(document);
+      publishPerformanceMetric("documentFileReadMs", performance.now() - readStartedAt);
+      if (result?.ok && result.dataUrl) return { ...document, dataUrl: result.dataUrl };
+      setNotice(result?.message || "This document file could not be read.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || "Document file read failed.");
+      setNotice(`Could not read this document: ${message}`);
+    }
+    return document;
+  };
+
   const closeDocumentImportDialog = () => {
     documentImportOcrRequestIdRef.current += 1;
     setDocumentImportOcrBusy(false);
@@ -171,12 +188,13 @@ export function createDocumentWorkspaceController({
     const silent = Boolean(options?.silent);
     if (!document) return { ok: false };
 
-    if (!document.dataUrl) {
+    const documentWithFile = await loadDocumentDataUrl(document);
+    if (!documentWithFile?.dataUrl) {
       if (!silent) setNotice("This document has no file attached for OCR.");
       return { ok: false, reason: "missing-file" };
     }
 
-    if (!documentSupportsAutomaticOcr(document.name, document.mimeType)) {
+    if (!documentSupportsAutomaticOcr(documentWithFile.name, documentWithFile.mimeType)) {
       actions.updateDocument(document.id, { ocrStatus: "pending" });
       if (!silent) setNotice("OCR review queued. Automatic OCR is only available for PDFs and images.");
       return { ok: true, queued: true, completed: false };
@@ -190,7 +208,7 @@ export function createDocumentWorkspaceController({
 
     setDocumentOcrBusyById((prev) => ({ ...prev, [document.id]: true }));
     try {
-      const result = await runAutomaticDocumentOcr(document);
+      const result = await runAutomaticDocumentOcr(documentWithFile);
       if (!result?.ok) {
         actions.updateDocument(document.id, { ocrStatus: "pending" });
         if (!silent) setNotice(result?.message || "Automatic OCR could not start.");
@@ -772,30 +790,34 @@ export function createDocumentWorkspaceController({
     );
   };
 
-  const openDocumentPreview = (document) => {
+  const openDocumentPreview = async (document) => {
     prefetchDialog("documentPreview");
-    if (!document.dataUrl) {
+    const documentWithFile = await loadDocumentDataUrl(document);
+    if (!documentWithFile?.dataUrl) {
       setNotice("This document has no previewable file attached.");
       return;
     }
-    setSelectedDocument(document);
+    setSelectedDocument(documentWithFile);
   };
+
+  const loadDocumentForReview = (document) => loadDocumentDataUrl(document);
 
   const openExpenseDraftFromUtilitySection = (document, section) => {
     openExpenseDraftFromDocument(document, section, { linkMode: "related" });
   };
 
   const openDocumentExternally = async (document) => {
-    if (!document?.dataUrl) {
+    const documentWithFile = await loadDocumentDataUrl(document);
+    if (!documentWithFile?.dataUrl) {
       setNotice("This document has no previewable file attached.");
       return;
     }
 
     if (desktopDocumentOpenApi?.openExternal) {
       const result = await desktopDocumentOpenApi.openExternal({
-        name: document.name,
-        mimeType: document.mimeType,
-        dataUrl: document.dataUrl,
+        name: documentWithFile.name,
+        mimeType: documentWithFile.mimeType,
+        dataUrl: documentWithFile.dataUrl,
       });
       if (result?.ok === false) {
         setNotice(result?.message || "Could not open this file externally.");
@@ -803,7 +825,7 @@ export function createDocumentWorkspaceController({
       return;
     }
 
-    const opened = window.open(document.dataUrl, "_blank", "noopener,noreferrer");
+    const opened = window.open(documentWithFile.dataUrl, "_blank", "noopener,noreferrer");
     if (!opened) {
       setNotice("Could not open this file in a new tab.");
     }
@@ -1560,6 +1582,7 @@ export function createDocumentWorkspaceController({
     openDocumentExternally,
     openDocumentImportPicker,
     openDocumentLinkedRecord,
+    loadDocumentForReview,
     openDocumentPreview,
     openExpenseDraftFromDocument,
     openExpenseDraftFromUtilitySection,

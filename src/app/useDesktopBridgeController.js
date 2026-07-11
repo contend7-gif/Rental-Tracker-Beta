@@ -10,6 +10,7 @@ export function useDesktopBridgeController({ setNotice }) {
         desktopDocumentAiApi: null,
         desktopDocumentOcrApi: null,
         desktopDocumentOpenApi: null,
+        desktopPersistenceApi: null,
         desktopStatementPdfApi: null,
         desktopUpdaterAvailable: false,
       };
@@ -20,6 +21,7 @@ export function useDesktopBridgeController({ setNotice }) {
       desktopDocumentAiApi: window.desktopDocumentAi || null,
       desktopDocumentOcrApi: window.desktopDocumentOcr || null,
       desktopDocumentOpenApi: window.desktopDocumentOpen || null,
+      desktopPersistenceApi: window.desktopPersistence || null,
       desktopStatementPdfApi: window.desktopStatementPdf || null,
       desktopUpdaterAvailable: Boolean(window.desktopUpdater),
     };
@@ -30,6 +32,7 @@ export function useDesktopBridgeController({ setNotice }) {
     desktopDocumentAiApi,
     desktopDocumentOcrApi,
     desktopDocumentOpenApi,
+    desktopPersistenceApi,
     desktopStatementPdfApi,
     desktopUpdaterAvailable,
   } = desktopApis;
@@ -127,6 +130,7 @@ export function useDesktopBridgeController({ setNotice }) {
     desktopDocumentOcrApi,
     desktopDocumentOcrState,
     desktopDocumentOpenApi,
+    desktopPersistenceApi,
     desktopStatementPdfApi,
     desktopUpdaterAvailable,
     runDesktopDiagnostics,

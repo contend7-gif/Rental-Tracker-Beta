@@ -139,6 +139,7 @@ export function SettingsWorkspace({
   openUpdateReleaseNotesDialog,
   persistenceHealth,
   persistenceLastError,
+  performanceMetrics,
   realDataChecklist,
   reloadDesktopPersistenceData,
   restorePointBusy,
@@ -968,6 +969,14 @@ export function SettingsWorkspace({
                       {desktopDiagnosticsReport.databaseSizeBytes !== undefined ? ` | DB size: ${desktopDiagnosticsReport.databaseSizeBytes} bytes` : ""}
                       {desktopDiagnosticsReport.backupCount !== undefined ? ` | Backups: ${desktopDiagnosticsReport.backupCount}` : ""}
                       {desktopDiagnosticsReport.documentStorageFileCount !== undefined ? ` | Document files: ${desktopDiagnosticsReport.documentStorageFileCount}` : ""}
+                    </div>
+                  )}
+                  {(performanceMetrics?.initialDataLoadMs != null || performanceMetrics?.deferredActivityLoadMs != null) && (
+                    <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
+                      Initial data load: {performanceMetrics.initialDataLoadMs ?? "…"} ms
+                      {performanceMetrics.deferredActivityLoadMs != null ? ` | Background activity history: ${performanceMetrics.deferredActivityLoadMs} ms` : " | Activity history loading in background"}
+                      {performanceMetrics.workspaceSwitchMs != null ? ` | Last workspace switch: ${performanceMetrics.workspaceSwitchMs} ms` : ""}
+                      {performanceMetrics.documentFileReadMs != null ? ` | Last document file read: ${performanceMetrics.documentFileReadMs} ms` : ""}
                     </div>
                   )}
                   {desktopDiagnosticsRecentEvents.length > 0 ? (

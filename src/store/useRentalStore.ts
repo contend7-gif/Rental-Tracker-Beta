@@ -106,6 +106,16 @@ export function useRentalStore(auditContext: { actorName?: string; actorRole?: s
         const backup = normalizeBackupData(rawData);
         applyStoreData(backup);
       },
+      mergeActivityLog(entries: ActivityLogEntry[]) {
+        const incoming = Array.isArray(entries) ? entries : [];
+        setActivityLog((previous) => {
+          const byId = new Map(previous.map((entry) => [entry.id, entry]));
+          incoming.forEach((entry) => {
+            if (entry?.id && !byId.has(entry.id)) byId.set(entry.id, entry);
+          });
+          return [...byId.values()].sort((left, right) => String(right.at || "").localeCompare(String(left.at || ""))).slice(0, 500);
+        });
+      },
       ...activityActions,
       addOrUpdateTransaction(txn: Transaction, assetPayload?: Omit<Asset, "id" | "currentYearDep" | "basis"> & { basis: number; life: number }) {
         const normalizedTxn: Transaction = {

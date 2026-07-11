@@ -36,6 +36,11 @@ test("workflow flags supported documents without extracted text as needing OCR",
   assert.equal(getDocumentPrimaryAction(document, context).key, "extract_text");
 });
 
+test("workflow keeps file-backed documents eligible for OCR without loading the file", () => {
+  const document = { ...baseDocument, dataUrl: undefined, relativePath: "d1-receipt.pdf" };
+  assert.equal(getDocumentWorkflowStatus(document, context), "needs_ocr");
+});
+
 test("workflow prioritizes pending expense suggestions after OCR", () => {
   const document = { ...baseDocument, extractedText: "Invoice total $42.00" };
   const expenseContext = {
