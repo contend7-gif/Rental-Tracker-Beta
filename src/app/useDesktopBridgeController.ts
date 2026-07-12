@@ -1,9 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const DEFAULT_DOCUMENT_OCR_STATE = { supported: false, platform: "", engine: "" };
+type NoticeSetter = (message: string) => void;
+type DocumentOcrState = { supported: boolean; platform: string; engine: string };
+type DesktopDiagnosticsReport = Awaited<ReturnType<NonNullable<Window["desktopDiagnostics"]>["run"]>>;
+type DesktopApis = {
+  desktopDiagnosticsApi: Window["desktopDiagnostics"] | null;
+  desktopDocumentAiApi: Window["desktopDocumentAi"] | null;
+  desktopDocumentOcrApi: Window["desktopDocumentOcr"] | null;
+  desktopDocumentOpenApi: Window["desktopDocumentOpen"] | null;
+  desktopPersistenceApi: Window["desktopPersistence"] | null;
+  desktopStatementPdfApi: Window["desktopStatementPdf"] | null;
+  desktopUpdaterAvailable: boolean;
+};
 
-export function useDesktopBridgeController({ setNotice }) {
-  const desktopApis = useMemo(() => {
+const DEFAULT_DOCUMENT_OCR_STATE: DocumentOcrState = { supported: false, platform: "", engine: "" };
+
+export function useDesktopBridgeController({ setNotice }: { setNotice: NoticeSetter }) {
+  const desktopApis = useMemo<DesktopApis>(() => {
     if (typeof window === "undefined") {
       return {
         desktopDiagnosticsApi: null,
@@ -37,11 +50,11 @@ export function useDesktopBridgeController({ setNotice }) {
     desktopUpdaterAvailable,
   } = desktopApis;
 
-  const [desktopDocumentOcrState, setDesktopDocumentOcrState] = useState(DEFAULT_DOCUMENT_OCR_STATE);
+  const [desktopDocumentOcrState, setDesktopDocumentOcrState] = useState<DocumentOcrState>(DEFAULT_DOCUMENT_OCR_STATE);
   const [desktopDiagnosticsBusy, setDesktopDiagnosticsBusy] = useState(false);
-  const [desktopDiagnosticsReport, setDesktopDiagnosticsReport] = useState(null);
+  const [desktopDiagnosticsReport, setDesktopDiagnosticsReport] = useState<DesktopDiagnosticsReport | null>(null);
 
-  const runDesktopDiagnostics = useCallback(async (showNotice = true) => {
+  const runDesktopDiagnostics = useCallback(async (showNotice = true): Promise<boolean> => {
     if (!desktopDiagnosticsApi?.run) {
       setDesktopDiagnosticsReport(null);
       if (showNotice) {

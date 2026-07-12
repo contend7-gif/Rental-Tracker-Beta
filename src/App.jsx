@@ -96,7 +96,7 @@ import { useRuntimePerformanceMetrics } from "./app/performanceMetrics.js";
 import { createDocumentWorkspaceController } from "./app/documentWorkspaceController.js";
 import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.js";
 import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.js";
-import { useDesktopBridgeController } from "./app/useDesktopBridgeController.js";
+import { useDesktopBridgeController } from "./app/useDesktopBridgeController.ts";
 import { useDesktopRuntimeStatus } from "./app/useDesktopRuntimeStatus.js";
 import { useDocumentWorkspaceUiState } from "./app/useDocumentWorkspaceUiState.js";
 import { useDocumentReviewModel } from "./app/useDocumentReviewModel.js";
