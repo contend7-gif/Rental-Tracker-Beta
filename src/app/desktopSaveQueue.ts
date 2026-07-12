@@ -1,9 +1,26 @@
-export function createDesktopSaveQueue({ saveSnapshot, onSuccess, onError } = {}) {
+export type DesktopSaveResult = {
+  ok?: boolean;
+  message?: string;
+  [key: string]: unknown;
+};
+
+export type DesktopSaveQueue<TSnapshot> = {
+  enqueue: (snapshot: TSnapshot) => void;
+  flush: () => Promise<DesktopSaveResult>;
+};
+
+type DesktopSaveQueueOptions<TSnapshot> = {
+  saveSnapshot?: (snapshot: TSnapshot) => Promise<DesktopSaveResult | undefined>;
+  onSuccess?: (result: DesktopSaveResult | undefined) => void | Promise<void>;
+  onError?: (error: unknown) => void;
+};
+
+export function createDesktopSaveQueue<TSnapshot = unknown>({ saveSnapshot, onSuccess, onError }: DesktopSaveQueueOptions<TSnapshot> = {}): DesktopSaveQueue<TSnapshot> {
   let inFlight = false;
   let pending = false;
-  let latestSnapshot = null;
-  let lastResult = { ok: true };
-  let flushWaiters = [];
+  let latestSnapshot: TSnapshot | null = null;
+  let lastResult: DesktopSaveResult = { ok: true };
+  let flushWaiters: Array<(result: DesktopSaveResult) => void> = [];
 
   const notifyFlushWaiters = () => {
     if (inFlight || pending) return;
@@ -12,7 +29,7 @@ export function createDesktopSaveQueue({ saveSnapshot, onSuccess, onError } = {}
     waiters.forEach((resolve) => resolve(lastResult));
   };
 
-  const run = async () => {
+  const run = async (): Promise<void> => {
     if (inFlight || !latestSnapshot) {
       notifyFlushWaiters();
       return;
@@ -23,6 +40,7 @@ export function createDesktopSaveQueue({ saveSnapshot, onSuccess, onError } = {}
     const snapshot = latestSnapshot;
 
     try {
+      if (!saveSnapshot) throw new Error("SQLite save is unavailable.");
       const result = await saveSnapshot(snapshot);
       if (result?.ok === false) {
         throw new Error(result.message || "SQLite save failed.");

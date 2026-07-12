@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createDesktopSaveQueue } from "../src/app/desktopSaveQueue.js";
+import { createDesktopSaveQueue } from "../src/app/desktopSaveQueue.ts";
 
 function deferred() {
   let resolve;

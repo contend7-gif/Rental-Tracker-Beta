@@ -4,7 +4,7 @@ import { buildLeaseAutomationPlan, findStaleAutomatedRentChargeIds } from "../do
 import { findReleaseNotesEntry, getRecentReleaseNotes } from "../domain/releaseNotes.ts";
 import { APP_SETTINGS_STORAGE_KEY, sanitizeAppSettingsForExport } from "../store/appSettings.ts";
 import { applyDesktopPersistenceBackup, loadAndApplyDesktopPersistenceData } from "./desktopPersistenceHydration.js";
-import { createDesktopSaveQueue } from "./desktopSaveQueue.js";
+import { createDesktopSaveQueue } from "./desktopSaveQueue.ts";
 import {
   readLastAutoBackupAt,
   readLeaseReminderNotificationMap,
