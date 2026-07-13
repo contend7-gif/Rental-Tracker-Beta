@@ -9,7 +9,7 @@ function removeSupportingOnlyTag(tags: unknown): string[] {
     .filter((tag) => tag.trim().toLowerCase() !== SUPPORTING_ONLY_TAG);
 }
 
-export type DocumentLinkKind = "lease" | "transaction" | "workOrder";
+type DocumentLinkKind = "lease" | "transaction" | "workOrder";
 
 export type DocumentLinkSuggestion = {
   id: string;

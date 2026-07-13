@@ -3,7 +3,7 @@ import { parseDocumentTags } from "./documentShared.ts";
 
 export type DocumentImportDraft = ReturnType<typeof createBlankDocumentImportDraft>;
 
-export type DocumentImportContext = Partial<Pick<
+type DocumentImportContext = Partial<Pick<
   DocumentImportDraft,
   "propertyId" | "unit" | "type" | "tags" | "linkType" | "linkedId"
 >>;

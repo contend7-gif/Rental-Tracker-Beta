@@ -1,6 +1,6 @@
 import type { DesktopResult } from "../types/desktop.d.ts";
 
-export type DocumentOcrInput = {
+type DocumentOcrInput = {
   name?: string;
   mimeType?: string;
   dataUrl?: string;

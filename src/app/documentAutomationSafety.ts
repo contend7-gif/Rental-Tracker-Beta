@@ -1,6 +1,6 @@
 import type { DocumentItem, Transaction } from "../models.ts";
 
-export type DocumentAutomationSuggestion = {
+type DocumentAutomationSuggestion = {
   confidence?: string;
   propertyId?: string;
   amount?: number | null;
@@ -8,7 +8,7 @@ export type DocumentAutomationSuggestion = {
   title?: string;
 };
 
-export type UtilitySectionCandidate = {
+type UtilitySectionCandidate = {
   external?: boolean;
   propertyId?: string;
   unit?: string;
@@ -21,12 +21,12 @@ export type UtilitySectionCandidate = {
 
 type AutomationDocument = Pick<DocumentItem, "name" | "type" | "extractedText" | "transactionId">;
 
-export function documentLooksLikeEstimate(document?: Partial<AutomationDocument> | null): boolean {
+function documentLooksLikeEstimate(document?: Partial<AutomationDocument> | null): boolean {
   const text = `${document?.name || ""} ${document?.type || ""} ${document?.extractedText || ""}`.toLowerCase();
   return /\bestimate\b|\bproposal\b|\bquote\b|\bbid\b/.test(text);
 }
 
-export function documentLooksLikeInvoice(document?: Partial<AutomationDocument> | null): boolean {
+function documentLooksLikeInvoice(document?: Partial<AutomationDocument> | null): boolean {
   const text = `${document?.name || ""} ${document?.type || ""} ${document?.extractedText || ""}`.toLowerCase();
   return /\binvoice\b|\breceipt\b|\bbill\b|\bamount due\b|\btotal due\b|\bpaid\b/.test(text);
 }

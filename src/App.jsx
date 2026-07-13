@@ -1682,7 +1682,6 @@ export default function App() {
     buildDocumentAiContext,
     canAttachToTransaction,
     categories,
-    closeConfirmDialog,
     createBlankDocumentImportDraft,
     createBlankForm,
     desktopDocumentAiApi,
