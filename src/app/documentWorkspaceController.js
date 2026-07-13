@@ -1,6 +1,12 @@
 import { removeSupportingOnlyTag } from "../features/documents/documentWorkflow.js";
 import { buildDocumentQualityWarnings } from "../features/documents/documentPresentation.js";
-import { publishPerformanceMetric } from "./performanceMetrics.ts";
+import { loadDocumentDataUrlFromDesktop } from "./documentFileAccess.ts";
+import {
+  canAutoCreateExpenseSuggestion,
+  canAutoCreateWorkOrderSuggestion,
+  canCreateUtilitySectionTransaction,
+  findMatchingUtilitySectionTransaction,
+} from "./documentAutomationSafety.ts";
 import {
   applyTransactionVendorMemoryToDraft,
   findTransactionVendorMemoryForDraft,
@@ -102,20 +108,11 @@ export function createDocumentWorkspaceController({
   workOrderById,
   workOrderSuggestionReasonSummary,
 }) {
-  const loadDocumentDataUrl = async (document) => {
-    if (!document || document.dataUrl || !desktopPersistenceApi?.readDocumentDataUrl) return document;
-    try {
-      const readStartedAt = performance.now();
-      const result = await desktopPersistenceApi.readDocumentDataUrl(document);
-      publishPerformanceMetric("documentFileReadMs", performance.now() - readStartedAt);
-      if (result?.ok && result.dataUrl) return { ...document, dataUrl: result.dataUrl };
-      setNotice(result?.message || "This document file could not be read.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error || "Document file read failed.");
-      setNotice(`Could not read this document: ${message}`);
-    }
-    return document;
-  };
+  const loadDocumentDataUrl = (document) => loadDocumentDataUrlFromDesktop({
+    document,
+    desktopPersistenceApi,
+    setNotice,
+  });
 
   const closeDocumentImportDialog = () => {
     documentImportOcrRequestIdRef.current += 1;
@@ -1068,37 +1065,14 @@ export function createDocumentWorkspaceController({
     linkedTransaction: document?.transactionId ? transactionById[document.transactionId] : null,
   }).length;
 
-  const documentLooksLikeEstimate = (document) => {
-    const text = `${document?.name || ""} ${document?.type || ""} ${document?.extractedText || ""}`.toLowerCase();
-    return /\bestimate\b|\bproposal\b|\bquote\b|\bbid\b/.test(text);
-  };
-
-  const documentLooksLikeInvoice = (document) => {
-    const text = `${document?.name || ""} ${document?.type || ""} ${document?.extractedText || ""}`.toLowerCase();
-    return /\binvoice\b|\breceipt\b|\bbill\b|\bamount due\b|\btotal due\b|\bpaid\b/.test(text);
-  };
-
   const canAutoCreateExpenseFromSuggestion = (document, suggestion) =>
-    Boolean(
-      suggestion &&
-      suggestion.confidence === "high" &&
-      !document?.transactionId &&
-      suggestion.propertyId &&
-      suggestion.amount != null &&
-      suggestion.date &&
-      documentLooksLikeInvoice(document) &&
-      !documentLooksLikeEstimate(document),
-    );
+    canAutoCreateExpenseSuggestion(document, suggestion);
 
   const canAutoCreateWorkOrderFromSuggestion = (document, suggestion) =>
-    Boolean(
-      suggestion &&
-      suggestion.confidence === "high" &&
-      !getDocumentLinkedWorkOrder(document) &&
-      suggestion.propertyId &&
-      suggestion.title &&
-      (documentLooksLikeEstimate(document) || !canAutoCreateExpenseFromSuggestion(document, getDocumentExpenseSuggestion(document))),
-    );
+    canAutoCreateWorkOrderSuggestion(document, suggestion, {
+      hasLinkedWorkOrder: Boolean(getDocumentLinkedWorkOrder(document)),
+      expenseSuggestion: getDocumentExpenseSuggestion(document),
+    });
 
   const createWorkOrderFromDocumentSuggestion = (document, suggestion, options = {}) => {
     if (!requirePermission("create_edit_records", "This access profile cannot create work orders from OCR suggestions.")) return "";
@@ -1202,34 +1176,8 @@ export function createDocumentWorkspaceController({
     return txnId;
   };
 
-  const canCreateUtilitySectionTransaction = (section) =>
-    Boolean(
-      section &&
-      !section.external &&
-      section.propertyId &&
-      section.amount != null &&
-      section.date,
-    );
-
-  const findMatchingUtilitySectionTransaction = (section) => {
-    if (!canCreateUtilitySectionTransaction(section)) return null;
-    const sectionUnit = String(section.unit || "Shared").trim() || "Shared";
-    const sectionInvoice = String(section.invoiceRef || section.accountRef || "").trim().toLowerCase();
-    const sectionVendor = String(section.vendor || "").trim().toLowerCase();
-    const existingTransactions = Array.isArray(transactions) ? transactions : Object.values(transactionById || {});
-    return existingTransactions.find((transaction) => {
-      if (!transaction || transaction.status === "deleted") return false;
-      if (transaction.type !== "Expense") return false;
-      if (String(transaction.propertyId || "") !== String(section.propertyId || "")) return false;
-      if (String(transaction.unit || "Shared").trim() !== sectionUnit) return false;
-      if (String(transaction.date || "") !== String(section.date || "")) return false;
-      if (Math.abs(Number(transaction.amount || 0) - Number(section.amount || 0)) >= 0.005) return false;
-      const transactionInvoice = String(transaction.invoiceRef || "").trim().toLowerCase();
-      if (sectionInvoice && transactionInvoice && transactionInvoice === sectionInvoice) return true;
-      const transactionVendor = String(transaction.vendor || transaction.description || "").trim().toLowerCase();
-      return Boolean(sectionVendor && transactionVendor.includes(sectionVendor));
-    }) || null;
-  };
+  const findMatchingUtilitySectionTransactionForWorkspace = (section) =>
+    findMatchingUtilitySectionTransaction(section, transactions, transactionById);
 
   const createExpenseTransactionsFromUtilitySections = (document, sections, options = {}) => {
     if (!requirePermission("create_edit_records", "This access profile cannot create utility transactions from OCR sections.")) return { created: 0, skipped: 0 };
@@ -1244,7 +1192,7 @@ export function createDocumentWorkspaceController({
     const matchedExistingIds = [];
     let skipped = 0;
     readySections.forEach((section, index) => {
-      const duplicate = findMatchingUtilitySectionTransaction(section);
+      const duplicate = findMatchingUtilitySectionTransactionForWorkspace(section);
       if (duplicate) {
         if (duplicate.id) matchedExistingIds.push(duplicate.id);
         skipped += 1;

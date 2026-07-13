@@ -29,6 +29,8 @@
     "src/app/documentShared.ts",
     "src/app/useDocumentWorkspaceUiState.ts",
     "src/app/useDocumentDerivedCollections.ts",
-    "src/app/useDocumentAttachmentWorkflow.ts"
+    "src/app/useDocumentAttachmentWorkflow.ts",
+    "src/app/documentFileAccess.ts",
+    "src/app/documentAutomationSafety.ts"
   ]
 }
