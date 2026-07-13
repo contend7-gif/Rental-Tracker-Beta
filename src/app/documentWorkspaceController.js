@@ -1,6 +1,8 @@
 import { removeSupportingOnlyTag } from "../features/documents/documentWorkflow.js";
 import { buildDocumentQualityWarnings } from "../features/documents/documentPresentation.js";
 import { loadDocumentDataUrlFromDesktop } from "./documentFileAccess.ts";
+import { runDesktopDocumentOcr } from "./documentOcrRunner.ts";
+import { buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
 import {
   canAutoCreateExpenseSuggestion,
   canAutoCreateWorkOrderSuggestion,
@@ -27,6 +29,7 @@ export function createDocumentWorkspaceController({
   createBlankDocumentImportDraft,
   createBlankForm,
   desktopDocumentAiApi,
+  desktopDocumentOcrApi,
   desktopDocumentOpenApi,
   desktopPersistenceApi,
   documentExpenseReviewRecords,
@@ -124,61 +127,25 @@ export function createDocumentWorkspaceController({
 
   const openDocumentImportPicker = (context = {}) => {
     prefetchDialog("documentImport");
-    if (context && Object.keys(context).length > 0) {
-      setDocumentImportDraft((prev) => {
-        const base = createBlankDocumentImportDraft(
-          context.propertyId || prev.propertyId || (propertyFilter !== "all" ? propertyFilter : (properties[0]?.id || "")),
-          context.unit || prev.unit || (unitFilter !== "all" ? unitFilter : "Shared"),
-        );
-        const tags = Array.from(new Set([
-          ...parseDocumentTags(prev.tags),
-          ...parseDocumentTags(context.tags || ""),
-        ]));
-        return {
-          ...base,
-          ...prev,
-          propertyId: context.propertyId || prev.propertyId || base.propertyId,
-          unit: context.unit || prev.unit || base.unit,
-          type: context.type || prev.type || base.type,
-          tags: tags.join(", "),
-          linkType: context.linkType || prev.linkType || "none",
-          linkedId: context.linkedId || prev.linkedId || "",
-        };
-      });
+    const scope = {
+      propertyFilter,
+      unitFilter,
+      defaultPropertyId: properties[0]?.id || "",
+    };
+    if (hasDocumentImportContext(context)) {
+      setDocumentImportDraft((prev) => buildDocumentImportPickerDraft(prev, context, scope));
     } else {
-      setDocumentImportDraft(createBlankDocumentImportDraft(
-        propertyFilter !== "all" ? propertyFilter : (properties[0]?.id || ""),
-        unitFilter !== "all" ? unitFilter : "Shared",
-      ));
+      setDocumentImportDraft(buildDocumentImportPickerDraft(null, context, scope));
     }
     documentImportInputRef.current?.click();
   };
 
-  const runAutomaticDocumentOcr = async (documentLike) => {
-    if (!documentSupportsAutomaticOcr(documentLike?.name, documentLike?.mimeType)) {
-      return {
-        ok: false,
-        supported: false,
-        reason: "unsupported-file",
-        message: "Automatic OCR currently supports PDFs and common image files.",
-      };
-    }
-
-    if (!automaticDocumentOcrAvailable) {
-      return {
-        ok: false,
-        supported: false,
-        reason: "desktop-unavailable",
-        message: "Automatic OCR runs in the Windows desktop app.",
-      };
-    }
-
-    return window.desktopDocumentOcr.extract({
-      name: documentLike?.name || "document",
-      mimeType: documentLike?.mimeType || "application/octet-stream",
-      dataUrl: documentLike?.dataUrl || "",
-    });
-  };
+  const runAutomaticDocumentOcr = (documentLike) => runDesktopDocumentOcr({
+    documentLike,
+    automaticDocumentOcrAvailable,
+    desktopDocumentOcrApi,
+    documentSupportsAutomaticOcr,
+  });
 
   const queueDocumentForOcr = async (document, options = {}) => {
     if (!requirePermission("review_documents", "This access profile cannot queue OCR review actions.")) return { ok: false };

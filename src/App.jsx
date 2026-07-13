@@ -1686,6 +1686,7 @@ export default function App() {
     createBlankDocumentImportDraft,
     createBlankForm,
     desktopDocumentAiApi,
+    desktopDocumentOcrApi,
     desktopDocumentOpenApi,
     desktopPersistenceApi,
     documentExpenseReviewRecords,

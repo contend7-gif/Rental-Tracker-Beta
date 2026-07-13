@@ -31,6 +31,8 @@
     "src/app/useDocumentDerivedCollections.ts",
     "src/app/useDocumentAttachmentWorkflow.ts",
     "src/app/documentFileAccess.ts",
-    "src/app/documentAutomationSafety.ts"
+    "src/app/documentAutomationSafety.ts",
+    "src/app/documentOcrRunner.ts",
+    "src/app/documentImportDraft.ts"
   ]
 }
