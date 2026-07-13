@@ -20,6 +20,10 @@
     "src/app/desktopPersistenceHydration.ts",
     "src/app/desktopUpdateShared.ts",
     "src/app/performanceMetrics.ts",
-    "src/app/useWorkspacePrefetchController.ts"
+    "src/app/useWorkspacePrefetchController.ts",
+    "src/app/useAccessSettingsController.ts",
+    "src/app/useAppLifecycleEffects.ts",
+    "src/app/useDesktopRuntimeStatus.ts",
+    "src/app/useDataReplacementWorkflowController.ts"
   ]
 }

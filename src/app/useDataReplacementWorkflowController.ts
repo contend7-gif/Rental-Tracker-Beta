@@ -1,5 +1,59 @@
+import type { ChangeEvent } from "react";
 import { normalizeAndMigrateBackup } from "../domain/backupMigrations.ts";
+import type { BackupMigrationResult } from "../domain/backupMigrations.ts";
 import { createBlankForm } from "./draftFactories.js";
+
+type InputRef = { current: HTMLInputElement | null };
+type BackupImportMeta = {
+  restoredDocumentFiles?: unknown;
+  missingDocumentFiles?: unknown;
+};
+type ConfirmDialog = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+};
+type UseDataReplacementWorkflowControllerArgs = {
+  actions: {
+    loadDemoData: () => Promise<void>;
+    restoreBackupData: (data: Record<string, unknown>) => void;
+  };
+  appSettings: { confirmDestructiveActions: boolean };
+  autoBackupStatusLabel: string;
+  backupImportInputRef: InputRef;
+  bankImportInputRef: InputRef;
+  clearBankImportPreview: () => void;
+  closeLeaseEditor: () => void;
+  currentDataStatus?: { lastBackupAt?: string; lastValidationStatus?: string } | null;
+  demoLoadWarning: { requiresTypedConfirmation: boolean; message: string };
+  formatDesktopUpdateDate: (dateText: unknown) => string;
+  hasAnyData: boolean;
+  openConfirmDialog: (dialog: ConfirmDialog) => void;
+  replaceSettings: (settings: unknown) => void;
+  requirePermission: (capability: string, deniedMessage?: string) => boolean;
+  resetMaintenanceWorkspaceState: () => void;
+  restorePlanningWorkspaceFromBackupData: (data: Record<string, unknown>) => void;
+  restoreTaxWorkspaceFromBackupData: (data: Record<string, unknown>) => void;
+  setBackupValidationBusy: (busy: boolean) => void;
+  setBackupValidationResult: (result: unknown) => void;
+  setDashboardQuickAddOpen: (open: boolean) => void;
+  setDocumentSearch: (search: string) => void;
+  setDocumentStatusFilter: (filter: string) => void;
+  setEditingTxnId: (id: string) => void;
+  setExpenseQueueShowDismissed: (show: boolean) => void;
+  setForm: (form: ReturnType<typeof createBlankForm>) => void;
+  setNotice: (notice: string) => void;
+  setPendingTxnAttachment: (attachment: unknown) => void;
+  setPropertyFilter: (filter: string) => void;
+  setPropertyQuickAddOpen: (open: boolean) => void;
+  setSelectedDocument: (document: unknown) => void;
+  setSelectedTxn: (transaction: unknown) => void;
+  setUnitFilter: (filter: string) => void;
+  setView: (view: string) => void;
+  txnAttachmentInputRef: InputRef;
+  txnInlineAttachmentInputRef: InputRef;
+};
 
 export function useDataReplacementWorkflowController({
   actions,
@@ -37,7 +91,7 @@ export function useDataReplacementWorkflowController({
   setView,
   txnAttachmentInputRef,
   txnInlineAttachmentInputRef,
-}) {
+}: UseDataReplacementWorkflowControllerArgs) {
   const resetUiAfterDataReplace = () => {
     setPropertyFilter("all");
     setUnitFilter("all");
@@ -69,7 +123,7 @@ export function useDataReplacementWorkflowController({
     setNotice("Demo data loaded.");
   };
 
-  const runImportBackup = (migration, importMeta = {}) => {
+  const runImportBackup = (migration: BackupMigrationResult, importMeta: BackupImportMeta = {}) => {
     const { backup, migratedFromSchemaVersion, migrationsApplied } = migration;
     restoreTaxWorkspaceFromBackupData(backup.data);
     restorePlanningWorkspaceFromBackupData(backup.data);
@@ -95,24 +149,25 @@ export function useDataReplacementWorkflowController({
     setNotice("Backup imported.");
   };
 
-  const onBackupImportInputChange = async (event) => {
+  const onBackupImportInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!requirePermission("manage_data_admin", "Admin access is required to import backup files.")) return;
-    const file = event.target?.files?.[0];
+    const file = event.target.files?.[0];
     if (!file) return;
 
     try {
       const isZipBackup = /\.zip$/i.test(file.name || "") || String(file.type || "").toLowerCase().includes("zip");
-      let migration;
-      const importMeta = {};
+      let migration: BackupMigrationResult;
+      const importMeta: BackupImportMeta = {};
 
       if (isZipBackup) {
-        if (!window.desktopPersistence?.importBackupArchive) {
+        const desktopPersistence = window.desktopPersistence;
+        if (!desktopPersistence?.importBackupArchive) {
           throw new Error("Zip backup import is available in the desktop app.");
         }
         const archiveBuffer = await file.arrayBuffer();
         const importZipBackup = async () => {
           try {
-            const archiveResult = await window.desktopPersistence.importBackupArchive(archiveBuffer);
+            const archiveResult = await desktopPersistence.importBackupArchive(archiveBuffer);
             if (archiveResult?.ok === false) {
               throw new Error(archiveResult.message || "Could not import zip backup.");
             }

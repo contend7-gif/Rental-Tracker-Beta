@@ -1,4 +1,30 @@
 import { useEffect } from "react";
+import type { AppSettings } from "../store/appSettings.ts";
+
+type LifecycleActions = {
+  materializeRecurringTransactions: (throughDate: string) => void;
+  syncLeaseStatuses: (todayIso: string) => void;
+};
+
+type UseAppLifecycleEffectsArgs = {
+  actions: LifecycleActions;
+  appSettings: Pick<AppSettings, "autoMaterializeRecurring" | "leaseAutomationEnabled" | "leaseDesktopNotifications">;
+  applyLeaseAutomation: () => Promise<unknown> | unknown;
+  isDataHydrated: boolean;
+  leaseAutomationDefaults: unknown;
+  leases: unknown[];
+  notice: string;
+  propertyFilter: string;
+  recurringThroughDate: string;
+  setNotice: (notice: string) => void;
+  setPendingDocumentExpenseSource: (source: unknown) => void;
+  setPendingDocumentWorkOrderSource: (source: unknown) => void;
+  setUnitFilter: (unit: string) => void;
+  tenantLedgerEntries: unknown[];
+  todayIso: string;
+  units: unknown[];
+  view: string;
+};
 
 export function useAppLifecycleEffects({
   actions,
@@ -18,7 +44,7 @@ export function useAppLifecycleEffects({
   todayIso,
   units,
   view,
-}) {
+}: UseAppLifecycleEffectsArgs) {
   useEffect(() => {
     setUnitFilter("all");
   }, [propertyFilter, setUnitFilter]);

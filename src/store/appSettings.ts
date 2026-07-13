@@ -348,20 +348,21 @@ export function useAppSettings() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.desktopSecrets) return;
+    const desktopSecrets = window.desktopSecrets;
     let cancelled = false;
 
     async function hydrateSecret() {
       try {
         const legacyKey = String(appSettings.aiOpenAiApiKey || "").trim();
         if (legacyKey) {
-          const saved = await window.desktopSecrets.setSecret("aiOpenAiApiKey", legacyKey);
+          const saved = await desktopSecrets.setSecret("aiOpenAiApiKey", legacyKey);
           if (!cancelled && saved?.ok !== false) {
             setAppSettings((prev) => sanitizeAppSettings({ ...prev, aiOpenAiApiKey: legacyKey, hasAiOpenAiApiKey: true }));
           }
           return;
         }
 
-        const result = await window.desktopSecrets.getSecret("aiOpenAiApiKey");
+        const result = await desktopSecrets.getSecret("aiOpenAiApiKey");
         if (!cancelled && result?.ok !== false) {
           setAppSettings((prev) => sanitizeAppSettings({
             ...prev,

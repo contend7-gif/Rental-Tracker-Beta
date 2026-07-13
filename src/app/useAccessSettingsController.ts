@@ -6,6 +6,37 @@ import {
   accessRoleHasCapability,
 } from "./accessControl.js";
 import { ACCESS_ROLE_OPTIONS } from "../store/appSettings.ts";
+import type { AccessRole, AppSettings, DashboardCardId } from "../store/appSettings.ts";
+
+type ActivityLogEntry = {
+  action: string;
+  entityType: string;
+  entityId: string;
+  propertyId?: string;
+  unit?: string;
+  summary: string;
+  details: string;
+  category: string;
+};
+
+type AccessCapability = keyof typeof ACCESS_CAPABILITY_LABELS;
+
+const accessCapabilityLabels = ACCESS_CAPABILITY_LABELS as Record<AccessCapability, string>;
+const accessCapabilityMatrix = ACCESS_CAPABILITY_MATRIX as Record<AccessRole, AccessCapability[]>;
+const accessRoleLabels = ACCESS_ROLE_LABELS as Record<AccessRole, string>;
+const settingCapabilityByKey = SETTING_CAPABILITY_BY_KEY as Record<string, AccessCapability>;
+
+type UseAccessSettingsControllerArgs = {
+  accessRole: AccessRole;
+  accessRoleLabel: string;
+  actions: { addActivityLogEntry: (entry: ActivityLogEntry) => void };
+  appSettings: AppSettings;
+  desktopDocumentAiApi?: { analyze?: (payload: Record<string, unknown>) => Promise<unknown> } | null;
+  persistDashboardCardSetting: (cardId: DashboardCardId, checked: boolean) => void;
+  persistSetting: (key: keyof AppSettings, value: AppSettings[keyof AppSettings]) => void;
+  resetStoredSettings: () => void;
+  setNotice: (notice: string) => void;
+};
 
 export function useAccessSettingsController({
   accessRole,
@@ -17,9 +48,9 @@ export function useAccessSettingsController({
   persistSetting,
   resetStoredSettings,
   setNotice,
-}) {
+}: UseAccessSettingsControllerArgs) {
   const activeAccessRoleOption = ACCESS_ROLE_OPTIONS.find((option) => option.value === accessRole) || ACCESS_ROLE_OPTIONS[0];
-  const roleAccessSummary = (ACCESS_CAPABILITY_MATRIX[accessRole] || []).map((capability) => ACCESS_CAPABILITY_LABELS[capability]).filter(Boolean);
+  const roleAccessSummary = (accessCapabilityMatrix[accessRole] || []).map((capability) => accessCapabilityLabels[capability]).filter(Boolean);
   const canManageAccessProfile = accessRoleHasCapability(accessRole, "manage_access_profile");
   const canManageDataAdmin = accessRoleHasCapability(accessRole, "manage_data_admin");
   const canCreateEditRecords = accessRoleHasCapability(accessRole, "create_edit_records");
@@ -29,23 +60,23 @@ export function useAccessSettingsController({
   const aiDocumentCopilotConfigured = Boolean(appSettings.aiDocumentCopilotEnabled && String(appSettings.aiOpenAiApiKey || "").trim());
   const aiDocumentCopilotReady = Boolean(aiDocumentCopilotConfigured && desktopDocumentAiApi?.analyze);
 
-  const permissionDeniedMessage = (capability) => {
-    const capabilityLabel = ACCESS_CAPABILITY_LABELS[capability] || "that action";
+  const permissionDeniedMessage = (capability: AccessCapability) => {
+    const capabilityLabel = accessCapabilityLabels[capability] || "that action";
     return `${accessRoleLabel} access cannot change ${capabilityLabel}.`;
   };
 
-  const requirePermission = (capability, deniedMessage) => {
+  const requirePermission = (capability: AccessCapability, deniedMessage?: string) => {
     if (accessRoleHasCapability(accessRole, capability)) return true;
     setNotice(deniedMessage || permissionDeniedMessage(capability));
     return false;
   };
 
-  const addAuditEntry = ({ action, entityType, entityId, propertyId, unit, summary, details, category }) => {
+  const addAuditEntry = ({ action, entityType, entityId, propertyId, unit, summary, details, category }: ActivityLogEntry) => {
     actions.addActivityLogEntry({ action, entityType, entityId, propertyId, unit, summary, details, category });
   };
 
-  const setSetting = (key, value) => {
-    const capability = SETTING_CAPABILITY_BY_KEY[key] || "manage_personal_settings";
+  const setSetting = (key: keyof AppSettings, value: AppSettings[keyof AppSettings]) => {
+    const capability = settingCapabilityByKey[key] || "manage_personal_settings";
     if (!requirePermission(capability)) return;
     const previousValue = appSettings[key];
     persistSetting(key, value);
@@ -54,14 +85,14 @@ export function useAccessSettingsController({
         action: "access-role",
         entityType: "settings",
         entityId: "access-profile",
-        summary: `Access profile changed to ${ACCESS_ROLE_LABELS[value] || value}.`,
-        details: `Previous role: ${ACCESS_ROLE_LABELS[previousValue] || previousValue || "Unknown"}. Operator: ${appSettings.operatorName || "Local admin"}.`,
+        summary: `Access profile changed to ${accessRoleLabels[value as AccessRole] || value}.`,
+        details: `Previous role: ${accessRoleLabels[previousValue as AccessRole] || previousValue || "Unknown"}. Operator: ${appSettings.operatorName || "Local admin"}.`,
         category: "security",
       });
     }
   };
 
-  const setDashboardCardSetting = (cardId, checked) => {
+  const setDashboardCardSetting = (cardId: DashboardCardId, checked: boolean) => {
     if (!requirePermission("manage_personal_settings")) return;
     persistDashboardCardSetting(cardId, checked);
   };
@@ -78,7 +109,7 @@ export function useAccessSettingsController({
       entityType: "settings",
       entityId: "access-profile",
       summary: "Restored local admin access.",
-      details: `Previous role: ${ACCESS_ROLE_LABELS[previousValue] || previousValue || "Unknown"}. Operator: ${appSettings.operatorName || "Local admin"}.`,
+      details: `Previous role: ${accessRoleLabels[previousValue] || previousValue || "Unknown"}. Operator: ${appSettings.operatorName || "Local admin"}.`,
       category: "security",
     });
     setNotice("Local admin access restored.");
@@ -98,7 +129,7 @@ export function useAccessSettingsController({
     setNotice("Settings reset to defaults.");
   };
 
-  const toggleDashboardCardSetting = (cardId, checked) => {
+  const toggleDashboardCardSetting = (cardId: DashboardCardId, checked: boolean) => {
     setDashboardCardSetting(cardId, checked);
   };
 
