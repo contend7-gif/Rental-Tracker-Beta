@@ -2,6 +2,7 @@ import { buildDocumentQualityWarnings } from "../features/documents/documentPres
 import { loadDocumentDataUrlFromDesktop } from "./documentFileAccess.ts";
 import { runDesktopDocumentOcr } from "./documentOcrRunner.ts";
 import { queueDocumentForOcrWorkflow } from "./documentOcrQueue.ts";
+import { markVisibleDocumentsPendingOcrWorkflow, runVisibleDocumentOcrWorkflow } from "./documentOcrBatch.ts";
 import { runDocumentImportOcrWorkflow } from "./documentImportOcrWorkflow.ts";
 import {
   buildDocumentImportFileDraft,
@@ -297,62 +298,23 @@ export function createDocumentWorkspaceController({
     }
   };
 
-  const markVisibleDocumentsPendingOcr = () => {
-    if (!requirePermission("review_documents", "This access profile cannot queue OCR review actions.")) return;
-    if (visibleDocumentsMissingIndex.length === 0) {
-      setNotice("No visible documents need OCR review.");
-      return;
-    }
+  const markVisibleDocumentsPendingOcr = () => markVisibleDocumentsPendingOcrWorkflow({
+    documents: visibleDocumentsMissingIndex,
+    documentStatusFilter,
+    requirePermission,
+    updateDocument: actions.updateDocument,
+    addAuditEntry,
+    setNotice,
+  });
 
-    visibleDocumentsMissingIndex.forEach((document) => {
-      actions.updateDocument(document.id, { ocrStatus: "pending" });
-    });
-    addAuditEntry({
-      action: "queue-ocr",
-      entityType: "document-batch",
-      entityId: `visible-${visibleDocumentsMissingIndex.length}`,
-      summary: `Queued ${visibleDocumentsMissingIndex.length} visible document${visibleDocumentsMissingIndex.length === 1 ? "" : "s"} for OCR review.`,
-      details: `Current search/filter scope: ${documentStatusFilter}.`,
-      category: "document",
-    });
-    setNotice(`Queued ${visibleDocumentsMissingIndex.length} visible document${visibleDocumentsMissingIndex.length === 1 ? "" : "s"} for OCR review.`);
-  };
-
-  const runVisibleDocumentOcr = async () => {
-    if (!requirePermission("review_documents", "This access profile cannot run OCR review actions.")) return;
-    if (visibleAutomaticOcrDocuments.length === 0) {
-      setNotice("No visible OCR-ready documents are available.");
-      return;
-    }
-
-    setDocumentBatchOcrBusy(true);
-    try {
-      let completedCount = 0;
-      for (const document of visibleAutomaticOcrDocuments) {
-        const result = await queueDocumentForOcr(document, { silent: true });
-        if (result?.ok && result?.completed) {
-          completedCount += 1;
-        }
-      }
-      if (completedCount > 0) {
-        addAuditEntry({
-          action: "run-ocr",
-          entityType: "document-batch",
-          entityId: `visible-${visibleAutomaticOcrDocuments.length}`,
-          summary: `Ran automatic OCR on ${visibleAutomaticOcrDocuments.length} visible document${visibleAutomaticOcrDocuments.length === 1 ? "" : "s"}.`,
-          details: `${completedCount} extracted text result${completedCount === 1 ? "" : "s"}.`,
-          category: "document",
-        });
-      }
-      setNotice(
-        completedCount > 0
-          ? `Automatic OCR finished for ${completedCount} visible document${completedCount === 1 ? "" : "s"}.`
-          : "Automatic OCR ran, but no readable text was found in the visible documents.",
-      );
-    } finally {
-      setDocumentBatchOcrBusy(false);
-    }
-  };
+  const runVisibleDocumentOcr = () => runVisibleDocumentOcrWorkflow({
+    documents: visibleAutomaticOcrDocuments,
+    requirePermission,
+    setBusy: setDocumentBatchOcrBusy,
+    queueDocument: queueDocumentForOcr,
+    addAuditEntry,
+    setNotice,
+  });
 
   const applyDocumentLinkSuggestion = (document, suggestion, options = {}) => {
     const silent = Boolean(options?.silent);

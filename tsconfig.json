@@ -37,6 +37,7 @@
     "src/app/documentLinkUpdates.ts",
     "src/app/documentRecordUpdates.ts",
     "src/app/documentOcrQueue.ts",
+    "src/app/documentOcrBatch.ts",
     "src/app/documentImportOcrWorkflow.ts"
   ]
 }
