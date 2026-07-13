@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.0.9",
+    releaseDate: "2026-07-13",
+    title: "Faster document workflows and safer desktop code",
+    summary: "Makes document loading and OCR workflows more responsive while adding stronger automated checks around desktop persistence and document actions.",
+    changes: [
+      "Document imports, OCR queues, file access, record updates, and safe automation decisions now run through smaller focused workflows with dedicated regression tests.",
+      "The Documents workspace keeps its analysis code out of the startup bundle and opened in well under one second during local release testing.",
+      "Desktop persistence, update handling, runtime status, access settings, and document-controller boundaries now have TypeScript checks for safer future changes.",
+      "Release verification now covers 551 automated tests, strict unused-code checks, Windows desktop packaging, and live navigation through the main workspaces.",
+    ],
+  },
+  {
     version: "1.0.8",
     releaseDate: "2026-07-11",
     title: "Faster startup and on-demand workspace analysis",
