@@ -2,7 +2,12 @@ import { buildDocumentQualityWarnings } from "../features/documents/documentPres
 import { loadDocumentDataUrlFromDesktop } from "./documentFileAccess.ts";
 import { runDesktopDocumentOcr } from "./documentOcrRunner.ts";
 import { queueDocumentForOcrWorkflow } from "./documentOcrQueue.ts";
-import { buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
+import { runDocumentImportOcrWorkflow } from "./documentImportOcrWorkflow.ts";
+import {
+  buildDocumentImportFileDraft,
+  buildDocumentImportPickerDraft,
+  hasDocumentImportContext,
+} from "./documentImportDraft.ts";
 import {
   applyDocumentImportLinkSuggestionToDraft,
   buildDocumentLinkUpdate,
@@ -73,7 +78,6 @@ export function createDocumentWorkspaceController({
   openConfirmDialog,
   openLease,
   openTransaction,
-  parseDocumentTags,
   prefetchDialog,
   properties,
   propertyFilter,
@@ -246,70 +250,19 @@ export function createDocumentWorkspaceController({
     }
   };
 
-  const applyAutomaticOcrToImportDraft = async (draft) => {
-    documentImportOcrRequestIdRef.current += 1;
-    const requestId = documentImportOcrRequestIdRef.current;
-
-    if (!documentSupportsAutomaticOcr(draft?.name, draft?.mimeType)) {
-      setDocumentImportOcrBusy(false);
-      setDocumentImportOcrMessage("Automatic OCR currently supports PDFs and common image files.");
-      return;
-    }
-
-    if (!automaticDocumentOcrAvailable) {
-      setDocumentImportOcrBusy(false);
-      setDocumentImportOcrMessage("Automatic OCR runs when you open the Windows desktop app.");
-      return;
-    }
-
-    setDocumentImportOcrBusy(true);
-    setDocumentImportOcrMessage("Running automatic OCR...");
-
-    try {
-      const result = await runAutomaticDocumentOcr(draft);
-      if (documentImportOcrRequestIdRef.current !== requestId) return;
-
-      if (!result?.ok) {
-        setDocumentImportOcrMessage(result?.message || "Automatic OCR could not start.");
-        return;
-      }
-
-      const normalizedText = normalizeExtractedDocumentText(result.text);
-      if (normalizedText) {
-        setDocumentImportDraft((prev) => {
-          if (prev.dataUrl !== draft.dataUrl) return prev;
-          return {
-            ...prev,
-            extractedText: normalizedText,
-            ocrStatus: "completed",
-            tags: formatDocumentTags(getDocumentImportSuggestedTags(prev, normalizedText)),
-          };
-        });
-        setDocumentImportOcrMessage(
-          result.truncated
-            ? `Automatic OCR extracted text from the first ${result.processedPages} pages. Review before saving.`
-            : "Automatic OCR extracted searchable text. Review before saving.",
-        );
-      } else {
-        setDocumentImportDraft((prev) => {
-          if (prev.dataUrl !== draft.dataUrl) return prev;
-          return {
-            ...prev,
-            ocrStatus: "pending",
-          };
-        });
-        setDocumentImportOcrMessage("Automatic OCR ran, but no readable text was found. You can still save this as pending OCR.");
-      }
-    } catch (error) {
-      if (documentImportOcrRequestIdRef.current !== requestId) return;
-      const message = error instanceof Error ? error.message : String(error || "Automatic OCR failed.");
-      setDocumentImportOcrMessage(`Automatic OCR failed: ${message}`);
-    } finally {
-      if (documentImportOcrRequestIdRef.current === requestId) {
-        setDocumentImportOcrBusy(false);
-      }
-    }
-  };
+  const applyAutomaticOcrToImportDraft = (draft) => runDocumentImportOcrWorkflow({
+    draft,
+    requestIdRef: documentImportOcrRequestIdRef,
+    documentSupportsAutomaticOcr,
+    automaticDocumentOcrAvailable,
+    setBusy: setDocumentImportOcrBusy,
+    setMessage: setDocumentImportOcrMessage,
+    runAutomaticDocumentOcr,
+    normalizeExtractedDocumentText,
+    setDraft: setDocumentImportDraft,
+    getSuggestedTags: getDocumentImportSuggestedTags,
+    formatTags: formatDocumentTags,
+  });
 
   const onDocumentImportInputChange = async (event) => {
     const file = event.target.files?.[0];
@@ -321,28 +274,18 @@ export function createDocumentWorkspaceController({
     }
 
     try {
-      const nextPropertyId = documentImportDraft.propertyId || (propertyFilter !== "all" ? propertyFilter : (properties[0]?.id || ""));
-      const nextUnit = documentImportDraft.unit || (unitFilter !== "all" ? unitFilter : "Shared");
-      const suggestedType = suggestDocumentType(file.name, file.type);
-      const type = documentImportDraft.type && documentImportDraft.type !== "Scanned PDF" ? documentImportDraft.type : suggestedType;
       const dataUrl = await readFileAsDataUrl(file);
-      const draft = {
-        name: file.name,
-        type,
-        propertyId: nextPropertyId,
-        unit: nextUnit,
-        linkType: documentImportDraft.linkType || "none",
-        linkedId: documentImportDraft.linkedId || "",
-        tags: documentImportDraft.tags || "",
-        extractedText: "",
-        ocrStatus: "pending",
-        mimeType: file.type || "application/octet-stream",
+      const draft = buildDocumentImportFileDraft({
+        previous: documentImportDraft,
+        file,
         dataUrl,
-      };
-      draft.tags = formatDocumentTags([
-        ...parseDocumentTags(draft.tags).map((tag) => ({ tag, sources: ["context"] })),
-        ...getDocumentImportSuggestedTags(draft),
-      ]);
+        propertyFilter,
+        unitFilter,
+        defaultPropertyId: properties[0]?.id || "",
+        suggestDocumentType,
+        getSuggestedTags: getDocumentImportSuggestedTags,
+        formatTags: formatDocumentTags,
+      });
       setDocumentImportDraft(draft);
       setDocumentImportDialogOpen(true);
       setDocumentImportOcrMessage("");

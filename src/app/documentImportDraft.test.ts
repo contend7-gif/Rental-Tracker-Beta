@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createBlankDocumentImportDraft } from "./draftFactories.js";
-import { buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
+import { buildDocumentImportFileDraft, buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
 
 test("document import drafts start from the active workspace scope", () => {
   const draft = buildDocumentImportPickerDraft(null, {}, {
@@ -43,4 +43,30 @@ test("document import context detection ignores empty context", () => {
   assert.equal(hasDocumentImportContext({}), false);
   assert.equal(hasDocumentImportContext({ type: "Lease" }), true);
   assert.equal(hasDocumentImportContext(null), false);
+});
+
+test("document file drafts preserve context and add file-based suggestions", () => {
+  const previous = {
+    ...createBlankDocumentImportDraft("", ""),
+    tags: "Tax",
+    linkType: "transaction",
+    linkedId: "t1",
+  };
+  const draft = buildDocumentImportFileDraft({
+    previous,
+    file: { name: "invoice.pdf", type: "application/pdf" },
+    dataUrl: "data:pdf",
+    propertyFilter: "all",
+    unitFilter: "Unit 2",
+    defaultPropertyId: "p1",
+    suggestDocumentType: () => "Invoice",
+    getSuggestedTags: () => [{ tag: "Invoice", sources: ["filename"] }],
+    formatTags: (tags) => (tags as Array<{ tag: string }>).map(({ tag }) => tag).join(", "),
+  });
+  assert.equal(draft.propertyId, "p1");
+  assert.equal(draft.unit, "Unit 2");
+  assert.equal(draft.type, "Invoice");
+  assert.equal(draft.tags, "Tax, Invoice");
+  assert.equal(draft.linkedId, "t1");
+  assert.equal(draft.dataUrl, "data:pdf");
 });
