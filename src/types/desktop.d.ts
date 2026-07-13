@@ -48,6 +48,19 @@ export type DesktopPersistenceApi = {
 
 declare global {
   interface Window {
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  }
+
+  interface IdleDeadline {
+    didTimeout: boolean;
+    timeRemaining: () => number;
+  }
+
+  type IdleRequestCallback = (deadline: IdleDeadline) => void;
+  type IdleRequestOptions = { timeout?: number };
+
+  interface Window {
     desktopDiagnostics?: { run: () => Promise<DesktopDiagnosticsResult> };
     desktopDocumentAi?: { analyze: (payload: Record<string, unknown>) => Promise<DesktopResult & { analysis?: unknown }> };
     desktopDocumentOcr?: {

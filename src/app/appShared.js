@@ -3,7 +3,7 @@ export * from "./accountingShared.js";
 export * from "./appStorageKeys.js";
 export * from "./bankImportShared.js";
 export * from "./dateHelpers.js";
-export * from "./desktopUpdateShared.js";
+export * from "./desktopUpdateShared.ts";
 export * from "./documentShared.js";
 export * from "./draftFactories.js";
 export * from "./formatHelpers.js";

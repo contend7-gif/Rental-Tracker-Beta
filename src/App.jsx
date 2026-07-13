@@ -44,7 +44,7 @@ import {
   desktopDiagnosticPillClass,
   desktopUpdateBadgeClass,
   formatDesktopUpdateDate,
-} from "./app/desktopUpdateShared.js";
+} from "./app/desktopUpdateShared.ts";
 import {
   canAttachToTransaction,
   documentLinkSuggestionKindLabel,
@@ -92,7 +92,7 @@ import { useDashboardStatCards } from "./app/useDashboardStatCards.js";
 import { useDataSafetyWorkspaceModel } from "./app/useDataSafetyWorkspaceModel.js";
 import { useDataReplacementWorkflowController } from "./app/useDataReplacementWorkflowController.js";
 import { useDesktopPersistenceController } from "./app/useDesktopPersistenceController.js";
-import { useRuntimePerformanceMetrics } from "./app/performanceMetrics.js";
+import { useRuntimePerformanceMetrics } from "./app/performanceMetrics.ts";
 import { createDocumentWorkspaceController } from "./app/documentWorkspaceController.js";
 import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.js";
 import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.js";
@@ -131,7 +131,7 @@ import { useTransactionEntryController } from "./app/useTransactionEntryControll
 import { useTransactionFormSuggestions } from "./app/useTransactionFormSuggestions.js";
 import { useTransactionWorkflowController } from "./app/useTransactionWorkflowController.js";
 import { useWorkspaceFilterController } from "./app/useWorkspaceFilterController.js";
-import { useWorkspacePrefetchController } from "./app/useWorkspacePrefetchController.js";
+import { useWorkspacePrefetchController } from "./app/useWorkspacePrefetchController.ts";
 import { useWorkOrderExpenseAction } from "./app/useWorkOrderExpenseAction.js";
 import { useOcrSuggestedFieldOptions } from "./app/useOcrSuggestedFieldOptions.js";
 import { useVisibleSafeSuggestionCount } from "./app/useVisibleSafeSuggestionCount.js";

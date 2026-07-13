@@ -23,7 +23,7 @@ import {
   DEFAULT_DESKTOP_UPDATE_STATE,
   DESKTOP_UPDATE_STATUS_LABELS,
   normalizeReleaseNotesLines,
-} from "./desktopUpdateShared.js";
+} from "./desktopUpdateShared.ts";
 import { toLocalIsoDate } from "../lib/localDate.ts";
 
 const SQLITE_MIGRATION_STORAGE_KEY = "rental-tracker:sqlite-migrated:v1";

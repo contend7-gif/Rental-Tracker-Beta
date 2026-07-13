@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 
+type RuntimeMetricName = "workspaceSwitchMs" | "documentFileReadMs";
+type RuntimePerformanceMetrics = Record<RuntimeMetricName, number | null>;
+type PerformanceMetricEventDetail = { name: RuntimeMetricName; durationMs: number };
+
 const PERFORMANCE_EVENT = "rental-tracker:performance-metric";
 
-export function publishPerformanceMetric(name, durationMs) {
+export function publishPerformanceMetric(name: RuntimeMetricName, durationMs: number): void {
   if (typeof window === "undefined" || !Number.isFinite(durationMs)) return;
-  window.dispatchEvent(new CustomEvent(PERFORMANCE_EVENT, {
+  window.dispatchEvent(new CustomEvent<PerformanceMetricEventDetail>(PERFORMANCE_EVENT, {
     detail: { name, durationMs: Math.round(durationMs) },
   }));
 }
 
-export function useRuntimePerformanceMetrics(view) {
-  const [metrics, setMetrics] = useState({ workspaceSwitchMs: null, documentFileReadMs: null });
+export function useRuntimePerformanceMetrics(view: string): RuntimePerformanceMetrics {
+  const [metrics, setMetrics] = useState<RuntimePerformanceMetrics>({ workspaceSwitchMs: null, documentFileReadMs: null });
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -25,8 +29,8 @@ export function useRuntimePerformanceMetrics(view) {
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
-    const onMetric = (event) => {
-      const detail = event?.detail;
+    const onMetric = (event: Event) => {
+      const detail = (event as CustomEvent<PerformanceMetricEventDetail>).detail;
       if (!detail?.name || !Number.isFinite(detail.durationMs)) return;
       setMetrics((previous) => ({ ...previous, [detail.name]: detail.durationMs }));
     };

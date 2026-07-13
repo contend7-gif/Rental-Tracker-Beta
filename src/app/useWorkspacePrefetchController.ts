@@ -2,14 +2,20 @@ import { useEffect } from "react";
 
 const STARTUP_PREFETCH_DELAY_MS = 2000;
 
-export function useWorkspacePrefetchController({ prefetchWorkspace, view, viewPrefetchMap }) {
+type WorkspacePrefetchControllerArgs = {
+  prefetchWorkspace: (view: string) => void;
+  view: string;
+  viewPrefetchMap: Record<string, string[]>;
+};
+
+export function useWorkspacePrefetchController({ prefetchWorkspace, view, viewPrefetchMap }: WorkspacePrefetchControllerArgs): void {
   useEffect(() => {
     const likelyNextViews = viewPrefetchMap[view] || [];
     if (!likelyNextViews.length) return undefined;
 
     let cancelled = false;
-    let timeoutId = null;
-    let idleCallbackId = null;
+    let timeoutId: number | null = null;
+    let idleCallbackId: number | null = null;
     const [likelyNextView] = likelyNextViews;
     const runPrefetch = () => {
       if (cancelled) return;

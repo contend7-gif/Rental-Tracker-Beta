@@ -1,6 +1,6 @@
 import { removeSupportingOnlyTag } from "../features/documents/documentWorkflow.js";
 import { buildDocumentQualityWarnings } from "../features/documents/documentPresentation.js";
-import { publishPerformanceMetric } from "./performanceMetrics.js";
+import { publishPerformanceMetric } from "./performanceMetrics.ts";
 import {
   applyTransactionVendorMemoryToDraft,
   findTransactionVendorMemoryForDraft,
