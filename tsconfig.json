@@ -34,6 +34,7 @@
     "src/app/documentAutomationSafety.ts",
     "src/app/documentOcrRunner.ts",
     "src/app/documentImportDraft.ts",
-    "src/app/documentLinkUpdates.ts"
+    "src/app/documentLinkUpdates.ts",
+    "src/app/documentRecordUpdates.ts"
   ]
 }

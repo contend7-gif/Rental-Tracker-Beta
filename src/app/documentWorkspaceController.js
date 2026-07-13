@@ -8,6 +8,11 @@ import {
   buildDocumentUnlinkUpdate,
 } from "./documentLinkUpdates.ts";
 import {
+  buildDocumentExtractedTextUpdate,
+  buildDocumentTagsUpdate,
+  buildImportedDocumentRecord,
+} from "./documentRecordUpdates.ts";
+import {
   canAutoCreateExpenseSuggestion,
   canAutoCreateWorkOrderSuggestion,
   canCreateUtilitySectionTransaction,
@@ -514,45 +519,31 @@ export function createDocumentWorkspaceController({
       ? (autoLinkSuggestion.kind === "workOrder" ? "workOrder" : autoLinkSuggestion.kind)
       : documentImportDraft.linkType;
     const effectiveLinkedId = autoLinkSuggestion?.id || documentImportDraft.linkedId;
-    const linkedLease = effectiveLinkType === "lease" ? leaseById[effectiveLinkedId] : null;
-    const linkedTxn = effectiveLinkType === "transaction" ? transactionById[effectiveLinkedId] : null;
-    const linkedWorkOrder = effectiveLinkType === "workOrder" ? workOrderById[effectiveLinkedId] : null;
-    const nextPropertyId = linkedLease?.propertyId || linkedTxn?.propertyId || linkedWorkOrder?.propertyId || documentImportDraft.propertyId;
-    const nextUnit = documentImportDraft.unitScopeOverride
-      ? documentImportDraft.unit || "Shared"
-      : linkedLease?.unit || linkedTxn?.unit || linkedWorkOrder?.unit || documentImportDraft.unit || "Shared";
     const ocrStatus = normalizeDocumentOcrStatus(documentImportDraft.ocrStatus, extractedText);
-
-    if (!nextPropertyId) {
+    const importedDocument = buildImportedDocumentRecord({
+      draft: documentImportDraft,
+      effectiveLinkType,
+      effectiveLinkedId,
+      extractedText,
+      leaseById,
+      transactionById,
+      workOrderById,
+      id: `d${Date.now()}`,
+      uploadedAt: new Date().toISOString(),
+      ocrStatus,
+    });
+    if (!importedDocument) {
       setNotice("Select a property before saving the imported document.");
       return;
     }
-
-    const importedDocument = {
-      id: `d${Date.now()}`,
-      propertyId: nextPropertyId,
-      unit: nextUnit,
-      name,
-      type,
-      leaseId: linkedLease?.id,
-      transactionId: linkedTxn?.id,
-      workOrderId: linkedWorkOrder?.id,
-      unitScopeOverride: Boolean(documentImportDraft.unitScopeOverride),
-      mimeType: documentImportDraft.mimeType || undefined,
-      uploadedAt: new Date().toISOString(),
-      dataUrl: documentImportDraft.dataUrl,
-      tags: parseDocumentTags(documentImportDraft.tags),
-      extractedText: extractedText || undefined,
-      ocrStatus,
-    };
     actions.addDocument(importedDocument);
 
     addAuditEntry({
       action: "import",
       entityType: "document",
       entityId: name,
-      propertyId: nextPropertyId,
-      unit: nextUnit,
+      propertyId: importedDocument.propertyId,
+      unit: importedDocument.unit,
       summary: ocrStatus === "completed" ? `Imported ${name} with searchable text.` : `Imported ${name} for OCR review.`,
       details: `Type ${type} | Link ${effectiveLinkType || "none"}.`,
       category: "document",
@@ -774,13 +765,9 @@ export function createDocumentWorkspaceController({
 
   const saveDocumentTags = (document, rawTags, options = {}) => {
     const silent = Boolean(options?.silent);
-    const nextTags = parseDocumentTags(rawTags);
-    const priorTags = Array.isArray(document.tags) ? document.tags : [];
-    const unchanged =
-      priorTags.length === nextTags.length &&
-      priorTags.every((tag, index) => String(tag || "").toLowerCase() === String(nextTags[index] || "").toLowerCase());
-    if (unchanged) return;
-    actions.updateDocument(document.id, { tags: nextTags });
+    const update = buildDocumentTagsUpdate(document, rawTags);
+    if (!update) return;
+    actions.updateDocument(document.id, update);
     if (!silent) setNotice("Document tags updated.");
   };
 
@@ -795,16 +782,9 @@ export function createDocumentWorkspaceController({
   };
 
   const saveDocumentExtractedText = (document, rawText) => {
-    const nextExtractedText = normalizeExtractedDocumentText(rawText);
-    const priorExtractedText = String(document.extractedText || "").trim();
-    if (nextExtractedText === priorExtractedText) return;
-    actions.updateDocument(document.id, {
-      extractedText: nextExtractedText,
-      reviewedWarningKeys: undefined,
-      reviewedWarningsAt: undefined,
-      expenseReviewDismissedAt: nextExtractedText ? undefined : document.expenseReviewDismissedAt,
-      workOrderReviewDismissedAt: nextExtractedText ? undefined : document.workOrderReviewDismissedAt,
-    });
+    const update = buildDocumentExtractedTextUpdate(document, rawText, normalizeExtractedDocumentText);
+    if (!update) return;
+    actions.updateDocument(document.id, update);
     setNotice("Extracted text updated.");
   };
 
