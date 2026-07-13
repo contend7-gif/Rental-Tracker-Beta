@@ -1,8 +1,12 @@
-import { removeSupportingOnlyTag } from "../features/documents/documentWorkflow.js";
 import { buildDocumentQualityWarnings } from "../features/documents/documentPresentation.js";
 import { loadDocumentDataUrlFromDesktop } from "./documentFileAccess.ts";
 import { runDesktopDocumentOcr } from "./documentOcrRunner.ts";
 import { buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
+import {
+  applyDocumentImportLinkSuggestionToDraft,
+  buildDocumentLinkUpdate,
+  buildDocumentUnlinkUpdate,
+} from "./documentLinkUpdates.ts";
 import {
   canAutoCreateExpenseSuggestion,
   canAutoCreateWorkOrderSuggestion,
@@ -462,30 +466,7 @@ export function createDocumentWorkspaceController({
       if (!silent) setNotice("That suggested link is no longer available.");
       return;
     }
-    const nextFields = {};
-    if (suggestion.kind === "lease") {
-      nextFields.leaseId = suggestion.id;
-      nextFields.reviewedWarningKeys = undefined;
-      nextFields.reviewedWarningsAt = undefined;
-      nextFields.expenseReviewDismissedAt = undefined;
-      nextFields.workOrderReviewDismissedAt = undefined;
-    } else if (suggestion.kind === "transaction") {
-      nextFields.transactionId = suggestion.id;
-      nextFields.reviewedWarningKeys = undefined;
-      nextFields.reviewedWarningsAt = undefined;
-      nextFields.expenseReviewDismissedAt = undefined;
-    } else {
-      nextFields.workOrderId = suggestion.id;
-      nextFields.reviewedWarningKeys = undefined;
-      nextFields.reviewedWarningsAt = undefined;
-      nextFields.workOrderReviewDismissedAt = undefined;
-    }
-    if (suggestion.propertyId) nextFields.propertyId = suggestion.propertyId;
-    if (suggestion.unit) nextFields.unit = suggestion.unit;
-    const nextTags = removeSupportingOnlyTag(document.tags);
-    if (nextTags.length !== (Array.isArray(document.tags) ? document.tags.length : 0)) {
-      nextFields.tags = nextTags;
-    }
+    const nextFields = buildDocumentLinkUpdate(document, suggestion);
     actions.updateDocument(document.id, nextFields);
     if (!silent) {
       setNotice(`Linked ${document.name} to ${documentLinkSuggestionKindLabel(suggestion.kind).toLowerCase()} ${suggestion.label}.`);
@@ -495,23 +476,8 @@ export function createDocumentWorkspaceController({
   const removeDocumentRecordLink = (document, kind, options = {}) => {
     const silent = Boolean(options?.silent);
     if (!document) return;
-    const nextFields = {};
-    if (kind === "lease") {
-      nextFields.leaseId = undefined;
-    } else if (kind === "transaction") {
-      const relatedTransactionId = String(options?.relatedTransactionId || "").trim();
-      if (relatedTransactionId) {
-        nextFields.relatedTransactionIds = (document.relatedTransactionIds || []).filter((id) => id !== relatedTransactionId);
-      } else {
-        nextFields.transactionId = undefined;
-      }
-      nextFields.expenseReviewDismissedAt = undefined;
-    } else if (kind === "workOrder") {
-      nextFields.workOrderId = undefined;
-      nextFields.workOrderReviewDismissedAt = undefined;
-    } else {
-      return;
-    }
+    const nextFields = buildDocumentUnlinkUpdate(document, kind, options?.relatedTransactionId);
+    if (!nextFields) return;
     actions.updateDocument(document.id, nextFields);
     if (!silent) setNotice("Document link removed.");
   };
@@ -523,14 +489,7 @@ export function createDocumentWorkspaceController({
       return;
     }
 
-    const nextLinkType = suggestion.kind === "workOrder" ? "workOrder" : suggestion.kind;
-    setDocumentImportDraft((prev) => ({
-      ...prev,
-      linkType: nextLinkType,
-      linkedId: suggestion.id,
-      propertyId: suggestion.propertyId || prev.propertyId,
-      unit: suggestion.unit || prev.unit,
-    }));
+    setDocumentImportDraft((prev) => applyDocumentImportLinkSuggestionToDraft(prev, suggestion));
     setNotice(`Applied suggested ${documentLinkSuggestionKindLabel(suggestion.kind).toLowerCase()} link.`);
   };
 
