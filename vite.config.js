@@ -52,10 +52,10 @@ export default defineConfig({
             normalizedId.includes("/src/domain/documentAi.ts")
             || normalizedId.includes("/src/domain/documentIntelligence.ts")
             || normalizedId.includes("/src/features/documents/")
-            || normalizedId.includes("/src/app/documentWorkspaceController.js")
-            || normalizedId.includes("/src/app/useDocumentAttachmentWorkflow.js")
-            || normalizedId.includes("/src/app/useDocumentReviewModel.js")
-            || normalizedId.includes("/src/app/useDocumentWorkspaceUiState.js")
+            || normalizedId.includes("/src/app/documentWorkspaceController.")
+            || normalizedId.includes("/src/app/useDocumentAttachmentWorkflow.")
+            || normalizedId.includes("/src/app/useDocumentReviewModel.")
+            || normalizedId.includes("/src/app/useDocumentWorkspaceUiState.")
           ) {
             return "documents-workspace";
           }

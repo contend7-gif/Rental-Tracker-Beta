@@ -93,7 +93,7 @@ import { useDataSafetyWorkspaceModel } from "./app/useDataSafetyWorkspaceModel.j
 import { useDataReplacementWorkflowController } from "./app/useDataReplacementWorkflowController.ts";
 import { useDesktopPersistenceController } from "./app/useDesktopPersistenceController.js";
 import { useRuntimePerformanceMetrics } from "./app/performanceMetrics.ts";
-import { createDocumentWorkspaceController } from "./app/documentWorkspaceController.js";
+import { createDocumentWorkspaceController } from "./app/documentWorkspaceController.ts";
 import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.ts";
 import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.ts";
 import { useDesktopBridgeController } from "./app/useDesktopBridgeController.ts";

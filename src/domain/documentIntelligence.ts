@@ -373,7 +373,7 @@ function vendorHeaderSearchText(text: string) {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
-  const headerLines = [];
+  const headerLines: string[] = [];
   for (const line of lines.slice(0, 16)) {
     if (headerLines.length >= 8) break;
     if (/^\s*(?:invoice|receipt|statement|bill|estimate|page\s+\d+|account|date|due|total|amount|balance)\b/i.test(line)) continue;
@@ -1055,7 +1055,7 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
     candidateVendors,
   });
 
-  const sections = addressAnchors.map((anchor, index) => {
+  const sections: Array<DocumentUtilitySection & { __sortScore?: number }> = addressAnchors.map((anchor, index) => {
     const previousAnchor = addressAnchors[index - 1];
     const nextAnchor = addressAnchors[index + 1];
     const sectionStart = previousAnchor ? Math.max(0, Math.floor((previousAnchor.index + anchor.index) / 2)) : Math.max(0, anchor.index - 220);
@@ -1328,7 +1328,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
   sources.add("ocr");
   if (resolvedVendorName) sources.add(vendorSource);
   if (property || lease || transaction || workOrder || matchedVendorId) {
-    sources.add(vendorSource === "ocr_match" ? "ocr_match" : "context");
+    sources.add("context");
   }
   const reasons = uniqueReasons([
     correctedVendorName ? `Vendor was corrected as ${correctedVendorName}.` : resolvedVendorName ? (matchedVendorId ? `Vendor matched saved vendor ${resolvedVendorName}.` : `Vendor came from ${vendorSource === "context" ? "linked context" : "OCR text"}.`) : "",
@@ -1520,7 +1520,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
   if (utilitySection?.sources?.length) utilitySection.sources.forEach((source) => sources.add(source));
   if (extractedFields?.sources?.length) extractedFields.sources.forEach((source) => sources.add(source));
   if (vendorName) sources.add(vendorSource);
-  if (workOrder || transaction || lease || property || matchedVendorId) sources.add(vendorSource === "ocr_match" ? "ocr_match" : "context");
+  if (workOrder || transaction || lease || property || matchedVendorId) sources.add("context");
   const reasons = uniqueReasons([
     utilitySection ? `Draft based on matched utility section ${utilitySection.address}.` : "",
     utilitySection?.reasons || [],
@@ -1616,7 +1616,7 @@ export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs): D
   if (extractedText) sources.add("ocr");
   if (extractedFields?.sources?.length) extractedFields.sources.forEach((source) => sources.add(source));
   if (vendorName) sources.add(vendorSource);
-  if (transaction || lease || property) sources.add(vendorSource === "ocr_match" ? "ocr_match" : "context");
+  if (transaction || lease || property) sources.add("context");
 
   return {
     propertyId: resolvedPropertyId,
@@ -1781,7 +1781,7 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
       label: `${candidateLease.tenantName} | Unit ${candidateLease.unit}`,
       propertyId: candidateLease.propertyId,
       unit: candidateLease.unit,
-    }, score, ["ocr_match", ...(unitMatched ? ["ocr"] : [])]);
+    }, score, ["ocr_match", ...(unitMatched ? ["ocr"] : [])] as DocumentTagSuggestionSource[]);
   });
 
   candidateWorkOrders.forEach((candidateWorkOrder) => {
@@ -1797,7 +1797,7 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
       label: `${candidateWorkOrder.title} | Unit ${candidateWorkOrder.unit}`,
       propertyId: candidateWorkOrder.propertyId,
       unit: candidateWorkOrder.unit,
-    }, score, ["ocr_match", ...(unitMatched ? ["ocr"] : [])]);
+    }, score, ["ocr_match", ...(unitMatched ? ["ocr"] : [])] as DocumentTagSuggestionSource[]);
   });
 
   candidateTransactions.forEach((candidateTransaction) => {
@@ -1877,7 +1877,7 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
     }, finalScore, [
       ...(vendorMatched || invoiceRefMatched ? ["ocr_match"] : []),
       ...((unitMatched || amountMatched || exactDateMatched || closeDateMatched || sameMonthDateMatched || servicePeriodEndMatched || sectionScore > 0) ? ["ocr"] : []),
-    ]);
+    ] as DocumentTagSuggestionSource[]);
   });
 
   return [...linkSuggestions.values()]
@@ -1889,7 +1889,7 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
       if (leftDate && rightDate && leftDate !== rightDate) return rightDate.localeCompare(leftDate);
       return left.suggestion.label.localeCompare(right.suggestion.label);
     })
-    .map((entry) => ({
+    .map((entry): DocumentLinkSuggestion => ({
       ...entry.suggestion,
       confidence: entry.score >= 5 ? "high" : "medium",
       sources: sortSuggestionSources(entry.sourceSet),

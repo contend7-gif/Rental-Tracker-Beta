@@ -29,6 +29,35 @@ import {
   applyTransactionVendorMemoryToDraft,
   findTransactionVendorMemoryForDraft,
 } from "../features/transactions/transactionVendorMemory.js";
+import type { DocumentItem } from "../models.ts";
+import type { DocumentImportDraft } from "./documentImportDraft.ts";
+import type { ChangeEvent } from "react";
+
+type DocumentWorkspaceActions = {
+  [action: string]: any;
+  updateDocument: (id: string, update: Partial<DocumentItem>) => void;
+  addDocument: (document: DocumentItem) => void;
+  addTransaction: (transaction: unknown) => void;
+  addWorkOrder: (workOrder: unknown) => void;
+};
+
+export type DocumentWorkspaceControllerDependencies = {
+  [dependency: string]: any;
+  actions: DocumentWorkspaceActions;
+  automaticDocumentOcrAvailable: boolean;
+  documentImportDraft: DocumentImportDraft;
+  documentImportOcrRequestIdRef: { current: number };
+  documentImportInputRef: { current: HTMLInputElement | null };
+  properties: Array<{ id: string }>;
+  propertyFilter: string;
+  unitFilter: string;
+  transactions: any[];
+  units: any[];
+  vendors?: any[];
+  visibleAutomaticOcrDocuments: DocumentItem[];
+  visibleDocuments: DocumentItem[];
+  visibleDocumentsMissingIndex: DocumentItem[];
+};
 
 export function createDocumentWorkspaceController({
   actions,
@@ -125,8 +154,8 @@ export function createDocumentWorkspaceController({
   vendors = [],
   workOrderById,
   workOrderSuggestionReasonSummary,
-}) {
-  const loadDocumentDataUrl = (document) => loadDocumentDataUrlFromDesktop({
+}: DocumentWorkspaceControllerDependencies) {
+  const loadDocumentDataUrl = (document: DocumentItem) => loadDocumentDataUrlFromDesktop({
     document,
     desktopPersistenceApi,
     setNotice,
@@ -148,21 +177,21 @@ export function createDocumentWorkspaceController({
       defaultPropertyId: properties[0]?.id || "",
     };
     if (hasDocumentImportContext(context)) {
-      setDocumentImportDraft((prev) => buildDocumentImportPickerDraft(prev, context, scope));
+      setDocumentImportDraft((prev: DocumentImportDraft) => buildDocumentImportPickerDraft(prev, context, scope));
     } else {
       setDocumentImportDraft(buildDocumentImportPickerDraft(null, context, scope));
     }
     documentImportInputRef.current?.click();
   };
 
-  const runAutomaticDocumentOcr = (documentLike) => runDesktopDocumentOcr({
+  const runAutomaticDocumentOcr = (documentLike: DocumentItem | DocumentImportDraft) => runDesktopDocumentOcr({
     documentLike,
     automaticDocumentOcrAvailable,
     desktopDocumentOcrApi,
     documentSupportsAutomaticOcr,
   });
 
-  const queueDocumentForOcr = (document, options = {}) => queueDocumentForOcrWorkflow({
+  const queueDocumentForOcr = (document: DocumentItem, options: Record<string, any> = {}) => queueDocumentForOcrWorkflow({
     document,
     silent: Boolean(options?.silent),
     requirePermission,
@@ -176,7 +205,7 @@ export function createDocumentWorkspaceController({
     normalizeExtractedDocumentText,
   });
 
-  const runDocumentAiAnalysis = async (document, options = {}) => {
+  const runDocumentAiAnalysis = async (document: DocumentItem, options: Record<string, any> = {}) => {
     if (!requirePermission("review_documents", "This access profile cannot run AI document review actions.")) return false;
     if (!aiDocumentCopilotEnabled) {
       setNotice("Enable AI document copilot in Settings first.");
@@ -212,7 +241,7 @@ export function createDocumentWorkspaceController({
 
     const context = buildDocumentAiContext(workingDocument);
 
-    setDocumentAiBusyById((prev) => ({ ...prev, [document.id]: true }));
+    setDocumentAiBusyById((prev: Record<string, boolean>) => ({ ...prev, [document.id]: true }));
     try {
       const result = await desktopDocumentAiApi.analyze({
         apiKey: aiOpenAiApiKey,
@@ -243,7 +272,7 @@ export function createDocumentWorkspaceController({
       setNotice(`AI analysis failed: ${message}`);
       return false;
     } finally {
-      setDocumentAiBusyById((prev) => {
+      setDocumentAiBusyById((prev: Record<string, boolean>) => {
         const next = { ...prev };
         delete next[document.id];
         return next;
@@ -251,7 +280,7 @@ export function createDocumentWorkspaceController({
     }
   };
 
-  const applyAutomaticOcrToImportDraft = (draft) => runDocumentImportOcrWorkflow({
+  const applyAutomaticOcrToImportDraft = (draft: DocumentImportDraft) => runDocumentImportOcrWorkflow({
     draft,
     requestIdRef: documentImportOcrRequestIdRef,
     documentSupportsAutomaticOcr,
@@ -265,7 +294,7 @@ export function createDocumentWorkspaceController({
     formatTags: formatDocumentTags,
   });
 
-  const onDocumentImportInputChange = async (event) => {
+  const onDocumentImportInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!canAttachToTransaction(file)) {
@@ -316,7 +345,7 @@ export function createDocumentWorkspaceController({
     setNotice,
   });
 
-  const applyDocumentLinkSuggestion = (document, suggestion, options = {}) => {
+  const applyDocumentLinkSuggestion = (document: DocumentItem, suggestion: any, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     if (!document || !suggestion?.id) {
       if (!silent) setNotice("That suggested link is no longer available.");
@@ -329,7 +358,7 @@ export function createDocumentWorkspaceController({
     }
   };
 
-  const removeDocumentRecordLink = (document, kind, options = {}) => {
+  const removeDocumentRecordLink = (document: DocumentItem, kind: any, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     if (!document) return;
     const nextFields = buildDocumentUnlinkUpdate(document, kind, options?.relatedTransactionId);
@@ -339,17 +368,17 @@ export function createDocumentWorkspaceController({
   };
 
 
-  const applyDocumentImportLinkSuggestion = (suggestion) => {
+  const applyDocumentImportLinkSuggestion = (suggestion: any) => {
     if (!suggestion?.id) {
       setNotice("That suggested link is no longer available.");
       return;
     }
 
-    setDocumentImportDraft((prev) => applyDocumentImportLinkSuggestionToDraft(prev, suggestion));
+    setDocumentImportDraft((prev: DocumentImportDraft) => applyDocumentImportLinkSuggestionToDraft(prev, suggestion));
     setNotice(`Applied suggested ${documentLinkSuggestionKindLabel(suggestion.kind).toLowerCase()} link.`);
   };
 
-  const saveImportedDocument = (options = {}) => {
+  const saveImportedDocument = (options: Record<string, any> = {}) => {
     if (!requirePermission("review_documents", "This access profile cannot save imported documents.")) return;
     const name = String(documentImportDraft.name || "").trim();
     const type = String(documentImportDraft.type || "").trim() || "Scanned PDF";
@@ -364,7 +393,7 @@ export function createDocumentWorkspaceController({
       !options.reviewUtilitySection &&
       !options.reviewExpenseDraft &&
       !options.reviewWorkOrderDraft
-        ? getDocumentImportLinkSuggestions?.(documentImportDraft, extractedText).find((suggestion) => suggestion.confidence === "high") || null
+        ? getDocumentImportLinkSuggestions?.(documentImportDraft, extractedText).find((suggestion: any) => suggestion.confidence === "high") || null
         : null;
     const effectiveLinkType = autoLinkSuggestion
       ? (autoLinkSuggestion.kind === "workOrder" ? "workOrder" : autoLinkSuggestion.kind)
@@ -423,7 +452,7 @@ export function createDocumentWorkspaceController({
     }
   };
 
-  const openDocumentLinkedRecord = (document, target) => {
+  const openDocumentLinkedRecord = (document: DocumentItem, target: any) => {
     if (target === "transaction") {
       if (!document.transactionId || !transactionById[document.transactionId]) {
         setNotice("Linked transaction was not found.");
@@ -452,7 +481,7 @@ export function createDocumentWorkspaceController({
     setNotice(`Showing work order ${linkedWorkOrder.title}.`);
   };
 
-  const openExpenseDraftFromDocument = (doc, suggestion, options = {}) => {
+  const openExpenseDraftFromDocument = (doc: DocumentItem, suggestion: any, options: Record<string, any> = {}) => {
     if (!doc || !suggestion) {
       setNotice("No expense draft suggestion is available for this document yet.");
       return;
@@ -520,7 +549,7 @@ export function createDocumentWorkspaceController({
       setExpenseQueueFocusDocumentId(nextQueueRecord?.document.id || "");
       setExpenseQueueShowDismissed(false);
     }
-    const possibleDuplicateTransaction = getDocumentLinkSuggestions(doc).find((linkSuggestion) => (
+    const possibleDuplicateTransaction = getDocumentLinkSuggestions(doc).find((linkSuggestion: any) => (
       linkSuggestion.kind === "transaction" &&
       linkSuggestion.confidence === "high" &&
       String(linkSuggestion.id || "") !== String(doc.transactionId || "")
@@ -555,7 +584,7 @@ export function createDocumentWorkspaceController({
     );
   };
 
-  const openDocumentPreview = async (document) => {
+  const openDocumentPreview = async (document: DocumentItem) => {
     prefetchDialog("documentPreview");
     const documentWithFile = await loadDocumentDataUrl(document);
     if (!documentWithFile?.dataUrl) {
@@ -565,13 +594,13 @@ export function createDocumentWorkspaceController({
     setSelectedDocument(documentWithFile);
   };
 
-  const loadDocumentForReview = (document) => loadDocumentDataUrl(document);
+  const loadDocumentForReview = (document: DocumentItem) => loadDocumentDataUrl(document);
 
-  const openExpenseDraftFromUtilitySection = (document, section) => {
+  const openExpenseDraftFromUtilitySection = (document: DocumentItem, section: any) => {
     openExpenseDraftFromDocument(document, section, { linkMode: "related" });
   };
 
-  const openDocumentExternally = async (document) => {
+  const openDocumentExternally = async (document: DocumentItem) => {
     const documentWithFile = await loadDocumentDataUrl(document);
     if (!documentWithFile?.dataUrl) {
       setNotice("This document has no previewable file attached.");
@@ -596,7 +625,7 @@ export function createDocumentWorkspaceController({
     }
   };
 
-  const confirmAndDeleteDocument = (document) => {
+  const confirmAndDeleteDocument = (document: DocumentItem) => {
     if (!requirePermission("delete_records", "Admin access is required to delete documents.")) return;
     const runDelete = () => {
       actions.deleteDocument(document.id);
@@ -614,7 +643,7 @@ export function createDocumentWorkspaceController({
     });
   };
 
-  const saveDocumentTags = (document, rawTags, options = {}) => {
+  const saveDocumentTags = (document: DocumentItem, rawTags: unknown, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     const update = buildDocumentTagsUpdate(document, rawTags);
     if (!update) return;
@@ -622,24 +651,24 @@ export function createDocumentWorkspaceController({
     if (!silent) setNotice("Document tags updated.");
   };
 
-  const applySuggestedDocumentTags = (document, options = {}) => {
+  const applySuggestedDocumentTags = (document: DocumentItem, options: Record<string, any> = {}) => {
     const existingTags = Array.isArray(document.tags) ? document.tags : [];
     const suggestedTags = getDocumentSuggestedTags(document);
     if (suggestedTags.length === 0) {
       if (!options?.silent) setNotice("No suggested tags to apply.");
       return;
     }
-    saveDocumentTags(document, [...existingTags, ...suggestedTags.map((suggestion) => suggestion.tag)].join(", "), options);
+    saveDocumentTags(document, [...existingTags, ...suggestedTags.map((suggestion: any) => suggestion.tag)].join(", "), options);
   };
 
-  const saveDocumentExtractedText = (document, rawText) => {
+  const saveDocumentExtractedText = (document: DocumentItem, rawText: unknown) => {
     const update = buildDocumentExtractedTextUpdate(document, rawText, normalizeExtractedDocumentText);
     if (!update) return;
     actions.updateDocument(document.id, update);
     setNotice("Extracted text updated.");
   };
 
-  const saveDocumentOcrFieldCorrections = (document, corrections = {}) => {
+  const saveDocumentOcrFieldCorrections = (document: DocumentItem, corrections: Record<string, any> = {}) => {
     if (!requirePermission("review_documents", "This access profile cannot correct OCR fields.")) return;
     if (!document) return;
 
@@ -651,7 +680,7 @@ export function createDocumentWorkspaceController({
     const servicePeriodEnd = String(corrections.servicePeriodEnd || "").trim();
     const unit = String(corrections.unit || document.unit || "Shared").trim() || "Shared";
 
-    if (totalAmountText && (!Number.isFinite(totalAmount) || totalAmount < 0)) {
+    if (totalAmountText && (!Number.isFinite(totalAmount) || totalAmount! < 0)) {
       setNotice("Enter a valid non-negative total amount.");
       return;
     }
@@ -664,7 +693,7 @@ export function createDocumentWorkspaceController({
     const nextOverrides = {
       ...currentOverrides,
       vendorName: vendorName || undefined,
-      totalAmount: totalAmountText ? Math.round(totalAmount * 100) / 100 : undefined,
+      totalAmount: totalAmountText ? Math.round(totalAmount! * 100) / 100 : undefined,
       servicePeriodStart: servicePeriodStart || undefined,
       servicePeriodEnd: servicePeriodEnd || undefined,
     };
@@ -711,7 +740,7 @@ export function createDocumentWorkspaceController({
     setNotice(`OCR corrections saved for ${document.name}.`);
   };
 
-  const markDocumentWarningsReviewed = (document, warningKeys = []) => {
+  const markDocumentWarningsReviewed = (document: DocumentItem, warningKeys: string[] = []) => {
     if (!requirePermission("review_documents", "This access profile cannot resolve document warnings.")) return;
     if (!document) return;
     const keys = Array.from(new Set(
@@ -730,7 +759,7 @@ export function createDocumentWorkspaceController({
     setNotice(`Marked ${keys.length} document warning${keys.length === 1 ? "" : "s"} reviewed for ${document.name}.`);
   };
 
-  const updateLinkedTransactionFromDocumentOcr = (document, warningKeys = []) => {
+  const updateLinkedTransactionFromDocumentOcr = (document: DocumentItem, warningKeys: string[] = []) => {
     if (!requirePermission("create_edit_records", "This access profile cannot update transactions from OCR.")) return false;
     const linkedTransaction = document?.transactionId ? transactionById[document.transactionId] : null;
     if (!document || !linkedTransaction) {
@@ -803,35 +832,35 @@ export function createDocumentWorkspaceController({
     return true;
   };
 
-  const getSafeDocumentTagSuggestions = (document) =>
-    getDocumentSuggestedTags(document).filter((suggestion) => {
+  const getSafeDocumentTagSuggestions = (document: DocumentItem) =>
+    getDocumentSuggestedTags(document).filter((suggestion: any) => {
       const sources = Array.isArray(suggestion.sources) ? suggestion.sources : [];
       return sources.includes("context") || sources.includes("ocr_match") || sources.length > 1;
     });
 
-  const getSafeDocumentLinkSuggestion = (document) =>
-    getDocumentLinkSuggestions(document).find((suggestion) => {
+  const getSafeDocumentLinkSuggestion = (document: DocumentItem) =>
+    getDocumentLinkSuggestions(document).find((suggestion: any) => {
       if (suggestion.confidence !== "high") return false;
       if (suggestion.kind === "lease") return !document.leaseId;
       if (suggestion.kind === "transaction") return !document.transactionId;
       return !getDocumentLinkedWorkOrder(document);
     }) || null;
 
-  const getDocumentQualityWarningCount = (document) => buildDocumentQualityWarnings(document, {
+  const getDocumentQualityWarningCount = (document: DocumentItem) => buildDocumentQualityWarnings(document, {
     extractedFields: getDocumentExtractedFields?.(document),
     linkedTransaction: document?.transactionId ? transactionById[document.transactionId] : null,
-  }).length;
+  } as any).length;
 
-  const canAutoCreateExpenseFromSuggestion = (document, suggestion) =>
+  const canAutoCreateExpenseFromSuggestion = (document: DocumentItem, suggestion: any) =>
     canAutoCreateExpenseSuggestion(document, suggestion);
 
-  const canAutoCreateWorkOrderFromSuggestion = (document, suggestion) =>
+  const canAutoCreateWorkOrderFromSuggestion = (document: DocumentItem, suggestion: any) =>
     canAutoCreateWorkOrderSuggestion(document, suggestion, {
       hasLinkedWorkOrder: Boolean(getDocumentLinkedWorkOrder(document)),
       expenseSuggestion: getDocumentExpenseSuggestion(document),
     });
 
-  const createWorkOrderFromDocumentSuggestion = (document, suggestion, options = {}) => {
+  const createWorkOrderFromDocumentSuggestion = (document: DocumentItem, suggestion: any, options: Record<string, any> = {}) => {
     if (!requirePermission("create_edit_records", "This access profile cannot create work orders from OCR suggestions.")) return "";
     const silent = Boolean(options?.silent);
     if (!document || !suggestion?.propertyId || !String(suggestion.title || "").trim()) {
@@ -866,7 +895,7 @@ export function createDocumentWorkspaceController({
     return workOrderId;
   };
 
-  const createExpenseFromDocumentSuggestion = (document, suggestion, options = {}) => {
+  const createExpenseFromDocumentSuggestion = (document: DocumentItem, suggestion: any, options: Record<string, any> = {}) => {
     if (!requirePermission("create_edit_records", "This access profile cannot create expenses from OCR suggestions.")) return "";
     const silent = Boolean(options?.silent);
     if (!document || !suggestion?.propertyId || suggestion.amount == null || !suggestion.date) {
@@ -933,10 +962,10 @@ export function createDocumentWorkspaceController({
     return txnId;
   };
 
-  const findMatchingUtilitySectionTransactionForWorkspace = (section) =>
+  const findMatchingUtilitySectionTransactionForWorkspace = (section: any) =>
     findMatchingUtilitySectionTransaction(section, transactions, transactionById);
 
-  const createExpenseTransactionsFromUtilitySections = (document, sections, options = {}) => {
+  const createExpenseTransactionsFromUtilitySections = (document: DocumentItem, sections: any[], options: Record<string, any> = {}) => {
     if (!requirePermission("create_edit_records", "This access profile cannot create utility transactions from OCR sections.")) return { created: 0, skipped: 0 };
     const silent = Boolean(options?.silent);
     const readySections = (Array.isArray(sections) ? sections : []).filter(canCreateUtilitySectionTransaction);
@@ -945,8 +974,8 @@ export function createDocumentWorkspaceController({
       return { created: 0, skipped: 0 };
     }
 
-    const createdIds = [];
-    const matchedExistingIds = [];
+    const createdIds: string[] = [];
+    const matchedExistingIds: string[] = [];
     let skipped = 0;
     readySections.forEach((section, index) => {
       const duplicate = findMatchingUtilitySectionTransactionForWorkspace(section);
@@ -1038,7 +1067,7 @@ export function createDocumentWorkspaceController({
     return { created: createdIds.length, skipped };
   };
 
-  const applySafeSuggestionsToDocument = (document, options = {}) => {
+  const applySafeSuggestionsToDocument = (document: DocumentItem, options: Record<string, any> = {}) => {
     if (!requirePermission("review_documents", "This access profile cannot apply OCR suggestions.")) return { tags: 0, links: 0, expenses: 0, workOrders: 0, flagged: 0 };
     const silent = Boolean(options?.silent);
     if (getDocumentQualityWarningCount(document) > 0) {
@@ -1053,7 +1082,7 @@ export function createDocumentWorkspaceController({
 
     if (safeTags.length > 0) {
       const existingTags = Array.isArray(document.tags) ? document.tags : [];
-      saveDocumentTags(document, [...existingTags, ...safeTags.map((suggestion) => suggestion.tag)].join(", "), { silent: true });
+      saveDocumentTags(document, [...existingTags, ...safeTags.map((suggestion: any) => suggestion.tag)].join(", "), { silent: true });
       result.tags = safeTags.length;
     }
 
@@ -1107,7 +1136,7 @@ export function createDocumentWorkspaceController({
       { tags: 0, links: 0, expenses: 0, workOrders: 0, flagged: 0 },
     );
 
-    const summary = [];
+    const summary: string[] = [];
     if (totals.tags > 0) summary.push(`${totals.tags} tag suggestions`);
     if (totals.links > 0) summary.push(`${totals.links} links`);
     if (totals.expenses > 0) summary.push(`${totals.expenses} expense transactions`);
@@ -1126,7 +1155,7 @@ export function createDocumentWorkspaceController({
     setNotice(summary.length > 0 ? `Applied safe OCR suggestions: ${summary.join(", ")}.${flaggedNote}` : `No safe OCR suggestions were ready to apply.${flaggedNote}`);
   };
 
-  const dismissDocumentExpenseReview = (document, options = {}) => {
+  const dismissDocumentExpenseReview = (document: DocumentItem, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     if (!document) return;
     if (document.transactionId) {
@@ -1141,7 +1170,7 @@ export function createDocumentWorkspaceController({
     if (!silent) setNotice(`Expense suggestion dismissed for ${document.name}.${nextRecord ? ` Next up: ${nextRecord.document.name}.` : ""}`);
   };
 
-  const reopenDocumentExpenseReview = (document, options = {}) => {
+  const reopenDocumentExpenseReview = (document: DocumentItem, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     if (!document) return;
     if (documentStatusFilter === "expense_queue") {
@@ -1151,7 +1180,7 @@ export function createDocumentWorkspaceController({
     if (!silent) setNotice("Expense suggestion reopened for review.");
   };
 
-  const dismissDocumentWorkOrderReview = (document, options = {}) => {
+  const dismissDocumentWorkOrderReview = (document: DocumentItem, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     if (!document) return;
     if (getDocumentLinkedWorkOrder(document)) {
@@ -1162,7 +1191,7 @@ export function createDocumentWorkspaceController({
     if (!silent) setNotice(`Work order suggestion dismissed for ${document.name}.`);
   };
 
-  const reopenDocumentWorkOrderReview = (document, options = {}) => {
+  const reopenDocumentWorkOrderReview = (document: DocumentItem, options: Record<string, any> = {}) => {
     const silent = Boolean(options?.silent);
     if (!document) return;
     actions.updateDocument(document.id, { workOrderReviewDismissedAt: undefined });
@@ -1176,7 +1205,7 @@ export function createDocumentWorkspaceController({
     }
 
     const runDismiss = () => {
-      visibleExpenseReviewRecords.forEach((record) => {
+      visibleExpenseReviewRecords.forEach((record: any) => {
         dismissDocumentExpenseReview(record.document, { silent: true });
       });
       setNotice(`Dismissed ${visibleExpenseReviewRecords.length} visible expense suggestion${visibleExpenseReviewRecords.length === 1 ? "" : "s"}.`);
@@ -1196,8 +1225,8 @@ export function createDocumentWorkspaceController({
   };
 
   const reviewNextExpenseQueueItem = () => {
-    const focusedRecord = visibleExpenseReviewRecords.find((record) => record.document.id === expenseQueueFocusDocumentId) || null;
-    const nextRecord = focusedRecord || visibleExpenseReviewRecords[0] || documentExpenseReviewRecords.find((record) => !record.dismissed) || null;
+    const focusedRecord = visibleExpenseReviewRecords.find((record: any) => record.document.id === expenseQueueFocusDocumentId) || null;
+    const nextRecord = focusedRecord || visibleExpenseReviewRecords[0] || documentExpenseReviewRecords.find((record: any) => !record.dismissed) || null;
     if (!nextRecord) {
       setNotice("No OCR expense suggestions are waiting for review.");
       return;
@@ -1206,7 +1235,7 @@ export function createDocumentWorkspaceController({
     openExpenseDraftFromDocument(nextRecord.document, nextRecord.suggestion);
   };
 
-  const openWorkOrderDraftFromDocument = (doc, suggestion) => {
+  const openWorkOrderDraftFromDocument = (doc: DocumentItem, suggestion: any) => {
     if (!doc || !suggestion?.propertyId || !suggestion?.title) {
       setNotice("No work order draft suggestion is available for this document yet.");
       return;
@@ -1250,7 +1279,7 @@ export function createDocumentWorkspaceController({
   };
 
   const reviewNextWorkOrderQueueItem = () => {
-    const nextRecord = visibleWorkOrderReviewRecords[0] || documentWorkOrderReviewRecords.find((record) => !record.dismissed) || null;
+    const nextRecord = visibleWorkOrderReviewRecords[0] || documentWorkOrderReviewRecords.find((record: any) => !record.dismissed) || null;
     if (!nextRecord) {
       setNotice("No OCR work order suggestions are waiting for review.");
       return;
@@ -1276,8 +1305,6 @@ export function createDocumentWorkspaceController({
     dismissDocumentExpenseReview,
     dismissDocumentWorkOrderReview,
     dismissVisibleExpenseQueue,
-    documentLooksLikeEstimate,
-    documentLooksLikeInvoice,
     getSafeDocumentLinkSuggestion,
     getSafeDocumentTagSuggestions,
     markVisibleDocumentsPendingOcr,

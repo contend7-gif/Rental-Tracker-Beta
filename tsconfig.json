@@ -38,6 +38,7 @@
     "src/app/documentRecordUpdates.ts",
     "src/app/documentOcrQueue.ts",
     "src/app/documentOcrBatch.ts",
-    "src/app/documentImportOcrWorkflow.ts"
+    "src/app/documentImportOcrWorkflow.ts",
+    "src/app/documentWorkspaceController.ts"
   ]
 }
