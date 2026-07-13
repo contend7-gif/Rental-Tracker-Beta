@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { suggestedFieldHint } from "./documentShared.js";
+import { suggestedFieldHint } from "./documentShared.ts";
 
 export function useOcrSuggestedFieldOptions({ pendingDocumentExpenseSource }) {
   const ocrPrefilledFieldSet = useMemo(

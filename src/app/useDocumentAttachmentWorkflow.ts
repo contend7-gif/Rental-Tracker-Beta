@@ -1,3 +1,32 @@
+import type { ChangeEvent } from "react";
+import type { DocumentItem, Transaction, Vendor, WorkOrder } from "../models.ts";
+
+type UseDocumentAttachmentWorkflowArgs = {
+  actions: {
+    addDocument: (document: DocumentItem) => void;
+    addOrUpdateWorkOrder: (workOrder: WorkOrder) => void;
+  };
+  canAttachToTransaction: (file?: Pick<File, "type"> | null) => boolean;
+  inferDocumentTags: (context: {
+    document: { name: string; type: string; tags: string[] };
+    transaction?: Transaction;
+    workOrder?: WorkOrder;
+    vendor?: Vendor | null;
+  }) => string[];
+  readFileAsDataUrl: (file: File) => Promise<string>;
+  selectedWorkOrderAttachmentId: string;
+  setDocumentSearch: (search: string) => void;
+  setDocumentStatusFilter: (filter: string) => void;
+  setNotice: (notice: string) => void;
+  setPropertyFilter: (filter: string) => void;
+  setSelectedWorkOrderAttachmentId: (id: string) => void;
+  setUnitFilter: (filter: string) => void;
+  setView: (view: string) => void;
+  vendorById: Record<string, Vendor>;
+  workOrderAttachmentInputRef: { current: HTMLInputElement | null };
+  workOrderById: Record<string, WorkOrder>;
+};
+
 export function useDocumentAttachmentWorkflow({
   actions,
   canAttachToTransaction,
@@ -14,8 +43,8 @@ export function useDocumentAttachmentWorkflow({
   vendorById,
   workOrderAttachmentInputRef,
   workOrderById,
-}) {
-  async function attachDocumentToTransaction(txn, file) {
+}: UseDocumentAttachmentWorkflowArgs) {
+  async function attachDocumentToTransaction(txn: Transaction | null | undefined, file: File | null | undefined) {
     if (!txn || !file) return;
     if (!canAttachToTransaction(file)) {
       setNotice("Attach a PDF or image file for transaction receipts.");
@@ -45,7 +74,7 @@ export function useDocumentAttachmentWorkflow({
     }
   }
 
-  async function attachDocumentToWorkOrder(workOrder, file) {
+  async function attachDocumentToWorkOrder(workOrder: WorkOrder | null | undefined, file: File | null | undefined) {
     if (!workOrder || !file) return;
     if (!canAttachToTransaction(file)) {
       setNotice("Attach a PDF or image file for work order documents.");
@@ -82,7 +111,7 @@ export function useDocumentAttachmentWorkflow({
     }
   }
 
-  const onWorkOrderAttachmentInputChange = async (event) => {
+  const onWorkOrderAttachmentInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     const workOrder = selectedWorkOrderAttachmentId ? workOrderById[selectedWorkOrderAttachmentId] : null;
     await attachDocumentToWorkOrder(workOrder, file);
@@ -90,12 +119,12 @@ export function useDocumentAttachmentWorkflow({
     event.target.value = "";
   };
 
-  const openWorkOrderAttachmentPicker = (workOrder) => {
+  const openWorkOrderAttachmentPicker = (workOrder: WorkOrder) => {
     setSelectedWorkOrderAttachmentId(workOrder.id);
     workOrderAttachmentInputRef.current?.click();
   };
 
-  const openWorkOrderDocuments = (workOrder) => {
+  const openWorkOrderDocuments = (workOrder: WorkOrder) => {
     setPropertyFilter(workOrder.propertyId);
     setUnitFilter(workOrder.unit || "all");
     setDocumentStatusFilter("all");

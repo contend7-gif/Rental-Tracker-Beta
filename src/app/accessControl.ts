@@ -1,11 +1,27 @@
 import { ACCESS_ROLE_OPTIONS } from "../store/appSettings.ts";
+import type { AccessRole, AppSettings } from "../store/appSettings.ts";
 
-export const ACCESS_ROLE_LABELS = ACCESS_ROLE_OPTIONS.reduce((map, option) => {
+export type AccessCapability =
+  | "manage_personal_settings"
+  | "manage_operational_settings"
+  | "manage_financial_settings"
+  | "manage_statement_branding"
+  | "manage_access_profile"
+  | "manage_data_admin"
+  | "create_edit_records"
+  | "delete_records"
+  | "run_imports"
+  | "review_documents"
+  | "reconcile_records"
+  | "export_reports"
+  | "run_desktop_diagnostics";
+
+export const ACCESS_ROLE_LABELS: Record<AccessRole, string> = ACCESS_ROLE_OPTIONS.reduce<Record<AccessRole, string>>((map, option) => {
   map[option.value] = option.label;
   return map;
-}, {});
+}, {} as Record<AccessRole, string>);
 
-export const ACCESS_CAPABILITY_MATRIX = {
+export const ACCESS_CAPABILITY_MATRIX: Record<AccessRole, AccessCapability[]> = {
   admin: [
     "manage_personal_settings",
     "manage_operational_settings",
@@ -46,7 +62,7 @@ export const ACCESS_CAPABILITY_MATRIX = {
   read_only: ["manage_personal_settings", "export_reports", "run_desktop_diagnostics"],
 };
 
-export const ACCESS_CAPABILITY_LABELS = {
+export const ACCESS_CAPABILITY_LABELS: Record<AccessCapability, string> = {
   manage_personal_settings: "personal preferences",
   manage_operational_settings: "automation settings",
   manage_financial_settings: "financial safeguards",
@@ -62,7 +78,7 @@ export const ACCESS_CAPABILITY_LABELS = {
   run_desktop_diagnostics: "desktop diagnostics",
 };
 
-export const SETTING_CAPABILITY_BY_KEY = {
+export const SETTING_CAPABILITY_BY_KEY: Partial<Record<keyof AppSettings, AccessCapability>> = {
   theme: "manage_personal_settings",
   defaultView: "manage_personal_settings",
   sidebarCollapsedByDefault: "manage_personal_settings",
@@ -98,7 +114,7 @@ export const SETTING_CAPABILITY_BY_KEY = {
   operatorName: "manage_access_profile",
 };
 
-export function accessRoleHasCapability(role, capability) {
+export function accessRoleHasCapability(role: AccessRole, capability: AccessCapability) {
   const allowed = ACCESS_CAPABILITY_MATRIX[role] || ACCESS_CAPABILITY_MATRIX.read_only;
   return allowed.includes(capability);
 }

@@ -24,6 +24,11 @@
     "src/app/useAccessSettingsController.ts",
     "src/app/useAppLifecycleEffects.ts",
     "src/app/useDesktopRuntimeStatus.ts",
-    "src/app/useDataReplacementWorkflowController.ts"
+    "src/app/useDataReplacementWorkflowController.ts",
+    "src/app/accessControl.ts",
+    "src/app/documentShared.ts",
+    "src/app/useDocumentWorkspaceUiState.ts",
+    "src/app/useDocumentDerivedCollections.ts",
+    "src/app/useDocumentAttachmentWorkflow.ts"
   ]
 }

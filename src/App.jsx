@@ -28,7 +28,7 @@ import { SETTINGS_SAVED_TEXT, useAppSettings } from "./store/appSettings.ts";
 import { useDashboardContext } from "./store/dashboardContext.ts";
 import {
   ACCESS_ROLE_LABELS,
-} from "./app/accessControl.js";
+} from "./app/accessControl.ts";
 import {
   buildRentalDayAllocationWeights,
   categories,
@@ -56,7 +56,7 @@ import {
   readFileAsDataUrl,
   workOrderSuggestionConfidenceLabel,
   workOrderSuggestionReasonSummary,
-} from "./app/documentShared.js";
+} from "./app/documentShared.ts";
 import {
   createBlankDocumentImportDraft,
   createBlankForm,
@@ -94,11 +94,11 @@ import { useDataReplacementWorkflowController } from "./app/useDataReplacementWo
 import { useDesktopPersistenceController } from "./app/useDesktopPersistenceController.js";
 import { useRuntimePerformanceMetrics } from "./app/performanceMetrics.ts";
 import { createDocumentWorkspaceController } from "./app/documentWorkspaceController.js";
-import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.js";
-import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.js";
+import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.ts";
+import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.ts";
 import { useDesktopBridgeController } from "./app/useDesktopBridgeController.ts";
 import { useDesktopRuntimeStatus } from "./app/useDesktopRuntimeStatus.ts";
-import { useDocumentWorkspaceUiState } from "./app/useDocumentWorkspaceUiState.js";
+import { useDocumentWorkspaceUiState } from "./app/useDocumentWorkspaceUiState.ts";
 import { useDocumentReviewModel } from "./app/useDocumentReviewModel.js";
 import { useLeaseTenantLedgerController } from "./app/useLeaseTenantLedgerController.js";
 import { useLedgerActivityWorkspaceController } from "./app/useLedgerActivityWorkspaceController.js";

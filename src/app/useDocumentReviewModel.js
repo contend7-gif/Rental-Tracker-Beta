@@ -13,7 +13,7 @@ import {
   inferDocumentWorkOrderSuggestion,
   normalizeExtractedDocumentText,
 } from "../domain/documentIntelligence.ts";
-import { parseDocumentTags } from "./documentShared.js";
+import { parseDocumentTags } from "./documentShared.ts";
 
 export function useDocumentReviewModel({
   isActive,

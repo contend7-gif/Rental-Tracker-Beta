@@ -22,7 +22,7 @@ import {
   expenseSuggestionReasonSummary,
   workOrderSuggestionConfidenceLabel,
   workOrderSuggestionReasonSummary,
-} from "./documentShared.js";
+} from "./documentShared.ts";
 import { createBlankWorkOrderDraft } from "./draftFactories.js";
 import { formatPercentInput, formatUsPhone } from "./formatHelpers.js";
 import { leaseActualEndLabel, leaseIsActiveByDate, leaseStatusForDate, leaseTypeLabel } from "./leaseShared.js";

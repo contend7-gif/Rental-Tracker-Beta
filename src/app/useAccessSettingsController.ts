@@ -4,7 +4,7 @@ import {
   ACCESS_ROLE_LABELS,
   SETTING_CAPABILITY_BY_KEY,
   accessRoleHasCapability,
-} from "./accessControl.js";
+} from "./accessControl.ts";
 import { ACCESS_ROLE_OPTIONS } from "../store/appSettings.ts";
 import type { AccessRole, AppSettings, DashboardCardId } from "../store/appSettings.ts";
 

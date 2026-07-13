@@ -1,6 +1,6 @@
 import { currency } from "../domain/accounting.ts";
 import { formatStatementPresetLabel, monthStartIso } from "../lib/appSupport.ts";
-import { DOCUMENT_OCR_STATUS_OPTIONS } from "./documentShared.js";
+import { DOCUMENT_OCR_STATUS_OPTIONS } from "./documentShared.ts";
 import {
   TENANT_LEDGER_ACCOUNTING_OPTIONS,
   TENANT_LEDGER_KIND_OPTIONS,
