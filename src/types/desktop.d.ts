@@ -1,25 +1,37 @@
 import type { DocumentItem } from "../models.ts";
 
-type DesktopResult = {
+export type DesktopResult = {
   ok?: boolean;
   message?: string;
   error?: string;
 };
 
-type DesktopDocumentOcrSupport = DesktopResult & {
+export type DesktopDocumentOcrSupport = DesktopResult & {
   supported?: boolean;
   platform?: string;
   engine?: string;
 };
 
-type DesktopDiagnosticsResult = DesktopResult & {
+export type DesktopDiagnosticsResult = DesktopResult & {
   checkedAt?: string;
   recentEvents?: unknown[];
 };
 
-type DesktopPersistenceApi = {
+export type DesktopPersistenceLoadResult = DesktopResult & {
+  hasData?: boolean;
+  backup?: unknown;
+  meta?: { lastBackupAt?: string; [key: string]: unknown };
+};
+
+export type DesktopPersistenceHealth = DesktopResult & {
+  lastBackupAt?: string;
+  structuredDataRecordCount?: number;
+  [key: string]: unknown;
+};
+
+export type DesktopPersistenceApi = {
   isAvailable: () => Promise<DesktopResult & { available?: boolean; databasePath?: string; userDataPath?: string }>;
-  loadAppData: (options?: Record<string, unknown>) => Promise<DesktopResult & Record<string, unknown>>;
+  loadAppData: (options?: Record<string, unknown>) => Promise<DesktopPersistenceLoadResult>;
   loadDeferredCollections: (collectionKeys: string[]) => Promise<DesktopResult & Record<string, unknown>>;
   queryActivityLogPage: (options?: Record<string, unknown>) => Promise<DesktopResult & Record<string, unknown>>;
   readDocumentDataUrl: (document: Pick<DocumentItem, "id" | "relativePath" | "filePath" | "dataUrl"> | Record<string, unknown>) => Promise<DesktopResult & { dataUrl?: string }>;
@@ -29,7 +41,7 @@ type DesktopPersistenceApi = {
   exportBackup: () => Promise<DesktopResult & Record<string, unknown>>;
   exportBackupArchive: () => Promise<DesktopResult & { buffer?: ArrayBuffer; missingDocumentFiles?: string[]; exportedAt?: string; fileName?: string }>;
   importBackupArchive: (archiveBuffer: ArrayBuffer) => Promise<DesktopResult & Record<string, unknown>>;
-  getHealth: () => Promise<DesktopResult & Record<string, unknown>>;
+  getHealth: () => Promise<DesktopPersistenceHealth>;
   validateLatestBackup: () => Promise<DesktopResult & Record<string, unknown>>;
   openDataFolder: () => Promise<DesktopResult & { path?: string }>;
 };

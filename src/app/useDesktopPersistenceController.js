@@ -3,7 +3,7 @@ import { normalizeAndMigrateBackup, BACKUP_SCHEMA_VERSION } from "../domain/back
 import { buildLeaseAutomationPlan, findStaleAutomatedRentChargeIds } from "../domain/leaseAutomation.ts";
 import { findReleaseNotesEntry, getRecentReleaseNotes } from "../domain/releaseNotes.ts";
 import { APP_SETTINGS_STORAGE_KEY, sanitizeAppSettingsForExport } from "../store/appSettings.ts";
-import { applyDesktopPersistenceBackup, loadAndApplyDesktopPersistenceData } from "./desktopPersistenceHydration.js";
+import { applyDesktopPersistenceBackup, loadAndApplyDesktopPersistenceData } from "./desktopPersistenceHydration.ts";
 import { createDesktopSaveQueue } from "./desktopSaveQueue.ts";
 import {
   readLastAutoBackupAt,

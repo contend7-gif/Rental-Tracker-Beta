@@ -1,4 +1,24 @@
-import { normalizeAndMigrateBackup } from "../domain/backupMigrations.ts";
+import { normalizeAndMigrateBackup, type BackupEnvelope } from "../domain/backupMigrations.ts";
+import type {
+  DesktopPersistenceApi,
+  DesktopPersistenceHealth,
+  DesktopPersistenceLoadResult,
+} from "../types/desktop";
+
+type HydrationCallbacks = {
+  restoreBackupEnvelope?: (backup: BackupEnvelope) => void;
+  replaceSettings?: (settings: unknown) => void;
+  setPersistenceHealth?: (health: DesktopPersistenceHealth | null) => void;
+  setLastAutoBackupAt?: (value: string) => void;
+  setPersistenceLastError?: (value: string) => void;
+  setNotice?: (message: string) => void;
+  manual?: boolean;
+};
+
+type ApplyDesktopPersistenceBackupArgs = HydrationCallbacks & {
+  loaded?: DesktopPersistenceLoadResult;
+  desktopPersistence?: Pick<DesktopPersistenceApi, "getHealth">;
+};
 
 export async function applyDesktopPersistenceBackup({
   loaded,
@@ -10,7 +30,7 @@ export async function applyDesktopPersistenceBackup({
   setPersistenceLastError,
   setNotice,
   manual = false,
-} = {}) {
+}: ApplyDesktopPersistenceBackupArgs = {}): Promise<boolean> {
   if (!loaded?.ok || !loaded.hasData || !loaded.backup) {
     if (manual) setNotice?.("SQLite database does not have saved rental records to reload yet.");
     return false;
@@ -24,7 +44,7 @@ export async function applyDesktopPersistenceBackup({
 
   const health = desktopPersistence?.getHealth ? await desktopPersistence.getHealth() : null;
   setPersistenceHealth?.(health?.ok === false ? null : health);
-  setLastAutoBackupAt?.(health?.lastBackupAt || loaded?.meta?.lastBackupAt || "");
+  setLastAutoBackupAt?.(health?.lastBackupAt || loaded.meta?.lastBackupAt || "");
   setPersistenceLastError?.("");
 
   if (manual) {
@@ -34,7 +54,14 @@ export async function applyDesktopPersistenceBackup({
   return true;
 }
 
-export async function loadAndApplyDesktopPersistenceData({ desktopPersistence, ...callbacks } = {}) {
+type LoadAndApplyDesktopPersistenceDataArgs = HydrationCallbacks & {
+  desktopPersistence?: Pick<DesktopPersistenceApi, "loadAppData" | "getHealth">;
+};
+
+export async function loadAndApplyDesktopPersistenceData({
+  desktopPersistence,
+  ...callbacks
+}: LoadAndApplyDesktopPersistenceDataArgs = {}): Promise<boolean> {
   if (!desktopPersistence?.loadAppData) {
     callbacks.setNotice?.("SQLite desktop persistence is not available in this environment.");
     return false;

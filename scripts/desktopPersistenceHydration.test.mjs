@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadAndApplyDesktopPersistenceData } from "../src/app/desktopPersistenceHydration.js";
+import { loadAndApplyDesktopPersistenceData } from "../src/app/desktopPersistenceHydration.ts";
 
 test("desktop hydration applies SQLite data once and does not load demo data over it", async () => {
   let loadCount = 0;
