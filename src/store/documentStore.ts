@@ -1,6 +1,69 @@
 import { normalizeDocumentAiAnalysis } from "../domain/documentAi.ts";
 import { normalizeDocumentOcrStatus } from "../domain/documentIntelligence.ts";
 import type { DocumentItem } from "../models.ts";
+import type { AppendActivityLog } from "./activityStore.ts";
+
+type DocumentStateSetter = (updater: DocumentItem[] | ((previous: DocumentItem[]) => DocumentItem[])) => void;
+
+export function createDocumentActions({
+  getDocuments,
+  setDocuments,
+  appendActivityLog,
+}: {
+  getDocuments: () => DocumentItem[];
+  setDocuments: DocumentStateSetter;
+  appendActivityLog: AppendActivityLog;
+}) {
+  return {
+    addDocument(document: DocumentItem) {
+      const normalized = normalizeDocument(document);
+      const existsBefore = getDocuments().some((item) => item.id === normalized.id);
+      setDocuments((previous) => [normalized, ...previous.filter((item) => item.id !== normalized.id)]);
+      appendActivityLog({
+        action: existsBefore ? "update" : "create",
+        entityType: "document",
+        entityId: normalized.id,
+        propertyId: normalized.propertyId,
+        unit: normalized.unit,
+        summary: existsBefore ? "Document updated." : "Document added.",
+        details: normalized.name,
+      });
+    },
+    updateDocument(id: string, updates: Partial<DocumentItem>) {
+      const existingDocument = getDocuments().find((document) => document.id === id);
+      setDocuments((previous) =>
+        previous.map((document) => {
+          if (document.id !== id) return document;
+          return normalizeDocument({ ...document, ...updates, id: document.id });
+        }),
+      );
+      const propertyId = String(updates.propertyId || existingDocument?.propertyId || "").trim() || undefined;
+      const unit = String(updates.unit || existingDocument?.unit || "").trim() || undefined;
+      appendActivityLog({
+        action: "update",
+        entityType: "document",
+        entityId: id,
+        propertyId,
+        unit,
+        summary: "Document metadata updated.",
+        details: String(updates.name || existingDocument?.name || "").trim() || undefined,
+      });
+    },
+    deleteDocument(id: string) {
+      const existingDocument = getDocuments().find((document) => document.id === id);
+      setDocuments((previous) => previous.filter((document) => document.id !== id));
+      appendActivityLog({
+        action: "delete",
+        entityType: "document",
+        entityId: id,
+        propertyId: existingDocument?.propertyId,
+        unit: existingDocument?.unit,
+        summary: "Document deleted.",
+        details: existingDocument?.name,
+      });
+    },
+  };
+}
 
 export function normalizeDocumentTags(value: unknown): string[] {
   if (!Array.isArray(value)) return [];

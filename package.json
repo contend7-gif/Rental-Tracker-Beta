@@ -1,7 +1,7 @@
 {
   "name": "rental-tracker-beta",
   "private": true,
-  "version": "1.0.9",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,8 +16,10 @@
     "scenario:dry-run": "node --test --test-concurrency=1 --experimental-strip-types src/domain/realDuplexScenario.test.ts",
     "scenario:loan-tax": "node --test --test-concurrency=1 --experimental-strip-types src/domain/loanTaxStabilizationScenario.test.ts",
     "test": "npm run privacy:scan && npm run bug:sweep && npm rebuild better-sqlite3 && node --test --test-concurrency=1 --experimental-strip-types \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\"",
-    "desktop:prepare": "node scripts/run-electron-builder.mjs install-app-deps",
-    "smoke:ci": "npm run privacy:scan && npm run bug:sweep && npm run check:types && npm rebuild better-sqlite3 && node --test --test-concurrency=1 --experimental-strip-types \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\" && vite build && node scripts/run-electron-builder.mjs --dir && node scripts/release-smoke.mjs",
+    "test:e2e": "npm run desktop:pack && npm run test:e2e:packaged",
+    "test:e2e:packaged": "playwright test --config playwright.config.mjs",
+    "desktop:prepare": "node scripts/run-electron-builder.mjs install-app-deps && electron-rebuild --force --which-module better-sqlite3",
+    "smoke:ci": "npm run privacy:scan && npm run bug:sweep && npm run check:types && npm rebuild better-sqlite3 && node --test --test-concurrency=1 --experimental-strip-types \"src/**/*.test.ts\" \"scripts/**/*.test.mjs\" && vite build && npm run desktop:prepare && node scripts/run-electron-builder.mjs --dir && npm run test:e2e:packaged && node scripts/release-smoke.mjs",
     "release:verify": "npm run smoke:ci",
     "desktop:run": "npm run build && npm run desktop:prepare && electron .",
     "desktop:pack": "npm run build && npm run desktop:prepare && node scripts/run-electron-builder.mjs --dir",
@@ -32,6 +34,7 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.2.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

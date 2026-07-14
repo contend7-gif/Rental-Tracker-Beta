@@ -114,3 +114,13 @@ export function createActivityActions(args: {
     addActivityLogEntry: appendActivityLog,
   };
 }
+
+export function mergeActivityLogEntries(previous: ActivityLogEntry[], entries: ActivityLogEntry[]) {
+  const byId = new Map(previous.map((entry) => [entry.id, entry]));
+  entries.forEach((entry) => {
+    if (entry?.id && !byId.has(entry.id)) byId.set(entry.id, entry);
+  });
+  return [...byId.values()]
+    .sort((left, right) => String(right.at || "").localeCompare(String(left.at || "")))
+    .slice(0, 500);
+}

@@ -977,6 +977,7 @@ export function SettingsWorkspace({
                       {performanceMetrics.deferredActivityLoadMs != null ? ` | Background activity history: ${performanceMetrics.deferredActivityLoadMs} ms` : " | Activity history loading in background"}
                       {performanceMetrics.workspaceSwitchMs != null ? ` | Last workspace switch: ${performanceMetrics.workspaceSwitchMs} ms` : ""}
                       {performanceMetrics.documentFileReadMs != null ? ` | Last document file read: ${performanceMetrics.documentFileReadMs} ms` : ""}
+                      {performanceMetrics.documentAnalysisMs != null ? ` | Last document analysis: ${performanceMetrics.documentAnalysisMs} ms` : ""}
                     </div>
                   )}
                   {desktopDiagnosticsRecentEvents.length > 0 ? (

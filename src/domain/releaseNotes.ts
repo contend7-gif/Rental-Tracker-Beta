@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.1.0",
+    releaseDate: "2026-07-14",
+    title: "Faster Documents and stronger app foundations",
+    summary: "Makes document review substantially more responsive while strengthening the app's internal architecture, persistence checks, and release safeguards.",
+    changes: [
+      "Document analysis now runs off the main interface thread, and document search reuses a prepared index instead of repeating expensive work after every filter change.",
+      "The Documents workspace keeps stable callbacks and avoids unrelated rerenders, with automated performance budgets guarding analysis and search speed.",
+      "The former all-in-one rental store is now composed from focused transaction, lease, loan, maintenance, asset, property, occupancy, recurring, activity, and document slices with cross-record regression tests.",
+      "Release verification now includes 566 automated tests, TypeScript coverage for the final store composition, packaged Documents testing, and a complete SQLite restart check.",
+    ],
+  },
+  {
     version: "1.0.9",
     releaseDate: "2026-07-13",
     title: "Faster document workflows and safer desktop code",

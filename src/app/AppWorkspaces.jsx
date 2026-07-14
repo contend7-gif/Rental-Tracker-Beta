@@ -12,6 +12,7 @@ import { documentNeedsIndexing, documentNeedsTags, documentSupportsAutomaticOcr,
 import { isTenantLedgerKindAllowedForTreatment, normalizeTenantLedgerAccountingTreatment, recommendedTenantLedgerAccountingTreatment, recommendedTenantLedgerKindForTreatment } from "../domain/tenantLedgerPosting.ts";
 import { getLeaseExpirationPill, leaseExpirationToneClass, shouldExpandNeedsReview } from "../store/dashboardContext.ts";
 import { LEASE_AUTOMATION_HELPER_TEXT } from "../store/appSettings.ts";
+import { useStableActions } from "../store/useStableActions.ts";
 import { field } from "../features/shared/uiHelpers.jsx";
 import { assetSchedule, categories, normalizeBonusRate } from "./accountingShared.js";
 import { daysUntil } from "./dateHelpers.js";
@@ -51,6 +52,8 @@ import {
   prefetchDialog,
 } from "./lazyRegistry.js";
 import { WorkspaceLoadingState } from "./WorkspaceLoadingState.jsx";
+
+const MemoizedDocumentsWorkspace = React.memo(DocumentsWorkspace);
 
 const LEDGER_WORKSPACE_PROP_KEYS = [
   "activeProperties",
@@ -609,6 +612,13 @@ export function AppWorkspaces(props) {
     workOrderSuggestionConfidenceLabel,
     workOrderSuggestionReasonSummary,
   };
+  const stableDocumentCallbacks = useStableActions(Object.fromEntries(
+    Object.entries(documentsWorkspaceProps).filter(([, value]) => typeof value === "function"),
+  ));
+  const stableDocumentsWorkspaceProps = {
+    ...documentsWorkspaceProps,
+    ...stableDocumentCallbacks,
+  };
   const taxWorkspaceContract = buildTaxWorkspaceContract(props, { taxWorkspaceUiProps });
   const taxWorkspaceProps = flattenWorkspaceContract(taxWorkspaceContract);
   const settingsWorkspaceProps = {
@@ -733,8 +743,8 @@ export function AppWorkspaces(props) {
         />
       )}
       {view === "documents" && (
-        <DocumentsWorkspace
-          {...documentsWorkspaceProps}
+        <MemoizedDocumentsWorkspace
+          {...stableDocumentsWorkspaceProps}
         />
       )}
       {view === "settings" && (

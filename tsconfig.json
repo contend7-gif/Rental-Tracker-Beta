@@ -20,6 +20,10 @@
     "src/app/desktopPersistenceHydration.ts",
     "src/app/desktopUpdateShared.ts",
     "src/app/performanceMetrics.ts",
+    "src/app/documentAnalysisBatch.ts",
+    "src/app/documentSearchIndex.ts",
+    "src/app/useDocumentAnalysisWorker.ts",
+    "src/workers/documentAnalysisWorker.ts",
     "src/app/useWorkspacePrefetchController.ts",
     "src/app/useAccessSettingsController.ts",
     "src/app/useAppLifecycleEffects.ts",
@@ -39,6 +43,18 @@
     "src/app/documentOcrQueue.ts",
     "src/app/documentOcrBatch.ts",
     "src/app/documentImportOcrWorkflow.ts",
-    "src/app/documentWorkspaceController.ts"
+    "src/app/documentWorkspaceController.ts",
+    "src/store/useDocumentSlice.ts",
+    "src/store/useActivitySlice.ts",
+    "src/store/useMaintenanceSlice.ts",
+    "src/store/useLoanSlice.ts",
+    "src/store/useLeaseSlice.ts",
+    "src/store/useTransactionSlice.ts",
+    "src/store/useUsePeriodSlice.ts",
+    "src/store/useRecurringSlice.ts",
+    "src/store/useAssetSlice.ts",
+    "src/store/usePropertySlice.ts",
+    "src/store/useRentalStore.ts",
+    "src/store/useStableActions.ts"
   ]
 }

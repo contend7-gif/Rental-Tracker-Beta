@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-type RuntimeMetricName = "workspaceSwitchMs" | "documentFileReadMs";
+type RuntimeMetricName = "workspaceSwitchMs" | "documentFileReadMs" | "documentAnalysisMs";
 type RuntimePerformanceMetrics = Record<RuntimeMetricName, number | null>;
 type PerformanceMetricEventDetail = { name: RuntimeMetricName; durationMs: number };
 
@@ -14,7 +14,7 @@ export function publishPerformanceMetric(name: RuntimeMetricName, durationMs: nu
 }
 
 export function useRuntimePerformanceMetrics(view: string): RuntimePerformanceMetrics {
-  const [metrics, setMetrics] = useState<RuntimePerformanceMetrics>({ workspaceSwitchMs: null, documentFileReadMs: null });
+  const [metrics, setMetrics] = useState<RuntimePerformanceMetrics>({ workspaceSwitchMs: null, documentFileReadMs: null, documentAnalysisMs: null });
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;

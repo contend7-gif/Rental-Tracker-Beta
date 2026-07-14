@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { formatUnitLabel } from "../domain/unitLabels.js";
 import {
   documentNeedsIndexing,
@@ -14,6 +14,8 @@ import {
   normalizeExtractedDocumentText,
 } from "../domain/documentIntelligence.ts";
 import { parseDocumentTags } from "./documentShared.ts";
+import { buildDocumentSearchIndex, matchesDocumentSearch } from "./documentSearchIndex.ts";
+import { useDocumentAnalysisWorker } from "./useDocumentAnalysisWorker.ts";
 
 export function useDocumentReviewModel({
   isActive,
@@ -64,11 +66,7 @@ export function useDocumentReviewModel({
     () => Object.fromEntries(workOrders.filter((workOrder) => workOrder.transactionId).map((workOrder) => [workOrder.transactionId, workOrder])),
     [workOrders],
   );
-  const documentAnalysisCache = useMemo(() => new Map(), [documents, candidateWorkOrders, leaseById, transactionById, workOrderById, propertyById, vendorById, vendorByNormalizedName]);
-
-  const getProperty = (propertyId) => propertyById[propertyId] || null;
-
-  const getDocumentLinkedWorkOrder = (document) => {
+  const getDocumentLinkedWorkOrder = useCallback((document) => {
     const directId = String(document.workOrderId || "").trim();
     if (directId && workOrderById[directId]) return workOrderById[directId];
     if (document.transactionId) {
@@ -78,9 +76,9 @@ export function useDocumentReviewModel({
       return workOrderByTransactionId[document.transactionId] || null;
     }
     return null;
-  };
+  }, [transactionById, workOrderById, workOrderByTransactionId]);
 
-  const buildCandidateContext = ({ document, draft, extractedText, includeTransactionVendor = false, preferLinkedProperty = false }) => {
+  const buildCandidateContext = useCallback(({ document, draft, extractedText, includeTransactionVendor = false, preferLinkedProperty = false }) => {
     const linkType = draft?.linkType || "";
     const linkedLease = document?.leaseId
       ? leaseById[document.leaseId]
@@ -99,7 +97,7 @@ export function useDocumentReviewModel({
         : null;
     const linkedPropertyId = linkedWorkOrder?.propertyId || linkedTxn?.propertyId || linkedLease?.propertyId;
     const propertyId = draft ? linkedPropertyId || draft.propertyId : preferLinkedProperty ? linkedPropertyId || document?.propertyId : document?.propertyId;
-    const property = getProperty(propertyId);
+    const property = propertyById[propertyId] || null;
     const vendor = linkedWorkOrder?.vendorId
       ? vendorById[linkedWorkOrder.vendorId]
       : includeTransactionVendor && linkedTxn?.vendor
@@ -140,35 +138,65 @@ export function useDocumentReviewModel({
       candidateTransactions: transactions,
       candidateWorkOrders,
     };
-  };
+  }, [candidateWorkOrders, getDocumentLinkedWorkOrder, leaseById, leases, properties, propertyById, transactionById, transactions, units, vendorById, vendorByNormalizedName, vendors, workOrderById]);
 
-  const getDocumentUtilitySections = (document) => {
-    if (!document) return [];
-    const key = `utility:${document.id}`;
-    if (!documentAnalysisCache.has(key)) documentAnalysisCache.set(key, inferDocumentUtilitySections(buildCandidateContext({ document, preferLinkedProperty: true })));
-    return documentAnalysisCache.get(key);
-  };
+  const documentAnalysisEntries = useMemo(
+    () => documents.map((document) => ({
+      id: document.id,
+      context: buildCandidateContext({ document, includeTransactionVendor: true, preferLinkedProperty: true }),
+    })),
+    [buildCandidateContext, documents],
+  );
+  const { resultsById: documentAnalysisById } = useDocumentAnalysisWorker(
+    Boolean(isActive || selectedDocument),
+    documentAnalysisEntries,
+  );
+  const selectedDocumentAnalysisEntries = useMemo(
+    () => selectedDocument && !documentAnalysisById[selectedDocument.id]
+      ? [{ id: selectedDocument.id, context: buildCandidateContext({ document: selectedDocument, includeTransactionVendor: true, preferLinkedProperty: true }) }]
+      : [],
+    [buildCandidateContext, documentAnalysisById, selectedDocument],
+  );
+  const { resultsById: selectedDocumentAnalysisById } = useDocumentAnalysisWorker(
+    selectedDocumentAnalysisEntries.length > 0,
+    selectedDocumentAnalysisEntries,
+  );
+  const documentImportAnalysisEntries = useMemo(
+    () => shouldAnalyzeImportDraft
+      ? [{ id: "document-import-draft", context: buildCandidateContext({ draft: documentImportDraft, extractedText: documentImportDraft.extractedText || "" }) }]
+      : [],
+    [buildCandidateContext, documentImportDraft, shouldAnalyzeImportDraft],
+  );
+  const { resultsById: documentImportAnalysisById } = useDocumentAnalysisWorker(
+    shouldAnalyzeImportDraft,
+    documentImportAnalysisEntries,
+  );
+  const getDocumentAnalysis = useCallback((document) => {
+    if (!document) return null;
+    return documentAnalysisById[document.id] || selectedDocumentAnalysisById[document.id] || null;
+  }, [documentAnalysisById, selectedDocumentAnalysisById]);
 
-  const getDocumentSuggestedTags = (document) => {
+  const getDocumentUtilitySections = useCallback(
+    (document) => getDocumentAnalysis(document)?.utilitySections || [],
+    [getDocumentAnalysis],
+  );
+
+  const getDocumentSuggestedTags = useCallback((document) => {
     const existingTags = Array.isArray(document.tags) ? document.tags : [];
-    const key = `tags:${document.id}`;
-    if (!documentAnalysisCache.has(key)) documentAnalysisCache.set(key, inferDocumentTagSuggestions(buildCandidateContext({ document })));
-    const suggested = documentAnalysisCache.get(key);
+    const suggested = getDocumentAnalysis(document)?.tagSuggestions || [];
     return suggested.filter((suggestion) => !existingTags.some((existing) => String(existing || "").toLowerCase() === String(suggestion.tag || "").toLowerCase()));
-  };
+  }, [getDocumentAnalysis]);
 
-  const getDocumentLinkSuggestions = (document) => {
+  const getDocumentLinkSuggestions = useCallback((document) => {
     const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
-    const key = `links:${document.id}`;
-    if (!documentAnalysisCache.has(key)) documentAnalysisCache.set(key, inferDocumentLinkSuggestions(buildCandidateContext({ document })));
-    const suggestions = documentAnalysisCache.get(key);
+    const suggestions = getDocumentAnalysis(document)?.linkSuggestions || [];
 
     return suggestions.filter((suggestion) => {
       if (suggestion.kind === "lease") return String(document.leaseId || "") !== suggestion.id;
       if (suggestion.kind === "transaction") return String(document.transactionId || "") !== suggestion.id;
       return String(linkedWorkOrder?.id || document.workOrderId || "") !== suggestion.id;
     });
-  };
+  }, [getDocumentAnalysis, getDocumentLinkedWorkOrder]);
 
   const getDocumentImportSuggestedTags = (draft, extractedText = draft?.extractedText || "") => {
     if (!draft) return [];
@@ -184,19 +212,15 @@ export function useDocumentReviewModel({
     });
   };
 
-  const getDocumentExpenseSuggestion = (document) => {
-    if (!document) return null;
-    const key = `expense:${document.id}`;
-    if (!documentAnalysisCache.has(key)) documentAnalysisCache.set(key, inferDocumentExpenseSuggestion(buildCandidateContext({ document, preferLinkedProperty: true })));
-    return documentAnalysisCache.get(key);
-  };
+  const getDocumentExpenseSuggestion = useCallback(
+    (document) => getDocumentAnalysis(document)?.expenseSuggestion || null,
+    [getDocumentAnalysis],
+  );
 
-  const getDocumentWorkOrderSuggestion = (document) => {
-    if (!document) return null;
-    const key = `work-order:${document.id}`;
-    if (!documentAnalysisCache.has(key)) documentAnalysisCache.set(key, inferDocumentWorkOrderSuggestion(buildCandidateContext({ document, preferLinkedProperty: true })));
-    return documentAnalysisCache.get(key);
-  };
+  const getDocumentWorkOrderSuggestion = useCallback(
+    (document) => getDocumentAnalysis(document)?.workOrderSuggestion || null,
+    [getDocumentAnalysis],
+  );
 
   const getDocumentImportExpenseSuggestion = (draft, extractedText = draft?.extractedText || "") => {
     if (!draft) return null;
@@ -208,12 +232,10 @@ export function useDocumentReviewModel({
     return inferDocumentWorkOrderSuggestion(buildCandidateContext({ draft, extractedText }));
   };
 
-  const getDocumentExtractedFields = (document) => {
-    if (!document) return null;
-    const key = `fields:${document.id}`;
-    if (!documentAnalysisCache.has(key)) documentAnalysisCache.set(key, inferDocumentExtractedFields(buildCandidateContext({ document, includeTransactionVendor: true })));
-    return documentAnalysisCache.get(key);
-  };
+  const getDocumentExtractedFields = useCallback(
+    (document) => getDocumentAnalysis(document)?.extractedFields || null,
+    [getDocumentAnalysis],
+  );
 
   const getDocumentImportExtractedFields = (draft, extractedText = draft?.extractedText || "") => {
     if (!draft) return null;
@@ -232,7 +254,7 @@ export function useDocumentReviewModel({
     const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
     const linkedVendor = linkedWorkOrder?.vendorId ? vendorById[linkedWorkOrder.vendorId] : null;
     const propertyId = linkedWorkOrder?.propertyId || linkedTxn?.propertyId || linkedLease?.propertyId || document.propertyId;
-    const property = getProperty(propertyId);
+    const property = propertyById[propertyId] || null;
 
     return {
       document: {
@@ -301,17 +323,22 @@ export function useDocumentReviewModel({
     };
   };
 
-  const documentImportSuggestedTags = shouldAnalyzeImportDraft ? getDocumentImportSuggestedTags(documentImportDraft) : [];
-  const documentImportLinkSuggestions = shouldAnalyzeImportDraft ? getDocumentImportLinkSuggestions(documentImportDraft) : [];
-  const documentImportExtractedFields = shouldAnalyzeImportDraft ? getDocumentImportExtractedFields(documentImportDraft) : null;
-  const documentImportExpenseSuggestion = shouldAnalyzeImportDraft ? getDocumentImportExpenseSuggestion(documentImportDraft) : null;
-  const documentImportWorkOrderSuggestion = shouldAnalyzeImportDraft ? getDocumentImportWorkOrderSuggestion(documentImportDraft) : null;
-  const documentImportUtilitySections = shouldAnalyzeImportDraft ? getDocumentImportUtilitySections(documentImportDraft) : [];
+  const documentImportAnalysis = documentImportAnalysisById["document-import-draft"] || null;
+  const documentImportSuggestedTags = documentImportAnalysis?.tagSuggestions || [];
+  const documentImportLinkSuggestions = (documentImportAnalysis?.linkSuggestions || []).filter((suggestion) => {
+    if (suggestion.kind === "lease") return !(documentImportDraft?.linkType === "lease" && documentImportDraft?.linkedId === suggestion.id);
+    if (suggestion.kind === "transaction") return !(documentImportDraft?.linkType === "transaction" && documentImportDraft?.linkedId === suggestion.id);
+    return !(documentImportDraft?.linkType === "workOrder" && documentImportDraft?.linkedId === suggestion.id);
+  });
+  const documentImportExtractedFields = documentImportAnalysis?.extractedFields || null;
+  const documentImportExpenseSuggestion = documentImportAnalysis?.expenseSuggestion || null;
+  const documentImportWorkOrderSuggestion = documentImportAnalysis?.workOrderSuggestion || null;
+  const documentImportUtilitySections = documentImportAnalysis?.utilitySections || [];
   const selectedDocumentExtractedFields = selectedDocument ? getDocumentExtractedFields(selectedDocument) : null;
   const selectedDocumentAiAnalysis = selectedDocument?.aiAnalysis || null;
   const selectedDocumentUtilitySections = selectedDocument ? getDocumentUtilitySections(selectedDocument) : [];
 
-  const describeDocumentOwnership = (document) => {
+  const describeDocumentOwnership = useCallback((document) => {
     const ownershipParts = [];
     if (document.transactionId) {
       const txn = transactionById[document.transactionId];
@@ -335,7 +362,7 @@ export function useDocumentReviewModel({
       ownershipParts.push(linkedWorkOrder ? `Work order: ${linkedWorkOrder.title} | ${formatUnitLabel(linkedWorkOrder.unit)}` : "Work order attachment");
     }
     return ownershipParts.length > 0 ? ownershipParts.join(" | ") : "General document";
-  };
+  }, [getDocumentLinkedWorkOrder, leaseById, transactionById]);
 
   const workOrderDocumentCountById = useMemo(() => {
     const counts = {};
@@ -358,7 +385,7 @@ export function useDocumentReviewModel({
     if (!shouldPrepareDocumentReview) return [];
     const records = filteredDocuments
       .map((document) => {
-        const suggestion = getDocumentExpenseSuggestion(document);
+        const suggestion = documentAnalysisById[document.id]?.expenseSuggestion || null;
         if (!suggestion || document.transactionId) return null;
         return {
           document,
@@ -375,13 +402,13 @@ export function useDocumentReviewModel({
     });
 
     return records;
-  }, [candidateWorkOrders, filteredDocuments, transactions, leases, workOrders, properties, shouldPrepareDocumentReview, vendors]);
+  }, [documentAnalysisById, filteredDocuments, shouldPrepareDocumentReview]);
 
   const documentWorkOrderReviewRecords = useMemo(() => {
     if (!shouldPrepareDocumentReview) return [];
     const records = filteredDocuments
       .map((document) => {
-        const suggestion = getDocumentWorkOrderSuggestion(document);
+        const suggestion = documentAnalysisById[document.id]?.workOrderSuggestion || null;
         if (!suggestion || getDocumentLinkedWorkOrder(document)) return null;
         return {
           document,
@@ -398,7 +425,7 @@ export function useDocumentReviewModel({
     });
 
     return records;
-  }, [candidateWorkOrders, filteredDocuments, transactions, leases, workOrders, properties, shouldPrepareDocumentReview, vendors]);
+  }, [documentAnalysisById, filteredDocuments, getDocumentLinkedWorkOrder, shouldPrepareDocumentReview]);
 
   const documentExpenseReviewRecordById = useMemo(
     () => Object.fromEntries(documentExpenseReviewRecords.map((record) => [record.document.id, record])),
@@ -440,6 +467,32 @@ export function useDocumentReviewModel({
     [documentWorkOrderReviewRecords],
   );
 
+  const documentSearchIndex = useMemo(
+    () => buildDocumentSearchIndex(filteredDocuments, (document) => {
+      const linkedTxn = document.transactionId ? transactionById[document.transactionId] : null;
+      const linkedLease = document.leaseId ? leaseById[document.leaseId] : null;
+      const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
+      const workOrderVendor = linkedWorkOrder?.vendorId ? vendorById[linkedWorkOrder.vendorId]?.name || "" : "";
+      return [
+        document.name,
+        document.type,
+        propertyNameById[document.propertyId] || document.propertyId,
+        document.unit,
+        describeDocumentOwnership(document),
+        Array.isArray(document.tags) ? document.tags.join(" ") : "",
+        document.extractedText,
+        linkedLease?.tenantName,
+        linkedTxn?.vendor,
+        linkedTxn?.category,
+        linkedTxn?.description,
+        linkedWorkOrder
+          ? `Work order: ${linkedWorkOrder.title} ${linkedWorkOrder.description || ""} ${linkedWorkOrder.priority} ${workOrderVendor}`
+          : "",
+      ];
+    }),
+    [describeDocumentOwnership, filteredDocuments, getDocumentLinkedWorkOrder, leaseById, propertyNameById, transactionById, vendorById],
+  );
+
   const visibleDocuments = useMemo(() => {
     if (!shouldPrepareDocumentReview) return [];
     const query = documentSearch.trim().toLowerCase();
@@ -466,36 +519,7 @@ export function useDocumentReviewModel({
     });
 
     const searched = query
-      ? scoped.filter((document) => {
-          const propertyLabel = propertyNameById[document.propertyId] || document.propertyId || "";
-          const linkedTxn = document.transactionId ? transactionById[document.transactionId] : null;
-          const linkedLease = document.leaseId ? leaseById[document.leaseId] : null;
-          const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
-          const workOrderVendor = linkedWorkOrder?.vendorId ? vendorById[linkedWorkOrder.vendorId]?.name || "" : "";
-          const ownershipText = describeDocumentOwnership(document);
-          const tagsText = Array.isArray(document.tags) ? document.tags.join(" ") : "";
-          const extractedText = String(document.extractedText || "");
-          const workOrderText = linkedWorkOrder
-            ? `Work order: ${linkedWorkOrder.title} ${linkedWorkOrder.description || ""} ${linkedWorkOrder.priority} ${workOrderVendor}`
-            : "";
-          const searchBlob = [
-            document.name || "",
-            document.type || "",
-            propertyLabel,
-            document.unit || "",
-            ownershipText,
-            tagsText,
-            extractedText,
-            linkedLease?.tenantName || "",
-            linkedTxn?.vendor || "",
-            linkedTxn?.category || "",
-            linkedTxn?.description || "",
-            workOrderText,
-          ]
-            .join(" ")
-            .toLowerCase();
-          return searchBlob.includes(query);
-        })
+      ? scoped.filter((document) => matchesDocumentSearch(documentSearchIndex, document.id, query))
       : scoped;
 
     const sorted = [...searched];
@@ -515,7 +539,7 @@ export function useDocumentReviewModel({
       return (a.name || "").localeCompare(b.name || "");
     });
     return sorted;
-  }, [documentSearch, documentSort, documentStatusFilter, filteredDocuments, propertyNameById, transactionById, leaseById, vendorById, workOrderById, workOrders, documentExpenseReviewRecordById, documentWorkOrderReviewRecordById, expenseQueueShowDismissed, shouldPrepareDocumentReview]);
+  }, [documentSearch, documentSort, documentStatusFilter, filteredDocuments, getDocumentLinkedWorkOrder, documentSearchIndex, documentExpenseReviewRecordById, documentWorkOrderReviewRecordById, expenseQueueShowDismissed, shouldPrepareDocumentReview]);
 
   const visibleDocumentsMissingIndex = useMemo(
     () => visibleDocuments.filter((document) => documentNeedsOcr(document) || documentNeedsIndexing(document)),

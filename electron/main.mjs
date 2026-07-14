@@ -14,6 +14,11 @@ const { autoUpdater } = electronUpdater;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const isEndToEndTest = process.env.RENTAL_TRACKER_E2E === "1";
+const endToEndUserDataPath = String(process.env.RENTAL_TRACKER_E2E_USER_DATA_PATH || "").trim();
+if (isEndToEndTest && endToEndUserDataPath) {
+  app.setPath("userData", path.resolve(endToEndUserDataPath));
+}
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 const UPDATE_STATUS_CHANNEL = "app-update:status";
 const UPDATE_GET_STATE_CHANNEL = "app-update:get-state";
@@ -529,6 +534,17 @@ function createMainWindow() {
 
 function configureAutoUpdates() {
   registerUpdateIpc();
+
+  if (isEndToEndTest) {
+    pushUpdateState({
+      status: "unavailable",
+      message: "Update checks are disabled during automated desktop testing.",
+      checkedAt: nowIso(),
+      progressPercent: 0,
+      error: "",
+    });
+    return;
+  }
 
   if (!app.isPackaged) {
     pushUpdateState({

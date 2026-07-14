@@ -93,7 +93,7 @@ export type DocumentWorkOrderSuggestion = {
   reasons?: string[];
 };
 
-type InferDocumentTagsArgs = {
+export type InferDocumentTagsArgs = {
   document: Pick<DocumentItem, "name" | "type" | "tags" | "extractedText"> & Partial<Pick<DocumentItem, "propertyId" | "unit" | "unitScopeOverride" | "ocrFieldOverrides">>;
   property?: Pick<Property, "id" | "name" | "address"> | null;
   lease?: Pick<Lease, "id" | "tenantName" | "unit" | "propertyId"> | null;
