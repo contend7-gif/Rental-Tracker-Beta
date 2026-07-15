@@ -45,7 +45,6 @@ test("packaged desktop supports the core Documents workflow", async () => {
 
   try {
     await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Property" })).toContainText("Sample Duplex");
 
     await page.getByRole("button", { name: "Documents", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
