@@ -49,6 +49,7 @@ test("packaged desktop supports the core Documents workflow", async () => {
     await page.getByRole("button", { name: "Documents", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
     await expect(page.getByText("4 files", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "All Files (4)", exact: true }).click();
 
     const search = page.getByRole("textbox", { name: /Search files, tags, extracted text/i });
     await search.fill("plumbing");
