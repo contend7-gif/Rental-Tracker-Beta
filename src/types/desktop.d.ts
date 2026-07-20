@@ -46,6 +46,31 @@ export type DesktopPersistenceApi = {
   openDataFolder: () => Promise<DesktopResult & { path?: string }>;
 };
 
+export type CompanionSubmission = {
+  id: string;
+  status: "pending" | "claimed" | "imported";
+  kind: "receipt";
+  propertyLabel?: string | null;
+  unitLabel?: string | null;
+  note?: string | null;
+  originalFileName: string;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+  capturedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DesktopCompanionApi = {
+  getStatus: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string; hasSyncSecret?: boolean; hasSitesBypassToken?: boolean }>;
+  configure: (payload: { siteUrl: string; syncSecret: string; sitesBypassToken?: string }) => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
+  list: () => Promise<DesktopResult & { submissions?: CompanionSubmission[] }>;
+  claim: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
+  download: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission; dataUrl?: string }>;
+  complete: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
+};
+
 declare global {
   interface Window {
     requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -62,6 +87,7 @@ declare global {
 
   interface Window {
     desktopDiagnostics?: { run: () => Promise<DesktopDiagnosticsResult> };
+    desktopCompanion?: DesktopCompanionApi;
     desktopDocumentAi?: { analyze: (payload: Record<string, unknown>) => Promise<DesktopResult & { analysis?: unknown }> };
     desktopDocumentOcr?: {
       isSupported: () => Promise<DesktopDocumentOcrSupport>;

@@ -30,7 +30,8 @@ import {
   applyTransactionVendorMemoryToDraft,
   findTransactionVendorMemoryForDraft,
 } from "../features/transactions/transactionVendorMemory.js";
-import type { DocumentItem, Transaction, Unit, Vendor } from "../models.ts";
+import type { DocumentItem, Property, Transaction, Unit, Vendor } from "../models.ts";
+import type { CompanionSubmission, DesktopCompanionApi } from "../types/desktop.d.ts";
 import type { DocumentImportDraft } from "./documentImportDraft.ts";
 import type { ChangeEvent } from "react";
 
@@ -66,7 +67,9 @@ export type DocumentWorkspaceControllerDependencies = {
   documentImportDraft: DocumentImportDraft;
   documentImportOcrRequestIdRef: { current: number };
   documentImportInputRef: { current: HTMLInputElement | null };
-  properties: Array<{ id: string }>;
+  properties: Array<Pick<Property, "id" | "name" | "address">>;
+  documents: DocumentItem[];
+  desktopCompanionApi?: DesktopCompanionApi | null;
   propertyFilter: string;
   unitFilter: string;
   transactions: Transaction[];
@@ -91,10 +94,12 @@ export function createDocumentWorkspaceController({
   createBlankDocumentImportDraft,
   createBlankForm,
   desktopDocumentAiApi,
+  desktopCompanionApi,
   desktopDocumentOcrApi,
   desktopDocumentOpenApi,
   desktopPersistenceApi,
   documentExpenseReviewRecords,
+  documents,
   documentImportDraft,
   documentImportExpenseSuggestion,
   documentImportInputRef,
@@ -344,6 +349,82 @@ export function createDocumentWorkspaceController({
     }
   };
 
+  const openMobileCompanionImport = async (submission: CompanionSubmission) => {
+    if (!requirePermission("review_documents", "This access profile cannot import mobile captures.")) return false;
+    if (!desktopCompanionApi?.download || !submission?.id) {
+      setNotice("The Mobile Companion is available in the installed desktop app.");
+      return false;
+    }
+
+    const alreadyImported = documents.find((document) =>
+      document.sourceRef?.provider === "rental-tracker-companion" &&
+      document.sourceRef.submissionId === submission.id,
+    );
+    if (alreadyImported) {
+      void desktopCompanionApi.complete(submission.id);
+      setNotice(`${submission.originalFileName} is already in Documents.`);
+      return true;
+    }
+
+    try {
+      const claimed = await desktopCompanionApi.claim(submission.id);
+      if (claimed?.ok === false) throw new Error(claimed.message || claimed.error || "Could not claim this mobile capture.");
+      const downloaded = await desktopCompanionApi.download(submission.id);
+      if (downloaded?.ok === false || !downloaded?.dataUrl) {
+        throw new Error(downloaded?.message || downloaded?.error || "Could not download this mobile capture.");
+      }
+      const remote = downloaded.submission || submission;
+      const propertyLabel = String(remote.propertyLabel || "").trim();
+      const normalizedPropertyLabel = propertyLabel.toLowerCase();
+      const matchedProperty = normalizedPropertyLabel
+        ? properties.find((property) =>
+            [property.name, property.address].some((value) => String(value || "").trim().toLowerCase() === normalizedPropertyLabel),
+          )
+        : null;
+      const propertyId = matchedProperty?.id || (propertyFilter !== "all" ? propertyFilter : properties[0]?.id || "");
+      const unit = String(remote.unitLabel || "").trim() || (unitFilter !== "all" ? unitFilter : "Shared");
+      const prior = createBlankDocumentImportDraft(propertyId, unit);
+      let draft = buildDocumentImportFileDraft({
+        previous: prior,
+        file: { name: remote.originalFileName, type: remote.contentType },
+        dataUrl: downloaded.dataUrl,
+        propertyFilter: propertyId || propertyFilter,
+        unitFilter: unit,
+        defaultPropertyId: properties[0]?.id || "",
+        suggestDocumentType,
+        getSuggestedTags: getDocumentImportSuggestedTags,
+        formatTags: formatDocumentTags,
+      });
+      draft = {
+        ...draft,
+        propertyId,
+        unit,
+        tags: formatDocumentTags([
+          ...String(draft.tags || "").split(",").filter(Boolean).map((tag) => ({ tag: tag.trim(), sources: ["context"] })),
+          { tag: "Receipt", sources: ["context"] },
+          { tag: "Mobile capture", sources: ["context"] },
+        ]),
+        sourceRef: {
+          provider: "rental-tracker-companion",
+          submissionId: remote.id,
+          sha256: remote.sha256,
+          capturedAt: remote.capturedAt,
+          propertyLabel: propertyLabel || undefined,
+          unitLabel: String(remote.unitLabel || "").trim() || undefined,
+          note: String(remote.note || "").trim() || undefined,
+        },
+      };
+      setDocumentImportDraft(draft);
+      setDocumentImportDialogOpen(true);
+      setDocumentImportOcrMessage(remote.note ? `Mobile note: ${remote.note}` : "Captured on mobile and ready to review.");
+      void applyAutomaticOcrToImportDraft(draft);
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not import this mobile capture.");
+      return false;
+    }
+  };
+
   const markVisibleDocumentsPendingOcr = () => markVisibleDocumentsPendingOcrWorkflow({
     documents: visibleDocumentsMissingIndex,
     documentStatusFilter,
@@ -434,6 +515,13 @@ export function createDocumentWorkspaceController({
       return;
     }
     actions.addDocument(importedDocument);
+    if (importedDocument.sourceRef?.provider === "rental-tracker-companion") {
+      void desktopCompanionApi?.complete?.(importedDocument.sourceRef.submissionId).then((result) => {
+        if (result?.ok === false) {
+          setNotice(`Imported ${name}. The mobile inbox will retry its completion status later.`);
+        }
+      });
+    }
 
     addAuditEntry({
       action: "import",
@@ -1328,6 +1416,7 @@ export function createDocumentWorkspaceController({
     markDocumentWarningsReviewed,
     updateLinkedTransactionFromDocumentOcr,
     onDocumentImportInputChange,
+    openMobileCompanionImport,
     openDocumentExternally,
     openDocumentImportPicker,
     openDocumentLinkedRecord,

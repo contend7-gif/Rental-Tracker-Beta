@@ -4,6 +4,7 @@ type NoticeSetter = (message: string) => void;
 type DocumentOcrState = { supported: boolean; platform: string; engine: string };
 type DesktopDiagnosticsReport = Awaited<ReturnType<NonNullable<Window["desktopDiagnostics"]>["run"]>>;
 type DesktopApis = {
+  desktopCompanionApi: Window["desktopCompanion"] | null;
   desktopDiagnosticsApi: Window["desktopDiagnostics"] | null;
   desktopDocumentAiApi: Window["desktopDocumentAi"] | null;
   desktopDocumentOcrApi: Window["desktopDocumentOcr"] | null;
@@ -19,6 +20,7 @@ export function useDesktopBridgeController({ setNotice }: { setNotice: NoticeSet
   const desktopApis = useMemo<DesktopApis>(() => {
     if (typeof window === "undefined") {
       return {
+        desktopCompanionApi: null,
         desktopDiagnosticsApi: null,
         desktopDocumentAiApi: null,
         desktopDocumentOcrApi: null,
@@ -30,6 +32,7 @@ export function useDesktopBridgeController({ setNotice }: { setNotice: NoticeSet
     }
 
     return {
+      desktopCompanionApi: window.desktopCompanion || null,
       desktopDiagnosticsApi: window.desktopDiagnostics || null,
       desktopDocumentAiApi: window.desktopDocumentAi || null,
       desktopDocumentOcrApi: window.desktopDocumentOcr || null,
@@ -41,6 +44,7 @@ export function useDesktopBridgeController({ setNotice }: { setNotice: NoticeSet
   }, []);
 
   const {
+    desktopCompanionApi,
     desktopDiagnosticsApi,
     desktopDocumentAiApi,
     desktopDocumentOcrApi,
@@ -136,6 +140,7 @@ export function useDesktopBridgeController({ setNotice }: { setNotice: NoticeSet
   }, [desktopDocumentOcrApi]);
 
   return {
+    desktopCompanionApi,
     desktopDiagnosticsApi,
     desktopDiagnosticsBusy,
     desktopDiagnosticsReport,

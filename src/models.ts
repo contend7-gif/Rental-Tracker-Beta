@@ -464,4 +464,13 @@ export type DocumentItem = {
   expenseReviewDismissedAt?: string;
   workOrderReviewDismissedAt?: string;
   aiAnalysis?: DocumentAiAnalysis;
+  sourceRef?: {
+    provider: "rental-tracker-companion";
+    submissionId: string;
+    sha256?: string;
+    capturedAt?: string;
+    propertyLabel?: string;
+    unitLabel?: string;
+    note?: string;
+  };
 };

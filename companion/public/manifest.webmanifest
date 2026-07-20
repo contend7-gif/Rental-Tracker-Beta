@@ -1,0 +1,17 @@
+{
+  "name": "Rental Tracker Companion",
+  "short_name": "Rental Capture",
+  "description": "Capture rental receipts and send them to Rental Tracker.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f7f6",
+  "theme_color": "#0d6f67",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registerDocumentAiIpc } from "./documentAi.mjs";
 import { registerDocumentOcrIpc } from "./documentOcr.mjs";
+import { registerCompanionSyncIpc } from "./companionSync.mjs";
 import { getRentalTrackerDataPaths } from "./fileStore.mjs";
 import { registerPersistenceIpc, registerSecretsIpc } from "./persistenceIpc.mjs";
 
@@ -53,6 +54,21 @@ let updateState = {
   error: "",
   packaged: app.isPackaged,
 };
+
+async function pairCompanionFromEnvironment(store) {
+  if (process.env.RENTAL_TRACKER_PAIR_COMPANION !== "1") return false;
+  const values = {
+    "companion.siteUrl": process.env.RENTAL_TRACKER_COMPANION_SITE_URL,
+    "companion.syncSecret": process.env.RENTAL_TRACKER_COMPANION_SYNC_SECRET,
+    "companion.sitesBypassToken": process.env.RENTAL_TRACKER_COMPANION_BYPASS_TOKEN,
+  };
+  for (const [key, value] of Object.entries(values)) {
+    if (!String(value || "").trim()) throw new Error(`Missing companion pairing value for ${key}.`);
+    const result = await store.setSecret(key, value);
+    if (!result?.ok) throw new Error(result?.message || `Could not save ${key}.`);
+  }
+  return true;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -669,10 +685,16 @@ function configureAutoUpdates() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const dataPaths = getRentalTrackerDataPaths(app.getPath("userData"));
-  persistenceServicePromise = registerPersistenceIpc({ app, recordDesktopHealthEvent });
   secretStore = registerSecretsIpc({ paths: dataPaths, recordDesktopHealthEvent });
+  if (await pairCompanionFromEnvironment(secretStore)) {
+    process.stdout.write("Mobile Companion paired with Rental Tracker.\n");
+    app.quit();
+    return;
+  }
+  persistenceServicePromise = registerPersistenceIpc({ app, recordDesktopHealthEvent });
+  registerCompanionSyncIpc({ secretStore, recordDesktopHealthEvent });
   registerNotificationIpc();
   registerDesktopDiagnosticsIpc();
   registerStatementPdfIpc();

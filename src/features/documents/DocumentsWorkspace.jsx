@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { FileCheck2, FileWarning, Inbox, Link2, ReceiptText, Upload, Wrench } from "lucide-react";
 import { DocumentCard } from "./DocumentCard.jsx";
+import { MobileInboxPanel } from "./MobileInboxPanel.jsx";
 import {
   buildDocumentDuplicateCandidates,
   buildDocumentQualityWarnings,
@@ -106,6 +107,7 @@ export function DocumentsWorkspace({
   dismissedWorkOrderReviewCount,
   documentAiActionLabel,
   documentAiBusyById,
+  desktopCompanionApi,
   documentBatchOcrBusy,
   documentExpenseReviewRecordById = {},
   documentImportInputRef,
@@ -138,6 +140,7 @@ export function DocumentsWorkspace({
   updateLinkedTransactionFromDocumentOcr,
   markVisibleDocumentsPendingOcr,
   onDocumentImportInputChange,
+  openMobileCompanionImport,
   openDocumentImportPicker,
   openDocumentLinkedRecord,
   openDocumentPreview,
@@ -547,6 +550,8 @@ export function DocumentsWorkspace({
             Upload document
           </Button>
         </div>
+
+        <MobileInboxPanel desktopCompanionApi={desktopCompanionApi} onImport={openMobileCompanionImport} />
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => setDocumentsTab("inbox")}>

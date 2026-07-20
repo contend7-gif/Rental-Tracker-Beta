@@ -57,6 +57,7 @@ export function createBlankDocumentImportDraft(propertyId = "", unit = "Shared")
     ocrStatus: "pending",
     mimeType: "",
     dataUrl: "",
+    sourceRef: null,
   };
 }
 

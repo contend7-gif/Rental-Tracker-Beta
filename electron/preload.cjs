@@ -27,6 +27,12 @@ const SECRETS_IS_ENCRYPTION_AVAILABLE_CHANNEL = "secrets:is-encryption-available
 const SECRETS_GET_CHANNEL = "secrets:get";
 const SECRETS_SET_CHANNEL = "secrets:set";
 const SECRETS_DELETE_CHANNEL = "secrets:delete";
+const COMPANION_STATUS_CHANNEL = "companion:status";
+const COMPANION_CONFIGURE_CHANNEL = "companion:configure";
+const COMPANION_LIST_CHANNEL = "companion:list";
+const COMPANION_CLAIM_CHANNEL = "companion:claim";
+const COMPANION_DOWNLOAD_CHANNEL = "companion:download";
+const COMPANION_COMPLETE_CHANNEL = "companion:complete";
 
 contextBridge.exposeInMainWorld("desktopUpdater", {
   check: () => ipcRenderer.invoke("app-update:check"),
@@ -97,4 +103,13 @@ contextBridge.exposeInMainWorld("desktopSecrets", {
   getSecret: (key) => ipcRenderer.invoke(SECRETS_GET_CHANNEL, key),
   setSecret: (key, value) => ipcRenderer.invoke(SECRETS_SET_CHANNEL, { key, value }),
   deleteSecret: (key) => ipcRenderer.invoke(SECRETS_DELETE_CHANNEL, key),
+});
+
+contextBridge.exposeInMainWorld("desktopCompanion", {
+  getStatus: () => ipcRenderer.invoke(COMPANION_STATUS_CHANNEL),
+  configure: (payload) => ipcRenderer.invoke(COMPANION_CONFIGURE_CHANNEL, payload),
+  list: () => ipcRenderer.invoke(COMPANION_LIST_CHANNEL),
+  claim: (id) => ipcRenderer.invoke(COMPANION_CLAIM_CHANNEL, { id }),
+  download: (id) => ipcRenderer.invoke(COMPANION_DOWNLOAD_CHANNEL, { id }),
+  complete: (id) => ipcRenderer.invoke(COMPANION_COMPLETE_CHANNEL, { id }),
 });

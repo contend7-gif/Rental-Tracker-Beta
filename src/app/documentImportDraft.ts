@@ -1,7 +1,10 @@
 import { createBlankDocumentImportDraft } from "./draftFactories.js";
 import { parseDocumentTags } from "./documentShared.ts";
+import type { DocumentItem } from "../models.ts";
 
-export type DocumentImportDraft = ReturnType<typeof createBlankDocumentImportDraft>;
+export type DocumentImportDraft = Omit<ReturnType<typeof createBlankDocumentImportDraft>, "sourceRef"> & {
+  sourceRef: DocumentItem["sourceRef"] | null;
+};
 
 type DocumentImportContext = Partial<Pick<
   DocumentImportDraft,
@@ -86,6 +89,7 @@ export function buildDocumentImportFileDraft({
     ocrStatus: "pending",
     mimeType: file.type || "application/octet-stream",
     dataUrl,
+    sourceRef: previous.sourceRef || null,
   };
   return {
     ...draft,

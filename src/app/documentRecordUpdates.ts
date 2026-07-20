@@ -56,6 +56,7 @@ export function buildImportedDocumentRecord({
     tags: parseDocumentTags(draft.tags),
     extractedText: extractedText || undefined,
     ocrStatus,
+    ...(draft.sourceRef ? { sourceRef: draft.sourceRef } : {}),
   };
 }
 

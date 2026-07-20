@@ -76,6 +76,25 @@ test("imported documents require a property after link resolution", () => {
   assert.equal(result, null);
 });
 
+test("mobile companion provenance survives document import", () => {
+  const sourceRef = {
+    provider: "rental-tracker-companion" as const,
+    submissionId: "861a8181-260b-41f3-b43a-cd3ee9ea26ad",
+    sha256: "abc123",
+    capturedAt: "2026-07-19T20:00:00.000Z",
+    note: "Hardware store receipt",
+  };
+  const result = buildRecord({
+    draft: {
+      ...createBlankDocumentImportDraft("p1", "Shared"),
+      name: "receipt.png",
+      dataUrl: "data:image/png;base64,abc",
+      sourceRef,
+    },
+  });
+  assert.deepEqual(result?.sourceRef, sourceRef);
+});
+
 test("tag updates ignore casing-only changes and retain meaningful changes", () => {
   assert.equal(buildDocumentTagsUpdate(document, "utility, tax"), null);
   assert.deepEqual(buildDocumentTagsUpdate(document, "Utility, Tax, Receipt"), {
