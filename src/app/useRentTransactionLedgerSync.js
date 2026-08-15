@@ -16,7 +16,15 @@ export function useRentTransactionLedgerSync({
     transactions
       .filter((txn) => isRentIncomeTransaction(txn) && !String(txn.tenantLedgerEntryId || "").trim())
       .forEach((txn) => {
-        const lease = leases
+        const explicitlyLinkedLease = String(txn.rentLeaseId || "").trim()
+          ? leases.find(
+              (candidate) =>
+                candidate.id === String(txn.rentLeaseId || "").trim() &&
+                candidate.propertyId === txn.propertyId &&
+                candidate.unit === txn.unit,
+            )
+          : null;
+        const lease = explicitlyLinkedLease || leases
           .filter(
             (candidate) =>
               candidate.propertyId === txn.propertyId &&

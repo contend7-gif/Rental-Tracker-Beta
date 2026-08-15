@@ -145,6 +145,39 @@ test("buildLeaseAutomationPlan keeps a full month at the full monthly rent", () 
   assert.equal(februaryCharge?.amount, 1500);
 });
 
+test("buildLeaseAutomationPlan bills a one-month mid-term lease once and repairs its old prorated charge", () => {
+  const oneMonthLease = baseLease({
+    startDate: "2026-08-12",
+    endDate: "2026-09-11",
+    actualEndDate: "2026-09-11",
+    monthlyRent: 1550,
+    rentalType: "Mid-term",
+    extensionTermMonths: 0,
+  });
+  const augustKey = rentChargeAutomationKey("lease-1", "2026-08-12");
+  const plan = buildLeaseAutomationPlan({
+    leases: [oneMonthLease],
+    tenantLedgerEntries: [{
+      id: "tle-old-prorated-charge",
+      leaseId: "lease-1",
+      date: "2026-08-12",
+      kind: "charge",
+      amount: 981.67,
+      memo: "Auto rent charge (2026-08)",
+      accountingTreatment: "none",
+      automationKey: augustKey,
+      createdAt: "2026-08-12T08:00:00.000Z",
+    }],
+    todayIso: "2026-09-11",
+    defaults: DEFAULTS,
+  });
+
+  assert.equal(plan.entries.length, 1);
+  assert.equal(plan.entries[0].id, "tle-old-prorated-charge");
+  assert.equal(plan.entries[0].amount, 1550);
+  assert.equal(plan.entries.some((entry) => entry.date.startsWith("2026-09")), false);
+});
+
 test("buildLeaseAutomationPlan does not mark prepaid manual rent as late when the charge row is reused", () => {
   const plan = buildLeaseAutomationPlan({
     leases: [baseLease({ startDate: "2026-03-01", endDate: "2026-03-31" })],

@@ -6,6 +6,7 @@ import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { field } from "../shared/uiHelpers.jsx";
 import { selectableProperties } from "../../domain/propertyLifecycle.js";
+import { isSingleMonthFixedTermLease, rentAmountForLeasePayment } from "../../domain/rentProration.js";
 import { CircleDollarSign, Droplets, Home, Landmark, MoreHorizontal, RotateCcw, Wrench } from "lucide-react";
 
 function TransactionSection({ title, children, action, className = "" }) {
@@ -147,7 +148,17 @@ export function QuickAddWorkspace({
   const selectedPropertyLeases = leases.filter((lease) => lease.propertyId === form.propertyId);
   const activeTenantLeases = selectedPropertyLeases.filter((lease) => isTenantLeaseActiveOnDate(lease, form.date));
   const isRentPayment = form.type === "Income" && form.category === "Rents received";
-  const activeRentUnitKeys = new Set(activeTenantLeases.map((lease) => transactionUnitKey(lease.unit)));
+  const rentPeriod = rentPeriodRange(form.rentPeriod, form.date);
+  const rentPeriodLeases = rentPeriod
+    ? selectedPropertyLeases.filter((lease) => (
+        Boolean(lease.tenantName) &&
+        String(lease.startDate || "") <= rentPeriod.end &&
+        leaseEndDate(lease) >= rentPeriod.start
+      ))
+    : [];
+  const rentRelevantLeases = [...activeTenantLeases, ...rentPeriodLeases]
+    .filter((lease, index, list) => list.findIndex((candidate) => candidate.id === lease.id) === index);
+  const activeRentUnitKeys = new Set(rentRelevantLeases.map((lease) => transactionUnitKey(lease.unit)));
   const rentUnitOptions = selectedPropertyUnits.filter((unit) => activeRentUnitKeys.has(transactionUnitKey(unit.name)));
   const selectedRentUnitIsVisible = rentUnitOptions.some((unit) => transactionUnitKey(unit.name) === transactionUnitKey(form.unit));
   const unitOptionsForForm = isRentPayment
@@ -159,24 +170,40 @@ export function QuickAddWorkspace({
       ]
     : selectedPropertyUnits;
   const selectedActiveTenantLease = activeTenantLeases.find((lease) => transactionUnitKey(lease.unit) === transactionUnitKey(form.unit));
-  const rentPeriod = rentPeriodRange(form.rentPeriod, form.date);
+  const selectedExplicitRentLease = selectedPropertyLeases.find((lease) => lease.id === String(form.rentLeaseId || "")) || null;
   const selectedRentPeriodLease = isRentPayment && rentPeriod
-    ? selectedPropertyLeases.find((lease) => (
+    ? selectedExplicitRentLease || [...selectedPropertyLeases].sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || ""))).find((lease) => (
         transactionUnitKey(lease.unit) === transactionUnitKey(form.unit) &&
         Boolean(lease.tenantName) &&
         String(lease.startDate || "") <= rentPeriod.end &&
         leaseEndDate(lease) >= rentPeriod.start
       ))
     : null;
+  const rentLeaseOptions = rentRelevantLeases
+    .filter((lease) => transactionUnitKey(lease.unit) === transactionUnitKey(form.unit))
+    .sort((a, b) => String(a.startDate || "").localeCompare(String(b.startDate || "")));
+  const rentLeaseForPayment = selectedExplicitRentLease || selectedRentPeriodLease || selectedActiveTenantLease;
+  const expectedRentAmount = rentLeaseForPayment
+    ? rentAmountForLeasePayment(rentLeaseForPayment, rentPeriod?.start || form.date)
+    : null;
   const rentAmount = Number(form.amount || 0);
   const rentAlreadyRecorded = isRentPayment && rentPeriod
     ? transactions.some((transaction) => (
+        transaction.id !== editingTxnId &&
         transaction.status !== "voided" &&
         transaction.propertyId === form.propertyId &&
         transactionUnitKey(transaction.unit) === transactionUnitKey(form.unit) &&
         transaction.type === "Income" &&
         transaction.category === "Rents received" &&
-        (String(transaction.rentPeriod || "").slice(0, 7) || String(transaction.date || "").slice(0, 7)) === rentPeriod.key
+        (String(transaction.rentPeriod || "").slice(0, 7) || String(transaction.date || "").slice(0, 7)) === rentPeriod.key &&
+        (() => {
+          if (!rentLeaseForPayment?.id) return true;
+          if (transaction.rentLeaseId) return transaction.rentLeaseId === rentLeaseForPayment.id;
+          const legacyLease = [...selectedPropertyLeases]
+            .filter((lease) => transactionUnitKey(lease.unit) === transactionUnitKey(transaction.unit) && isTenantLeaseActiveOnDate(lease, transaction.date))
+            .sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")))[0];
+          return legacyLease ? legacyLease.id === rentLeaseForPayment.id : true;
+        })()
       ))
     : false;
   const rentWarnings = [];
@@ -187,11 +214,10 @@ export function QuickAddWorkspace({
     rentWarnings.push("Choose the tenant unit for this rent payment.");
   }
   if (isRentPayment && form.unit && form.unit !== "Shared") {
-    const leaseForWarning = selectedRentPeriodLease || selectedActiveTenantLease;
-    if (!selectedActiveTenantLease) rentWarnings.push("No active tenant lease found for this unit.");
-    if (rentPeriod && !selectedRentPeriodLease) rentWarnings.push("Rent month is outside the active tenant lease period.");
-    if (leaseForWarning?.monthlyRent && amountEntered && Math.abs(Number(leaseForWarning.monthlyRent || 0) - rentAmount) > 0.01) {
-      rentWarnings.push(`Lease rent is ${currency(Number(leaseForWarning.monthlyRent || 0))}/month; entered amount is ${currency(rentAmount)}.`);
+    if (rentLeaseOptions.length > 1 && !selectedExplicitRentLease) rentWarnings.push("Choose the tenant lease this payment belongs to.");
+    if (!rentLeaseForPayment) rentWarnings.push("No tenant lease found for this unit and rent period.");
+    if (expectedRentAmount != null && amountEntered && Math.abs(Number(expectedRentAmount) - rentAmount) > 0.01) {
+      rentWarnings.push(`Expected rent for this lease coverage is ${currency(Number(expectedRentAmount))}; entered amount is ${currency(rentAmount)}.`);
     }
     if (rentAlreadyRecorded) rentWarnings.push("A rent payment appears to already be recorded for this unit and rent month.");
   } else if (isRentPayment && form.unit === "Shared") {
@@ -211,7 +237,8 @@ export function QuickAddWorkspace({
     form.capitalImprovement !== "Yes" &&
     /(roof|hvac|furnace|water heater|remodel|renovat|replace|upgrade|floor|window|siding|deck|appliance)/i.test(`${form.category || ""} ${form.description || ""}`);
   const rentUnitMissing = isRentPayment && (!form.unit || form.unit === "Shared");
-  const saveDisabled = properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing;
+  const rentLeaseMissing = isRentPayment && rentLeaseOptions.length > 1 && !selectedExplicitRentLease;
+  const saveDisabled = properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing || rentLeaseMissing;
   const receiptRecommended = form.type === "Expense" && amountEntered && rentAmount >= 75 && !pendingTxnAttachment && !pendingDocumentExpenseSource?.documentId;
   const taxTreatmentExplanation = (() => {
     if (form.type !== "Expense") return "Income is tracked for reporting; deductible expense preview does not apply.";
@@ -428,6 +455,7 @@ export function QuickAddWorkspace({
                     type: v,
                     category: nextCategory,
                     unit: nextIsRentPayment ? firstActiveTenantLeaseUnit(leases, form.propertyId, form.date) : form.unit,
+                    rentLeaseId: nextIsRentPayment ? "" : form.rentLeaseId,
                   });
                 }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -441,6 +469,7 @@ export function QuickAddWorkspace({
                   ...form,
                   propertyId: v,
                   unit: isRentPayment ? firstActiveTenantLeaseUnit(leases, v, form.date) : "Shared",
+                  rentLeaseId: "",
                 })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{propertyOptions.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}</SelectContent>
@@ -450,7 +479,10 @@ export function QuickAddWorkspace({
               {field(
                 "Unit",
                 unitOptionsForForm.length ? (
-                  <Select value={isRentPayment && form.unit === "Shared" ? undefined : form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
+                  <Select value={isRentPayment && form.unit === "Shared" ? undefined : form.unit} onValueChange={(v) => {
+                    const matchingLeases = rentRelevantLeases.filter((lease) => transactionUnitKey(lease.unit) === transactionUnitKey(v));
+                    setForm({ ...form, unit: v, rentLeaseId: matchingLeases.length === 1 ? matchingLeases[0].id : "" });
+                  }}>
                     <SelectTrigger><SelectValue placeholder={isRentPayment ? "Select tenant unit" : "Select unit"} /></SelectTrigger>
                     <SelectContent>
                       {!isRentPayment ? <SelectItem value="Shared">Shared</SelectItem> : null}
@@ -473,6 +505,7 @@ export function QuickAddWorkspace({
                     ...form,
                     category: v,
                     unit: nextIsRentPayment && form.unit === "Shared" ? firstActiveTenantLeaseUnit(leases, form.propertyId, form.date) : form.unit,
+                    rentLeaseId: nextIsRentPayment ? form.rentLeaseId : "",
                   });
                 }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -482,13 +515,38 @@ export function QuickAddWorkspace({
               )}
               {field("Amount", <Input type="number" value={form.amount} onChange={(e) => { setRentAmountTouched(true); setForm({ ...form, amount: e.target.value }); }} />, getSuggestedFieldOptions("amount", "Amount"))}
               {field("Vendor / payee", <Input value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />, getSuggestedFieldOptions("vendor", "Vendor"))}
+              {isRentPayment && rentLeaseOptions.length
+                ? field(
+                    "Tenant lease",
+                    <Select value={form.rentLeaseId || undefined} onValueChange={(value) => {
+                      const lease = rentLeaseOptions.find((candidate) => candidate.id === value);
+                      setRentAmountTouched(false);
+                      setForm({
+                        ...form,
+                        rentLeaseId: value,
+                        vendor: form.vendor || lease?.tenantName || "",
+                        rentPeriod: form.rentPeriod || String(lease?.startDate || form.date).slice(0, 7),
+                      });
+                    }}>
+                      <SelectTrigger><SelectValue placeholder={rentLeaseOptions.length > 1 ? "Choose tenant lease" : "Select lease"} /></SelectTrigger>
+                      <SelectContent>{rentLeaseOptions.map((lease) => <SelectItem key={lease.id} value={lease.id}>{lease.tenantName} | {lease.startDate} to {leaseEndDate(lease)}</SelectItem>)}</SelectContent>
+                    </Select>,
+                  )
+                : null}
               {form.type === "Income" && form.category === "Rents received"
-                ? field("Rent month / period", <Input type="month" value={form.rentPeriod || ""} onChange={(e) => setForm({ ...form, rentPeriod: e.target.value })} />)
+                ? field("Rent month / period", <Input type="month" value={form.rentPeriod || ""} onChange={(e) => setForm({ ...form, rentPeriod: e.target.value, rentLeaseId: "" })} />)
                 : null}
               <div className="md:col-span-2">
                 {field("Description / memo", <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />, getSuggestedFieldOptions("description", "Description"))}
               </div>
             </div>
+            {isRentPayment && rentLeaseForPayment ? (
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
+                {isSingleMonthFixedTermLease(rentLeaseForPayment)
+                  ? `Prepaid fixed term: ${rentLeaseForPayment.startDate} to ${leaseEndDate(rentLeaseForPayment)}. One full rent charge of ${currency(rentLeaseForPayment.monthlyRent)}; no second calendar-month charge.`
+                  : `Rent coverage follows ${rentLeaseForPayment.tenantName}'s lease (${rentLeaseForPayment.startDate} to ${leaseEndDate(rentLeaseForPayment)}).`}
+              </div>
+            ) : null}
             {rentWarnings.length ? (
               <div className="mt-3 space-y-1 rounded-lg border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
                 {rentWarnings.map((warning) => <div key={warning}>{warning}</div>)}

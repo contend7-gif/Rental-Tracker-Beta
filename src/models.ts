@@ -155,6 +155,7 @@ export type Transaction = {
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
   rentPeriod?: string;
+  rentLeaseId?: string;
   deMinimisTreatment?: "auto" | "yes" | "no";
   deMinimisCandidate?: boolean;
   deMinimisApplied?: boolean;

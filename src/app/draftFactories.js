@@ -26,6 +26,7 @@ export function createBlankForm(propertyId = "", unit = "Shared") {
     servicePeriodStart: "",
     servicePeriodEnd: "",
     rentPeriod: "",
+    rentLeaseId: "",
     workOrderId: "",
     deMinimisTreatment: "auto",
     recurringMonthly: "No",

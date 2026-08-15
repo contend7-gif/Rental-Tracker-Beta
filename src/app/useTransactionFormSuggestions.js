@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
-import { leaseIsActiveByDate, proratedRentForMonth } from "./leaseShared.js";
+import { leaseIsActiveByDate } from "./leaseShared.js";
+import { rentAmountForLeasePayment } from "../domain/rentProration.js";
 
 const MID_TERM_EXTRA_INCOME_CATEGORIES = ["Pet fees", "Cleaning fees"];
 const MID_TERM_CLEANING_FEE_DEFAULT = 200;
@@ -32,14 +33,23 @@ export function useTransactionFormSuggestions({
   }, [form.propertyId, form.unit, properties, setForm, units]);
 
   const rentLeaseForForm = useMemo(
-    () =>
-      leases.find(
+    () => {
+      const explicitLease = String(form.rentLeaseId || "").trim()
+        ? leases.find(
+            (lease) =>
+              lease.id === String(form.rentLeaseId || "").trim() &&
+              lease.propertyId === form.propertyId &&
+              lease.unit === form.unit,
+          )
+        : null;
+      return explicitLease || leases.find(
         (lease) =>
           lease.propertyId === form.propertyId &&
           lease.unit === form.unit &&
           leaseIsActiveByDate(lease, form.date),
-      ) || null,
-    [leases, form.propertyId, form.unit, form.date],
+      ) || null;
+    },
+    [leases, form.propertyId, form.unit, form.date, form.rentLeaseId],
   );
 
   const midTermLeaseForForm = useMemo(() => {
@@ -72,17 +82,17 @@ export function useTransactionFormSuggestions({
     if (form.type !== "Income" || !form.date) return null;
     if (form.category === "Rents received") {
       if (!rentLeaseForForm) return null;
-      return proratedRentForMonth(rentLeaseForForm, form.date);
+      return rentAmountForLeasePayment(rentLeaseForForm, form.rentPeriod ? `${form.rentPeriod}-01` : form.date);
     }
     if (form.category === "Cleaning fees" && midTermLeaseForForm) {
       return MID_TERM_CLEANING_FEE_DEFAULT;
     }
     return null;
-  }, [form.type, form.category, form.date, rentLeaseForForm, midTermLeaseForForm]);
+  }, [form.type, form.category, form.date, form.rentPeriod, rentLeaseForForm, midTermLeaseForForm]);
 
   useEffect(() => {
     setRentAmountTouched(false);
-  }, [form.type, form.category, form.propertyId, form.unit, form.date, setRentAmountTouched]);
+  }, [form.type, form.category, form.propertyId, form.unit, form.date, form.rentLeaseId, form.rentPeriod, setRentAmountTouched]);
 
   useEffect(() => {
     if (rentAmountTouched || suggestedAmount == null) return;

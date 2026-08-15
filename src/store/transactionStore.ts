@@ -8,12 +8,14 @@ type AssetPayload = Omit<Asset, "id" | "currentYearDep" | "basis"> & { basis: nu
 
 export function normalizeTransaction(transaction: Transaction): Transaction {
   const rentPeriod = String(transaction.rentPeriod || "").trim();
+  const rentLeaseId = String(transaction.rentLeaseId || "").trim();
   return {
     ...transaction,
     reconciled: transaction.reconciled === true,
     servicePeriodStart: String(transaction.servicePeriodStart || "").trim() || undefined,
     servicePeriodEnd: String(transaction.servicePeriodEnd || "").trim() || undefined,
     rentPeriod: /^\d{4}-\d{2}$/.test(rentPeriod) ? rentPeriod : undefined,
+    rentLeaseId: rentLeaseId || undefined,
   };
 }
 

@@ -251,6 +251,7 @@ export function useTransactionEntryController({
       servicePeriodStart: form.servicePeriodStart || undefined,
       servicePeriodEnd: form.servicePeriodEnd || undefined,
       rentPeriod: form.type === "Income" && /\brents?\b/i.test(form.category) ? (form.rentPeriod || form.date.slice(0, 7)) : undefined,
+      rentLeaseId: form.type === "Income" && /\brents?\b/i.test(form.category) ? (form.rentLeaseId || undefined) : undefined,
       deMinimisTreatment,
       deMinimisCandidate,
       deMinimisApplied,

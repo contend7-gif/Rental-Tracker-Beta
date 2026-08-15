@@ -69,7 +69,7 @@ export function DocumentCard({
       : getDocumentReviewSummary(document, context);
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30">
+    <div role="group" aria-label={`Document ${document.name}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30">
       <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(12rem,.75fr)_minmax(14rem,.85fr)_auto] lg:items-center">
         <div className="min-w-0">
           <div className="flex min-w-0 items-start gap-2 text-slate-900">

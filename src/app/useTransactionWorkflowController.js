@@ -77,6 +77,7 @@ export function useTransactionWorkflowController({
       servicePeriodStart: txn.servicePeriodStart || "",
       servicePeriodEnd: txn.servicePeriodEnd || "",
       rentPeriod: txn.rentPeriod || "",
+      rentLeaseId: txn.rentLeaseId || "",
       deMinimisTreatment: txn.deMinimisTreatment || "auto",
       capitalImprovement: txn.capitalImprovement ? "Yes" : "No",
       taxChecked: txn.taxChecked ? "Yes" : "No",

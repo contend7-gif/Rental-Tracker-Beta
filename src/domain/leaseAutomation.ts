@@ -273,7 +273,7 @@ export function buildLeaseAutomationPlan(args: {
       const matchingManualCharge = existingEntries.find((entry) => isManualRentChargeEntryForDueDate(entry, lease.id, dueDate));
       const chargeEntry =
         matchingManualCharge ||
-        existing ||
+        (existing ? { ...existing, amount: scheduledRent } : null) ||
         {
           id: sanitizeAutomationEntryId(automationKey),
           leaseId: lease.id,
@@ -286,7 +286,7 @@ export function buildLeaseAutomationPlan(args: {
           createdAt: generatedAtIso,
         };
 
-      if (!matchingManualCharge && !existing) {
+      if (!matchingManualCharge && (!existing || Math.abs(Number(existing.amount || 0) - scheduledRent) >= 0.01)) {
         generatedRentEntries.push(chargeEntry);
       }
 

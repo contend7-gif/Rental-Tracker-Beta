@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.2.0",
+    releaseDate: "2026-08-15",
+    title: "Mobile receipt capture and clearer prepaid rent",
+    summary: "Adds the private mobile capture companion and makes rent payments follow the correct tenant lease when occupants change mid-month.",
+    changes: [
+      "A private mobile companion can send receipt and PDF captures into the desktop Documents inbox for review before import.",
+      "Rent payments can be linked to a specific tenant lease, preventing false duplicate warnings when two tenants share the same unit and calendar month.",
+      "One-month mid-term leases that cross calendar months now create one full prepaid-term rent charge instead of separate August and September prorations.",
+      "Lease automation repairs older generated partial charges to the correct fixed-term amount while preserving valid outgoing-tenant prorations.",
+    ],
+  },
+  {
     version: "1.1.0",
     releaseDate: "2026-07-14",
     title: "Faster Documents and stronger app foundations",

@@ -56,7 +56,9 @@ test("packaged desktop supports the core Documents workflow", async () => {
     await expect(page.getByText("Example Plumbing receipt", { exact: true })).toBeVisible();
     await expect(page.getByText("Example Hardware roof receipt", { exact: true })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    const plumbingCard = page.getByRole("group", { name: "Document Example Plumbing receipt", exact: true });
+    await plumbingCard.getByTitle("More actions", { exact: true }).click();
+    await plumbingCard.getByRole("button", { name: "Review details", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Example Plumbing receipt", exact: true })).toBeVisible();
     await expect(page.getByText("Extracted fields", { exact: true })).toBeVisible();
     expect(rendererErrors).toEqual([]);
