@@ -1,6 +1,65 @@
 const CLOSED_STATUSES = new Set(["Completed", "Closed"]);
 const ACTIVE_STATUSES = new Set(["Open", "In Progress", "Waiting on Parts"]);
 
+export function buildMaintenanceWorkspaceModes({
+  activeCount = 0,
+  cleanupCount = 0,
+  historyCount = 0,
+  vendorCount = 0,
+} = {}) {
+  return [
+    {
+      key: "active",
+      label: "Active work",
+      badge: `${activeCount} active`,
+      description: "Triage open, in-progress, waiting, and overdue repairs.",
+    },
+    {
+      key: "history",
+      label: "History & costs",
+      badge: `${historyCount} closed`,
+      description: "Review completed or canceled work and resolved costs.",
+    },
+    {
+      key: "cleanup",
+      label: "Cleanup & accounting",
+      badge: cleanupCount > 0 ? `${cleanupCount} open` : "Clear",
+      description: "Resolve missing expenses, documents, and asset handoffs.",
+    },
+    {
+      key: "vendors",
+      label: "Vendors",
+      badge: `${vendorCount} vendor${vendorCount === 1 ? "" : "s"}`,
+      description: "Maintain assignment contacts and default categories.",
+    },
+  ];
+}
+
+export function maintenanceQuickFiltersForMode(mode) {
+  if (mode === "history") {
+    return [
+      { key: "history", label: "All history" },
+      { key: "completed", label: "Completed" },
+      { key: "closed", label: "Closed" },
+      { key: "canceled", label: "Canceled" },
+    ];
+  }
+  if (mode === "cleanup") return [{ key: "needs_review", label: "Needs cleanup" }];
+  return [
+    { key: "active", label: "All active" },
+    { key: "open", label: "Open" },
+    { key: "in_progress", label: "In progress" },
+    { key: "waiting", label: "Waiting on parts" },
+    { key: "overdue", label: "Overdue" },
+  ];
+}
+
+export function defaultMaintenanceQuickFilter(mode) {
+  if (mode === "history") return "history";
+  if (mode === "cleanup") return "needs_review";
+  return "active";
+}
+
 export function formatMaintenanceDate(value, fallback = "Not set") {
   const raw = String(value || "").trim();
   if (!raw) return fallback;

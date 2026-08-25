@@ -36,7 +36,13 @@ import {
 } from "../../domain/maintenance.ts";
 import { formatUnitLabel } from "../../domain/unitLabels.js";
 import { getWorkOrderReadiness, getWorkOrderReviewIssues } from "./maintenanceReview.js";
-import { formatMaintenanceDate, workOrderPrimaryActionKey } from "./maintenanceWorkspacePresentation.js";
+import {
+  buildMaintenanceWorkspaceModes,
+  defaultMaintenanceQuickFilter,
+  formatMaintenanceDate,
+  maintenanceQuickFiltersForMode,
+  workOrderPrimaryActionKey,
+} from "./maintenanceWorkspacePresentation.js";
 import { AuditReadinessBadge } from "../shared/AuditReadinessBadge.jsx";
 import { ResponsiveTableFrame, field } from "../shared/uiHelpers.jsx";
 import { selectableProperties } from "../../domain/propertyLifecycle.js";
@@ -139,6 +145,7 @@ export function MaintenanceWorkspace({
   maintenanceVendors,
   maintenanceReviewInbox,
   maintenanceVisibleWorkOrders,
+  newWorkOrderRequestKey,
   onWorkOrderAttachmentInputChange,
   openWorkOrderAttachmentPicker,
   openWorkOrderDocuments,
@@ -169,7 +176,8 @@ export function MaintenanceWorkspace({
   const [vendorPanelOpen, setVendorPanelOpen] = useState(false);
   const [optionalCreateOpen, setOptionalCreateOpen] = useState(false);
   const [expandedOverrides, setExpandedOverrides] = useState({});
-  const [queueQuickFilter, setQueueQuickFilter] = useState("all");
+  const [workspaceMode, setWorkspaceMode] = useState("active");
+  const [queueQuickFilter, setQueueQuickFilter] = useState("active");
   const [vendorActionsOpenId, setVendorActionsOpenId] = useState("");
   const propertyOptions = selectableProperties(properties, workOrderDraft.propertyId);
   const reviewContext = {
@@ -181,11 +189,26 @@ export function MaintenanceWorkspace({
   };
 
   useEffect(() => {
-    if (pendingDocumentWorkOrderSource?.documentId) setCreatePanelOpen(true);
+    if (pendingDocumentWorkOrderSource?.documentId) {
+      setWorkspaceMode("active");
+      setQueueQuickFilter("active");
+      setCreatePanelOpen(true);
+    }
   }, [pendingDocumentWorkOrderSource?.documentId]);
 
   useEffect(() => {
-    if (editingVendorId) setVendorPanelOpen(true);
+    if (newWorkOrderRequestKey) {
+      setWorkspaceMode("active");
+      setQueueQuickFilter("active");
+      setCreatePanelOpen(true);
+    }
+  }, [newWorkOrderRequestKey]);
+
+  useEffect(() => {
+    if (editingVendorId) {
+      setWorkspaceMode("vendors");
+      setVendorPanelOpen(true);
+    }
   }, [editingVendorId]);
 
   const reviewRecords = maintenanceReviewInbox?.records || [];
@@ -201,6 +224,14 @@ export function MaintenanceWorkspace({
     () => maintenanceVisibleWorkOrders.filter((workOrder) => isWorkOrderOverdue(workOrder, todayIso)).length,
     [maintenanceVisibleWorkOrders, todayIso],
   );
+  const activeWorkOrderCount = maintenanceVisibleWorkOrders.filter((workOrder) => ACTIVE_STATUSES.has(workOrder.status)).length;
+  const historyWorkOrderCount = maintenanceVisibleWorkOrders.filter((workOrder) => CLOSED_STATUSES.has(workOrder.status)).length;
+  const workspaceModes = buildMaintenanceWorkspaceModes({
+    activeCount: activeWorkOrderCount,
+    cleanupCount: cleanupCounts.total,
+    historyCount: historyWorkOrderCount,
+    vendorCount: maintenanceVendors.length,
+  });
   const defaultExpandedIds = useMemo(() => {
     const priorityRows = maintenanceVisibleWorkOrders
       .filter((workOrder) => {
@@ -211,15 +242,26 @@ export function MaintenanceWorkspace({
       .map((workOrder) => workOrder.id);
     return new Set(priorityRows);
   }, [maintenanceVisibleWorkOrders, reviewContext, todayIso]);
-  const summaryCards = [
-    { label: "Open", value: countByStatus(maintenanceStatusSummary, "Open"), icon: Wrench, iconTone: "border-orange-200 bg-orange-50 text-orange-700" },
-    { label: "In progress", value: countByStatus(maintenanceStatusSummary, "In Progress"), icon: Clock3, iconTone: "border-blue-200 bg-blue-50 text-blue-700" },
-    { label: "Waiting on parts", value: countByStatus(maintenanceStatusSummary, "Waiting on Parts"), icon: PackageOpen, iconTone: "border-amber-200 bg-amber-50 text-amber-700" },
-    { label: "Overdue", value: overdueCount, tone: overdueCount > 0 ? "text-red-700" : "", icon: AlertTriangle, iconTone: overdueCount > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-500" },
-    { label: "Completed", value: countByStatus(maintenanceStatusSummary, "Completed"), icon: CheckCircle2, iconTone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-    { label: "Total cost", value: currency(maintenanceTotalCost), icon: CircleDollarSign, iconTone: "border-teal-200 bg-teal-50 text-teal-700" },
-    { label: "Cleanup items", value: cleanupCounts.total, tone: cleanupCounts.total > 0 ? "text-amber-700" : "", icon: ClipboardList, iconTone: cleanupCounts.total > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-50 text-slate-500" },
-  ];
+  const summaryCards = {
+    active: [
+      { label: "Open", value: countByStatus(maintenanceStatusSummary, "Open"), icon: Wrench, iconTone: "border-orange-200 bg-orange-50 text-orange-700" },
+      { label: "In progress", value: countByStatus(maintenanceStatusSummary, "In Progress"), icon: Clock3, iconTone: "border-blue-200 bg-blue-50 text-blue-700" },
+      { label: "Waiting on parts", value: countByStatus(maintenanceStatusSummary, "Waiting on Parts"), icon: PackageOpen, iconTone: "border-amber-200 bg-amber-50 text-amber-700" },
+      { label: "Overdue", value: overdueCount, tone: overdueCount > 0 ? "text-red-700" : "", icon: AlertTriangle, iconTone: overdueCount > 0 ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-slate-50 text-slate-500" },
+    ],
+    history: [
+      { label: "Completed", value: countByStatus(maintenanceStatusSummary, "Completed"), icon: CheckCircle2, iconTone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+      { label: "Closed", value: countByStatus(maintenanceStatusSummary, "Closed"), icon: CheckCircle2, iconTone: "border-slate-200 bg-slate-50 text-slate-600" },
+      { label: "Canceled", value: countByStatus(maintenanceStatusSummary, "Canceled"), icon: PackageOpen, iconTone: "border-slate-200 bg-slate-50 text-slate-500" },
+      { label: "Resolved cost", value: currency(maintenanceTotalCost), icon: CircleDollarSign, iconTone: "border-teal-200 bg-teal-50 text-teal-700" },
+    ],
+    cleanup: [
+      { label: "Cleanup items", value: cleanupCounts.total, tone: cleanupCounts.total > 0 ? "text-amber-700" : "", icon: ClipboardList, iconTone: cleanupCounts.total > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-emerald-200 bg-emerald-50 text-emerald-700" },
+      { label: "Missing expense", value: cleanupCounts.completedWithoutExpense + cleanupCounts.actualCostWithoutTransaction, icon: Receipt, iconTone: "border-amber-200 bg-amber-50 text-amber-700" },
+      { label: "Missing document", value: cleanupCounts.actualCostWithoutDocument, icon: FilePlus2, iconTone: "border-blue-200 bg-blue-50 text-blue-700" },
+      { label: "Asset handoff", value: cleanupCounts.capitalImprovementWithoutAsset, icon: BarChart3, iconTone: "border-violet-200 bg-violet-50 text-violet-700" },
+    ],
+  }[workspaceMode] || [];
 
   const toggleExpanded = (id) => {
     setExpandedOverrides((prev) => {
@@ -247,23 +289,72 @@ export function MaintenanceWorkspace({
   }, [assetById, maintenanceVisibleWorkOrders, reviewContext, todayIso, transactionById, workOrderDocumentCountById]);
   const queueWorkOrders = useMemo(() => {
     if (queueQuickFilter === "active") return maintenanceVisibleWorkOrders.filter((workOrder) => ACTIVE_STATUSES.has(workOrder.status));
-    if (queueQuickFilter === "completed") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "Completed" || workOrder.status === "Closed");
+    if (queueQuickFilter === "open") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "Open");
+    if (queueQuickFilter === "in_progress") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "In Progress");
+    if (queueQuickFilter === "waiting") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "Waiting on Parts");
+    if (queueQuickFilter === "history") return maintenanceVisibleWorkOrders.filter((workOrder) => CLOSED_STATUSES.has(workOrder.status));
+    if (queueQuickFilter === "completed") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "Completed");
+    if (queueQuickFilter === "closed") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "Closed");
+    if (queueQuickFilter === "canceled") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrder.status === "Canceled");
     if (queueQuickFilter === "needs_review") return maintenanceVisibleWorkOrders.filter((workOrder) => (workOrderMetaById[workOrder.id]?.issues || []).length > 0);
     if (queueQuickFilter === "overdue") return maintenanceVisibleWorkOrders.filter((workOrder) => workOrderMetaById[workOrder.id]?.isOverdue);
     return maintenanceVisibleWorkOrders;
   }, [maintenanceVisibleWorkOrders, queueQuickFilter, workOrderMetaById]);
-  const quickFilters = [
-    { key: "all", label: "All" },
-    { key: "active", label: "Active" },
-    { key: "completed", label: "Completed" },
-    { key: "needs_review", label: "Needs review" },
-    { key: "overdue", label: "Overdue" },
-  ];
+  const quickFilters = maintenanceQuickFiltersForMode(workspaceMode);
+  const queuePresentation = {
+    active: {
+      title: "Active work orders",
+      helper: "Triage current repairs, assignments, due dates, and next actions.",
+      emptyTitle: "No active work orders.",
+      emptyDetail: "Create a work order when a repair or property task needs tracking.",
+    },
+    history: {
+      title: "Maintenance history",
+      helper: "Review completed, closed, or canceled work without mixing it into the active queue.",
+      emptyTitle: "No maintenance history yet.",
+      emptyDetail: "Completed and canceled work orders will stay available here.",
+    },
+    cleanup: {
+      title: "Work orders needing cleanup",
+      helper: "Inspect records missing an expense, document, review, or capital-asset handoff.",
+      emptyTitle: "No work orders need cleanup.",
+      emptyDetail: "Accounting and support records are clear for the current scope.",
+    },
+  }[workspaceMode];
+  const changeWorkspaceMode = (mode) => {
+    setWorkspaceMode(mode);
+    setQueueQuickFilter(defaultMaintenanceQuickFilter(mode));
+    setMaintenanceStatusFilter("all");
+    if (mode !== "vendors") setVendorActionsOpenId("");
+  };
 
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-3 !p-4">
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
+        <div role="tablist" aria-label="Maintenance workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {workspaceModes.map((mode) => {
+            const modeSelected = workspaceMode === mode.key;
+            const ModeIcon = mode.key === "active" ? Wrench : mode.key === "history" ? BarChart3 : mode.key === "cleanup" ? ClipboardList : Users;
+            return (
+              <button
+                key={`maintenance-mode-${mode.key}`}
+                type="button"
+                role="tab"
+                aria-selected={modeSelected}
+                className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-orange-200 hover:bg-orange-50/60"}`}
+                onClick={() => changeWorkspaceMode(mode.key)}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
+                </div>
+                <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        {summaryCards.length ? <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {summaryCards.map((card) => {
             const SummaryIcon = card.icon;
             return (
@@ -280,9 +371,9 @@ export function MaintenanceWorkspace({
               </div>
             );
           })}
-        </div>
+        </div> : null}
 
-        {createPanelOpen && (
+        {workspaceMode === "active" && createPanelOpen && (
           <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2">
@@ -412,30 +503,21 @@ export function MaintenanceWorkspace({
           </div>
         )}
 
-        <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
+        {workspaceMode !== "vendors" && queuePresentation ? <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex min-w-0 items-start gap-2">
               <ClipboardList className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
               <div className="min-w-0">
-                <div className="font-medium text-slate-900">Work Order Queue</div>
-                <div className="text-xs text-slate-500">Open items, assignments, costs, support, and accounting cleanup.</div>
+                <div className="font-medium text-slate-900">{queuePresentation.title}</div>
+                <div className="text-xs text-slate-500">{queuePresentation.helper}</div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => setCreatePanelOpen((value) => !value)} disabled={!canCreateEditRecords}>
+              {workspaceMode === "active" ? <Button size="sm" onClick={() => setCreatePanelOpen((value) => !value)} disabled={!canCreateEditRecords}>
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 New Work Order
-              </Button>
+              </Button> : null}
               <Badge variant="secondary">{queueWorkOrders.length} visible</Badge>
-              <Select value={maintenanceStatusFilter} onValueChange={setMaintenanceStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[220px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All statuses</SelectItem>
-                  {WORK_ORDER_STATUS_ORDER.map((status) => <SelectItem key={`wo-filter-${status}`} value={status}>{status}</SelectItem>)}
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -457,8 +539,8 @@ export function MaintenanceWorkspace({
             <input ref={workOrderAttachmentInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={onWorkOrderAttachmentInputChange} />
             {queueWorkOrders.length === 0 && (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-4 text-sm">
-                <div className="font-medium text-slate-900">No work orders in this view.</div>
-                <div className="mt-1 text-xs text-slate-500">Create a work order to track repairs, costs, documents, and accounting review.</div>
+                <div className="font-medium text-slate-900">{queuePresentation.emptyTitle}</div>
+                <div className="mt-1 text-xs text-slate-500">{queuePresentation.emptyDetail}</div>
               </div>
             )}
             {queueWorkOrders.map((workOrder) => {
@@ -732,18 +814,18 @@ export function MaintenanceWorkspace({
               );
             })}
           </div>
-        </div>
+        </div> : null}
 
-        <div className="grid gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
-          <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
+        <div className="space-y-3">
+          {workspaceMode === "cleanup" ? <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2">
                 <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700">
                   <Wrench className="h-4 w-4" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Maintenance Review Status</div>
-                  <div className="mt-1 text-xs text-slate-600">Cleanup grouped for Review Center.</div>
+                  <div className="text-sm font-semibold text-slate-900">Cleanup status</div>
+                  <div className="mt-1 text-xs text-slate-600">Resolve details here or use Work Queue for guided cleanup.</div>
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -751,7 +833,7 @@ export function MaintenanceWorkspace({
                   {cleanupCounts.total} cleanup items
                 </Badge>
                 <Button size="sm" variant={cleanupCounts.total > 0 ? "default" : "secondary"} onClick={openReviewCenter}>
-                  Open Review Center
+                  Open Work Queue
                 </Button>
               </div>
             </div>
@@ -783,9 +865,9 @@ export function MaintenanceWorkspace({
                 />
               </div>
             )}
-          </div>
+          </div> : null}
 
-          <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
+          {workspaceMode === "vendors" ? <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2">
                 <Users className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
@@ -894,10 +976,10 @@ export function MaintenanceWorkspace({
               </div>
             </div>
             )}
-          </div>
+          </div> : null}
         </div>
 
-        <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
+        {workspaceMode === "history" ? <div className={`${WORKSPACE_PANEL_CLASS} p-3`}>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex min-w-0 items-start gap-2">
               <BarChart3 className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
@@ -954,7 +1036,7 @@ export function MaintenanceWorkspace({
               </tbody>
             </table>
           </ResponsiveTableFrame>
-        </div>
+        </div> : null}
       </CardContent>
     </Card>
   );

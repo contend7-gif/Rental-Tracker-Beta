@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertTriangle, ClipboardCheck, Landmark, ReceiptText, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, Building2, ClipboardCheck, Landmark, ReceiptText, Settings2, ShieldCheck, X } from "lucide-react";
 import {
   deriveLoanBalanceFromPayments,
   formatLoanPaymentDraftTotal,
@@ -14,7 +14,7 @@ import {
 import { LoanCardsPanel } from "./LoanCardsPanel.jsx";
 import { LoanPaymentEntryPanel } from "./LoanPaymentEntryPanel.jsx";
 import { LoanPropertySummaryPanel } from "./LoanPropertySummaryPanel.jsx";
-import { combinedLtvPresentation, loanReviewSummary } from "./loanWorkspacePresentation.js";
+import { buildLoanWorkspaceModes, combinedLtvPresentation, loanReviewSummary } from "./loanWorkspacePresentation.js";
 
 function sumVisibleLoanValues({ visibleLoans, observedLoanDefaultsById, loanPayments, leases, units, usePeriods, asOfDate }) {
   return visibleLoans.reduce((summary, loan) => {
@@ -55,6 +55,13 @@ function cleanupGroups(loanReviewInbox) {
   ];
 }
 
+const loanWorkspaceModeIcons = {
+  overview: Landmark,
+  payments: ReceiptText,
+  tax: ShieldCheck,
+  details: Settings2,
+};
+
 export function LoansWorkspace({
   cancelLoanPaymentEdit,
   currency,
@@ -92,6 +99,7 @@ export function LoansWorkspace({
   yearFilter,
   yearScopedLoanPayments,
 }) {
+  const [workspaceMode, setWorkspaceMode] = useState("overview");
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
   const inboxReviewCount = loanReviewInbox?.counts?.total || 0;
   const debtTotals = useMemo(
@@ -121,21 +129,29 @@ export function LoansWorkspace({
     () => yearScopedLoanPayments
       .filter((payment) => !recurringThroughDate || String(payment.paymentDate || "").slice(0, 10) <= recurringThroughDate)
       .reduce((summary, payment) => {
+        summary.paymentCount += 1;
         summary.interest += Number(payment.interest || 0);
         summary.deductibleInterest += Number(effectiveLoanPaymentDeductibleInterest(payment) || 0);
+        summary.principal += Number(payment.principal || 0);
+        summary.extraPrincipal += Number(payment.extraPrincipal || 0);
         summary.escrow += Number(payment.escrow || 0);
         summary.pmi += Number(payment.mortgageInsurance || 0);
+        summary.total += Number(payment.totalPayment || 0);
         return summary;
-      }, { interest: 0, deductibleInterest: 0, escrow: 0, pmi: 0 }),
+      }, { paymentCount: 0, interest: 0, deductibleInterest: 0, principal: 0, extraPrincipal: 0, escrow: 0, pmi: 0, total: 0 }),
     [effectiveLoanPaymentDeductibleInterest, recurringThroughDate, yearScopedLoanPayments],
   );
 
   useEffect(() => {
-    if (editingLoanPaymentId) setPaymentPanelOpen(true);
+    if (editingLoanPaymentId) {
+      setWorkspaceMode("payments");
+      setPaymentPanelOpen(true);
+    }
   }, [editingLoanPaymentId]);
 
   const openPaymentForLoan = (loan) => {
     resetLoanPaymentDraftForLoan(loan);
+    setWorkspaceMode("payments");
     setPaymentPanelOpen(true);
   };
 
@@ -144,29 +160,82 @@ export function LoansWorkspace({
     setPaymentPanelOpen(false);
   };
 
-  const summaryItems = [
-    { label: "Total loan balance", value: currency(debtTotals.balance), helper: "Current balance", icon: Landmark },
-    { label: "Scheduled monthly outlay", value: currency(debtTotals.outlay), helper: "Current schedule", icon: ReceiptText },
-    { label: `${yearFilter} interest`, value: currency(selectedYearLoanSummary.interest), helper: "Recorded in selected year", icon: ReceiptText },
-    { label: "Deductible interest", value: currency(selectedYearLoanSummary.deductibleInterest), helper: "Tax-deductible estimate", icon: ShieldCheck },
-    { label: "Escrow & PMI", value: currency(selectedYearLoanSummary.escrow + selectedYearLoanSummary.pmi), helper: "Selected-year total", icon: ClipboardCheck },
-    {
-      label: "Combined LTV",
-      value: combinedLtv.value == null ? "Add valuation" : `${combinedLtv.value.toFixed(1)}%`,
-      helper: combinedLtv.helper,
-      icon: Landmark,
-    },
-  ];
+  const workspaceModes = buildLoanWorkspaceModes({
+    loanCount: visibleLoans.length,
+    paymentCount: selectedYearLoanSummary.paymentCount,
+    reviewCount: loanReviewCount,
+  });
+  const summaryByMode = {
+    overview: [
+      { label: "Total loan balance", value: currency(debtTotals.balance), helper: "Current balance", icon: Landmark },
+      { label: "Scheduled monthly outlay", value: currency(debtTotals.outlay), helper: "Current schedule", icon: ReceiptText },
+      {
+        label: "Combined LTV",
+        value: combinedLtv.value == null ? "Add valuation" : `${combinedLtv.value.toFixed(1)}%`,
+        helper: combinedLtv.helper,
+        icon: Building2,
+      },
+      { label: "Loans in scope", value: String(visibleLoans.length), helper: "Across selected properties", icon: Landmark },
+    ],
+    payments: [
+      { label: "Scheduled monthly outlay", value: currency(debtTotals.outlay), helper: "Current schedule", icon: ReceiptText },
+      { label: `${yearFilter} payments`, value: currency(selectedYearLoanSummary.total), helper: `${selectedYearLoanSummary.paymentCount} recorded`, icon: ClipboardCheck },
+      { label: "Principal paid", value: currency(selectedYearLoanSummary.principal + selectedYearLoanSummary.extraPrincipal), helper: "Regular and extra principal", icon: Landmark },
+      { label: "Interest paid", value: currency(selectedYearLoanSummary.interest), helper: "Recorded in selected year", icon: ReceiptText },
+    ],
+    tax: [
+      { label: `${yearFilter} interest`, value: currency(selectedYearLoanSummary.interest), helper: "Recorded interest", icon: ReceiptText },
+      { label: "Deductible interest", value: currency(selectedYearLoanSummary.deductibleInterest), helper: "Tax-deductible estimate", icon: ShieldCheck },
+      { label: "Escrow paid", value: currency(selectedYearLoanSummary.escrow), helper: "Selected-year deposits", icon: ClipboardCheck },
+      { label: "PMI paid", value: currency(selectedYearLoanSummary.pmi), helper: "Selected-year mortgage insurance", icon: ShieldCheck },
+    ],
+    details: [
+      { label: "Loans in scope", value: String(visibleLoans.length), helper: "Loan records", icon: Landmark },
+      { label: "Current balance", value: currency(debtTotals.balance), helper: "Across visible loans", icon: Landmark },
+      { label: "Balance reviews", value: String(debtTotals.balanceReviewLoanIds.length), helper: debtTotals.balanceReviewLoanIds.length ? "Needs attention" : "Balances aligned", icon: ClipboardCheck },
+      { label: "Property valuations", value: String(loanPropertySummaries.length), helper: "Used for leverage", icon: Building2 },
+    ],
+  };
+  const summaryItems = summaryByMode[workspaceMode] || summaryByMode.overview;
+  const summaryHeading = {
+    overview: "Debt overview",
+    payments: "Payment activity",
+    tax: `${yearFilter} tax and escrow totals`,
+    details: "Loan record status",
+  }[workspaceMode];
 
   return (
     <div className="space-y-4">
+      <div role="tablist" aria-label="Loan workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {workspaceModes.map((mode) => {
+          const modeSelected = workspaceMode === mode.key;
+          const ModeIcon = loanWorkspaceModeIcons[mode.key] || Landmark;
+          return (
+            <button
+              key={`loan-mode-${mode.key}`}
+              type="button"
+              role="tab"
+              aria-selected={modeSelected}
+              className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/60"}`}
+              onClick={() => setWorkspaceMode(mode.key)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
+              </div>
+              <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+            </button>
+          );
+        })}
+      </div>
+
       <section aria-labelledby="debt-summary-title">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <h2 id="debt-summary-title" className="text-base font-semibold text-slate-950">Debt summary</h2>
+            <h2 id="debt-summary-title" className="text-base font-semibold text-slate-950">{summaryHeading}</h2>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {summaryItems.map(({ label, value, helper, icon: Icon }) => (
             <Card key={label} className="shadow-none">
               <CardContent className="flex min-h-28 items-start gap-3 !px-4 !py-4">
@@ -182,43 +251,43 @@ export function LoansWorkspace({
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,.9fr)_minmax(0,1.1fr)] lg:items-stretch">
-        <Card className="h-full shadow-none">
-          <CardContent className="flex h-full flex-col !p-4">
-            <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              {loanReviewCount > 0 ? <AlertTriangle className="h-4 w-4 text-amber-600" /> : <ShieldCheck className="h-4 w-4 text-emerald-600" />}
-              <h2 className="font-semibold text-slate-950">Loan review status</h2>
-              <Badge className={loanReviewCount > 0 ? "!bg-amber-100 !text-amber-800" : "!bg-emerald-100 !text-emerald-700"}>
-                {reviewSummary.badge}
-              </Badge>
-            </div>
-            <p className="mt-1 text-sm font-medium text-slate-700">{reviewSummary.headline}</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {reviewGroups.map((group) => (
-                <div key={group.label} className="flex items-center justify-between rounded-md border border-slate-200 px-2.5 py-2 text-xs">
-                  <span className="text-slate-600">{group.label}</span>
-                  <span className={group.count ? "font-semibold text-amber-700" : "font-medium text-emerald-700"}>{group.count ? `Needs review - ${group.count}` : "Ready"}</span>
-                </div>
-              ))}
-            </div>
+      {workspaceMode === "tax" && <Card className="shadow-none">
+        <CardContent className="flex h-full flex-col !p-4">
+          <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            {loanReviewCount > 0 ? <AlertTriangle className="h-4 w-4 text-amber-600" /> : <ShieldCheck className="h-4 w-4 text-emerald-600" />}
+            <h2 className="font-semibold text-slate-950">Loan review status</h2>
+            <Badge className={loanReviewCount > 0 ? "!bg-amber-100 !text-amber-800" : "!bg-emerald-100 !text-emerald-700"}>
+              {reviewSummary.badge}
+            </Badge>
           </div>
-          <div className="mt-auto flex items-center justify-end gap-2 pt-4">
-            <Button size="sm" variant={loanReviewCount > 0 ? "default" : "secondary"} onClick={openReviewCenter}>Open Review Center</Button>
+          <p className="mt-1 text-sm font-medium text-slate-700">{reviewSummary.headline}</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            {reviewGroups.map((group) => (
+              <div key={group.label} className="flex items-center justify-between rounded-md border border-slate-200 px-2.5 py-2 text-xs">
+                <span className="text-slate-600">{group.label}</span>
+                <span className={group.count ? "font-semibold text-amber-700" : "font-medium text-emerald-700"}>{group.count ? `Needs review - ${group.count}` : "Ready"}</span>
+              </div>
+            ))}
           </div>
-          </CardContent>
-        </Card>
+        </div>
+        <div className="mt-auto flex items-center justify-end gap-2 pt-4">
+          <Button size="sm" variant={loanReviewCount > 0 ? "default" : "secondary"} onClick={openReviewCenter}>Open Work Queue</Button>
+        </div>
+        </CardContent>
+      </Card>}
 
+      {workspaceMode === "overview" && (
         <LoanPropertySummaryPanel
           balanceByPropertyId={debtTotals.balanceByPropertyId}
           currency={currency}
           loanPropertySummaries={loanPropertySummaries}
           openPropertyValuation={openPropertyValuation}
         />
-      </div>
+      )}
 
-      {paymentPanelOpen && (
-        <Card className="shadow-none">
+      {workspaceMode === "payments" && paymentPanelOpen && (
+        <Card className="h-full shadow-none">
           <CardHeader className="flex-row items-center justify-between border-b border-slate-200 py-3">
             <CardTitle className="text-base">{editingLoanPaymentId ? "Edit loan payment" : "Record loan payment"}</CardTitle>
             <Button size="icon" variant="ghost" onClick={closePaymentPanel} title="Close payment form"><X className="h-4 w-4" /></Button>
@@ -272,6 +341,8 @@ export function LoansWorkspace({
         visibleLoans={visibleLoans}
         yearFilter={yearFilter}
         yearScopedLoanPayments={yearScopedLoanPayments}
+        workspaceMode={workspaceMode}
+        onOpenWorkspaceMode={setWorkspaceMode}
       />
 
     </div>

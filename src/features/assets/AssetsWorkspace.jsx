@@ -19,6 +19,7 @@ import {
   assetSourceTransactionIds,
   buildAssetReviewGroups,
   buildAssetSummary,
+  buildAssetWorkspaceModes,
   getAssetSourceStatus,
 } from "./assetWorkspacePresentation.js";
 
@@ -134,6 +135,7 @@ function AssetDetails({
   units,
   usePeriods,
   workOrderById,
+  workspaceMode,
 }) {
   const sourceTransactionIds = assetSourceTransactionIds(asset);
   const sourceWorkOrder = asset.sourceWorkOrderId ? workOrderById?.[asset.sourceWorkOrderId] : null;
@@ -151,8 +153,8 @@ function AssetDetails({
 
   return (
     <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-4">
-      <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr]">
-        <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <div className={`grid gap-3 ${workspaceMode === "cleanup" ? "lg:grid-cols-2" : ""}`}>
+        <div className={`rounded-lg border border-slate-200 bg-white p-3 ${workspaceMode === "schedules" ? "" : "hidden"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-xs font-semibold uppercase text-slate-500">Selected-year depreciation</div>
@@ -182,8 +184,8 @@ function AssetDetails({
             </table>
           </div>
         </div>
-        <div className="space-y-3">
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className={`space-y-3 ${workspaceMode === "schedules" ? "hidden" : ""}`}>
+          <div className={`rounded-lg border border-slate-200 bg-white p-3 ${workspaceMode === "register" ? "" : "hidden"}`}>
             <div className="text-sm font-semibold text-slate-900">Basis and tax treatment</div>
             <div className="mt-1 text-xs text-slate-500">Depreciable basis excludes land and other nondepreciable amounts.</div>
             <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
@@ -206,7 +208,7 @@ function AssetDetails({
             </div>
             {asset.assetReviewNotes ? <div className="mt-2 text-xs text-slate-500">Notes: {asset.assetReviewNotes}</div> : null}
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className={`rounded-lg border border-slate-200 bg-white p-3 ${workspaceMode === "cleanup" ? "" : "hidden"}`}>
             <div className="text-sm font-semibold text-slate-900">{sourceRecordCount === 1 ? "Source record" : "Source records"}</div>
             {sourceRecordCount > 1 ? <div className="mt-1 text-xs text-slate-500">{sourceRecordCount} source records linked</div> : null}
             <div className="mt-2 flex flex-wrap gap-2">
@@ -241,7 +243,7 @@ function AssetDetails({
               ) : null}
             </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-3">
+          <div className={`rounded-lg border border-slate-200 bg-white p-3 ${workspaceMode === "cleanup" ? "" : "hidden"}`}>
             <div className="text-sm font-semibold text-slate-900">Review issues</div>
             {assetIssues.length ? (
               <div className="mt-2 space-y-2">
@@ -288,6 +290,7 @@ function AssetRollRow({
   units,
   usePeriods,
   workOrderById,
+  workspaceMode,
 }) {
   const currentYearDep = adjustedAssetDepreciationForYear({ asset, year: selectedYearNum, usePeriods, leases, units });
   const readinessStatus = assetReadiness.key === "not_current_year" ? { key: "optional", label: assetReadiness.label } : assetReadiness;
@@ -299,13 +302,13 @@ function AssetRollRow({
         <div className="min-w-0">
           <button
             type="button"
-            className="flex min-w-0 items-center gap-2 text-left"
+            className="flex w-full min-w-0 items-center gap-2 text-left"
             onClick={onToggle}
             onMouseEnter={prefetchAssetEditorDialog}
             onFocus={prefetchAssetEditorDialog}
           >
             {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" /> : <ChevronRight className="h-4 w-4 shrink-0 text-slate-500" />}
-            <span className="min-w-0">
+            <span className="min-w-0 flex-1 overflow-hidden">
               <span className="rt-row-title block truncate" title={asset.description}>{asset.description || "Untitled asset"}</span>
               <span className="mt-0.5 block text-xs text-slate-500">{property?.name || "Unassigned property"} | {formatScope(asset)}</span>
             </span>
@@ -325,19 +328,25 @@ function AssetRollRow({
         </div>
         <div className="flex flex-wrap items-center gap-2 xl:justify-end">
           <Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={onToggle}>
-            {isExpanded ? "Hide details" : "View details"}
+            {workspaceMode === "schedules"
+              ? (isExpanded ? "Hide schedule" : "View schedule")
+              : workspaceMode === "cleanup"
+                ? (isExpanded ? "Hide review" : "Review asset")
+                : (isExpanded ? "Hide details" : "View details")}
           </Button>
-          <Button
-            size="sm"
-            className="whitespace-nowrap"
-            onClick={(event) => { event.stopPropagation(); openAssetEditor(asset); }}
-            onMouseEnter={prefetchAssetEditorDialog}
-            onFocus={prefetchAssetEditorDialog}
-            onTouchStart={prefetchAssetEditorDialog}
-          >
-            <Pencil className="h-4 w-4" />
-            Edit
-          </Button>
+          {workspaceMode !== "schedules" ? (
+            <Button
+              size="sm"
+              className="whitespace-nowrap"
+              onClick={(event) => { event.stopPropagation(); openAssetEditor(asset); }}
+              onMouseEnter={prefetchAssetEditorDialog}
+              onFocus={prefetchAssetEditorDialog}
+              onTouchStart={prefetchAssetEditorDialog}
+            >
+              <Pencil className="h-4 w-4" />
+              Edit
+            </Button>
+          ) : null}
         </div>
       </div>
       {isExpanded ? (
@@ -358,6 +367,7 @@ function AssetRollRow({
           units={units}
           usePeriods={usePeriods}
           workOrderById={workOrderById}
+          workspaceMode={workspaceMode}
         />
       ) : null}
     </div>
@@ -385,8 +395,8 @@ export function AssetsWorkspace({
   yearFilter,
   workOrderById,
 }) {
+  const [workspaceMode, setWorkspaceMode] = useState("overview");
   const [expandedAssetIds, setExpandedAssetIds] = useState(() => new Set());
-  const [autoExpandedAssetId, setAutoExpandedAssetId] = useState("");
   const selectedYearNum = Number(yearFilter);
   const visibleProperties = propertyFilter === "all"
     ? properties
@@ -433,26 +443,70 @@ export function AssetsWorkspace({
     missingSourceCount,
     needsReviewCount: summary.needsReviewCount,
   });
-  const assetCleanupCount = (assetReviewInbox?.transactionCandidates?.length || 0) + (assetReviewInbox?.assetRecords?.length || 0) + missingSourceCount;
-  const initialExpandedAssetId = useMemo(() => {
-    const issueRow = assetRows.find((row) => row.issues.length > 0 || row.sourceStatus.key === "missing_source");
-    return (issueRow || assetRows[0])?.asset?.id || "";
-  }, [assetRows]);
+  const cleanupAssetRows = useMemo(() => assetRows.filter((row) => (
+    row.issues.length > 0 || row.sourceStatus.key === "missing_source"
+  )), [assetRows]);
+  const candidateCount = assetReviewInbox?.transactionCandidates?.length || 0;
+  const assetCleanupCount = candidateCount + cleanupAssetRows.length;
+  const displayedAssetRows = workspaceMode === "cleanup" ? cleanupAssetRows : assetRows;
+  const workspaceModes = buildAssetWorkspaceModes({
+    assetCount: summary.assetCount,
+    cleanupCount: assetCleanupCount,
+    year: selectedYearNum,
+  });
+  const scheduleExpandedAssetId = assetRows[0]?.asset?.id || "";
+  const cleanupExpandedAssetId = cleanupAssetRows[0]?.asset?.id || "";
+  const summaryByMode = {
+    overview: [
+      { icon: Boxes, label: "Total asset cost", value: compactCurrency(summary.totalCost), helper: "Selected scope" },
+      { icon: ReceiptText, label: "Depreciable basis", value: compactCurrency(summary.totalBasis), helper: "Cost less land and nondepreciable amounts" },
+      { icon: CalendarDays, label: `${selectedYearNum} depreciation`, value: compactCurrency(summary.selectedYearDepreciation), helper: "Adjusted for rental use" },
+      { icon: ClipboardCheck, label: "Tax ready", value: `${Math.max(0, summary.assetCount - summary.needsReviewCount)} of ${summary.assetCount}`, helper: "Assets without open review" },
+    ],
+    register: [
+      { icon: Boxes, label: "Assets in scope", value: summary.assetCount, helper: "Depreciation records" },
+      { icon: Boxes, label: "Total asset cost", value: compactCurrency(summary.totalCost), helper: "Recorded acquisition and improvement cost" },
+      { icon: ReceiptText, label: "Depreciable basis", value: compactCurrency(summary.totalBasis), helper: "Current recorded basis" },
+      { icon: Link2, label: "Source linked", value: `${summary.sourceLinkedCount} of ${summary.assetCount}`, helper: "Assets with source support" },
+    ],
+    schedules: [
+      { icon: CalendarDays, label: `${selectedYearNum} depreciation`, value: compactCurrency(summary.selectedYearDepreciation), helper: "Selected tax year" },
+      { icon: ReceiptText, label: "Depreciable basis", value: compactCurrency(summary.totalBasis), helper: "Across scheduled assets" },
+      { icon: Boxes, label: "Scheduled assets", value: summary.assetCount, helper: "Assets in selected scope" },
+      { icon: ClipboardCheck, label: "Calculation review", value: calculationIssueCount, helper: calculationIssueCount ? "Warnings need attention" : "No calculation warnings" },
+    ],
+    cleanup: [
+      { icon: FileWarning, label: "Cleanup items", value: assetCleanupCount, helper: assetCleanupCount ? "Assets and candidates needing attention" : "No open cleanup" },
+      { icon: FileWarning, label: "Calculation warnings", value: calculationIssueCount, helper: calculationIssueCount ? "Review basis and tax treatment" : "No calculation warnings" },
+      { icon: Link2, label: "Missing sources", value: missingSourceCount, helper: missingSourceCount ? "Link supporting records" : "Sources complete" },
+      { icon: ReceiptText, label: "Capital candidates", value: candidateCount, helper: candidateCount ? "Review in the Work Queue" : "No unclassified candidates" },
+    ],
+  };
+  const summaryItems = summaryByMode[workspaceMode] || summaryByMode.overview;
+  const summaryHeading = {
+    overview: "Depreciation overview",
+    register: "Asset register status",
+    schedules: `${selectedYearNum} schedule status`,
+    cleanup: "Cleanup status",
+  }[workspaceMode];
   const assetRowsByPropertyId = useMemo(() => {
     const rowsByProperty = new Map();
-    assetRows.forEach((row) => {
+    displayedAssetRows.forEach((row) => {
       const propertyRows = rowsByProperty.get(row.asset.propertyId) || [];
       propertyRows.push(row);
       rowsByProperty.set(row.asset.propertyId, propertyRows);
     });
     return rowsByProperty;
-  }, [assetRows]);
+  }, [displayedAssetRows]);
 
   useEffect(() => {
-    if (!initialExpandedAssetId || autoExpandedAssetId === initialExpandedAssetId) return;
-    setAutoExpandedAssetId(initialExpandedAssetId);
-    setExpandedAssetIds(new Set([initialExpandedAssetId]));
-  }, [autoExpandedAssetId, initialExpandedAssetId]);
+    const expandedAssetId = workspaceMode === "schedules"
+      ? scheduleExpandedAssetId
+      : workspaceMode === "cleanup"
+        ? cleanupExpandedAssetId
+        : "";
+    setExpandedAssetIds(expandedAssetId ? new Set([expandedAssetId]) : new Set());
+  }, [cleanupExpandedAssetId, scheduleExpandedAssetId, workspaceMode]);
 
   const toggleAsset = (assetId) => {
     setExpandedAssetIds((current) => {
@@ -461,118 +515,195 @@ export function AssetsWorkspace({
     });
   };
 
+  const rollProperties = workspaceMode === "cleanup"
+    ? visibleProperties.filter((property) => assetRowsByPropertyId.has(property.id))
+    : visibleProperties;
+  const rollHeading = workspaceMode === "register"
+    ? "Asset register"
+    : workspaceMode === "schedules"
+      ? "Depreciation schedules"
+      : "Assets needing cleanup";
+  const emptyRollMessage = workspaceMode === "cleanup"
+    ? "No asset records need cleanup in this scope. Capital-improvement candidates, if any, remain in the Work Queue."
+    : "No depreciation assets yet. Add a building basis or capital improvement.";
+
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden shadow-none">
-        <CardContent className="space-y-3 !p-4">
-          <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
-            <SummaryCard icon={Boxes} label="Total asset cost" value={compactCurrency(summary.totalCost)} helper="Selected scope" />
-            <SummaryCard icon={ReceiptText} label="Depreciable basis" value={compactCurrency(summary.totalBasis)} helper="Cost less land/nondepreciable amounts" />
-            <SummaryCard icon={CalendarDays} label={`${selectedYearNum} depreciation`} value={compactCurrency(summary.selectedYearDepreciation)} helper="Adjusted for rental use" />
-            <SummaryCard icon={Boxes} label="Asset count" value={summary.assetCount} helper="Depreciation records" accent="slate" />
+      <div role="tablist" aria-label="Depreciation workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {workspaceModes.map((mode) => {
+          const modeSelected = workspaceMode === mode.key;
+          const ModeIcon = mode.key === "overview"
+            ? Boxes
+            : mode.key === "register"
+              ? ReceiptText
+              : mode.key === "schedules"
+                ? CalendarDays
+                : ClipboardCheck;
+          return (
+            <button
+              key={`asset-mode-${mode.key}`}
+              type="button"
+              role="tab"
+              aria-selected={modeSelected}
+              className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/60"}`}
+              onClick={() => setWorkspaceMode(mode.key)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
+              </div>
+              <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      <section aria-labelledby="asset-summary-title">
+        <h2 id="asset-summary-title" className="mb-2 text-base font-semibold text-slate-950">{summaryHeading}</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryItems.map((item) => (
             <SummaryCard
-              icon={FileWarning}
-              label="Needs review"
-              value={summary.needsReviewCount}
-              helper={needsReviewSummary}
-              accent={summary.needsReviewCount ? "amber" : "teal"}
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              value={item.value}
+              helper={item.helper}
+              accent={(workspaceMode === "cleanup" && Number(item.value) > 0) ? "amber" : "teal"}
             />
-            <SummaryCard icon={Link2} label="Source-linked" value={`${summary.sourceLinkedCount} of ${summary.assetCount}`} helper="Assets with source support" />
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+          ))}
+        </div>
+      </section>
+
+      {workspaceMode === "overview" ? (
+        <Card className="shadow-none">
+          <CardHeader className="border-b border-slate-200 bg-white">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Depreciation readiness</CardTitle>
+                <p className="mt-1 text-sm text-slate-500">A concise view of whether the asset records support the selected tax year.</p>
+              </div>
+              <Badge variant={assetCleanupCount ? "default" : "secondary"}>{assetCleanupCount ? `${assetCleanupCount} open` : "Ready"}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="!p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold uppercase text-slate-500">Asset records</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{summary.assetCount} in selected scope</div>
+                <div className="mt-1 text-xs text-slate-500">Maintain cost, basis, life, and placed-in-service details in Asset register.</div>
+                <Button size="sm" variant="secondary" className="mt-3" onClick={() => setWorkspaceMode("register")}>Open Asset register</Button>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold uppercase text-slate-500">Tax schedule</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{compactCurrency(summary.selectedYearDepreciation)} for {selectedYearNum}</div>
+                <div className="mt-1 text-xs text-slate-500">Review each asset's prior, selected, and future depreciation years.</div>
+                <Button size="sm" variant="secondary" className="mt-3" onClick={() => setWorkspaceMode("schedules")}>Open Schedules</Button>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold uppercase text-slate-500">Documentation</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{needsReviewSummary}</div>
+                <div className="mt-1 text-xs text-slate-500">Resolve source links and calculation warnings without mixing them into everyday asset editing.</div>
+                <Button size="sm" variant={assetCleanupCount ? "default" : "secondary"} className="mt-3" onClick={() => setWorkspaceMode("cleanup")}>Open Cleanup & sources</Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {workspaceMode === "cleanup" ? (
+        <Card className="shadow-none">
+          <CardContent className="!p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex min-w-0 items-start gap-2">
                 <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" aria-hidden="true" />
-                <div className="min-w-0">
-                  <div className="text-sm font-semibold text-slate-900">Asset review status</div>
-                  <div className="mt-1 text-xs text-slate-600">Calculation issues and missing source documentation stay actionable in Review Center.</div>
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">Asset cleanup and sources</h2>
+                  <p className="mt-1 text-xs text-slate-600">Calculation issues and missing documentation stay actionable here and in the Work Queue.</p>
                 </div>
               </div>
-              <div className="text-right">
-              <div className="text-base font-semibold text-slate-950">{assetCleanupCount}</div>
-              <div className="text-xs text-slate-500">{assetCleanupCount ? "cleanup items" : "calculation issues"}</div>
+              <Button size="sm" variant={assetCleanupCount ? "default" : "secondary"} onClick={openReviewCenter}>Open Work Queue</Button>
             </div>
-            <Button size="sm" variant={assetCleanupCount > 0 ? "default" : "secondary"} onClick={openReviewCenter}>
-              Open Review Center
-            </Button>
-          </div>
-            <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {reviewGroups.map((group) => (
-                <div key={group.key} className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-1.5">
+                <div key={group.key} className="flex items-center justify-between rounded-md border border-slate-200 bg-white px-2.5 py-2">
                   <span className="text-xs text-slate-700">{group.label}</span>
                   <span className={`text-xs font-semibold ${reviewGroupClass(group)}`}>{group.key === "ready_assets" ? group.count : group.count || group.status}</span>
                 </div>
               ))}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      <Card className="overflow-hidden shadow-none">
-        <CardHeader className="border-b border-slate-200 bg-white">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>Depreciation asset roll</CardTitle>
-            </div>
-            <Badge variant="secondary">{assetRows.length} assets in scope</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {visibleProperties.map((property) => {
-            const propertyRows = assetRowsByPropertyId.get(property.id) || [];
-            const showPropertyGroup = propertyFilter === "all";
-            return (
-              <div key={property.id} className="border-b border-slate-200 last:border-b-0">
-                {showPropertyGroup ? (
-                  <div className="flex items-center justify-between bg-slate-50/80 px-4 py-2">
-                    <div>
-                      <div className="font-semibold text-slate-900">{property.name}</div>
-                      <div className="text-xs text-slate-500">{property.address}</div>
-                    </div>
-                    <Badge variant="secondary">{propertyRows.length} assets</Badge>
-                  </div>
-                ) : null}
-                {propertyRows.length ? (
-                  <div className="divide-y divide-slate-200">
-                    {propertyRows.map(({ asset, issues, readiness, sourceStatus }) => (
-                      <AssetRollRow
-                        key={asset.id}
-                        adjustedAssetDepreciationForYear={adjustedAssetDepreciationForYear}
-                        asset={asset}
-                        assetIssues={issues}
-                        assetReadiness={readiness}
-                        assetSchedule={assetSchedule}
-                        currency={currency}
-                        isExpanded={expandedAssetIds.has(asset.id)}
-                        leases={leases}
-                        normalizeBonusRate={normalizeBonusRate}
-                        onToggle={() => toggleAsset(asset.id)}
-                        openAssetEditor={openAssetEditor}
-                        openAssetSourceTransaction={openAssetSourceTransaction}
-                        openAssetSourceWorkOrder={openAssetSourceWorkOrder}
-                        openReviewCenter={openReviewCenter}
-                        prefetchAssetEditorDialog={prefetchAssetEditorDialog}
-                        property={propertyById[asset.propertyId]}
-                        selectedYearNum={selectedYearNum}
-                        sourceStatus={sourceStatus}
-                        transactionById={transactionById}
-                        units={units}
-                        usePeriods={usePeriods}
-                        workOrderById={workOrderById}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="px-4 py-6 text-sm text-slate-500">No depreciation assets yet. Add a building basis or capital improvement.</div>
-                )}
+      {workspaceMode !== "overview" ? (
+        <Card className="overflow-hidden shadow-none">
+          <CardHeader className="border-b border-slate-200 bg-white">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>{rollHeading}</CardTitle>
+                <p className="mt-1 text-sm text-slate-500">
+                  {workspaceMode === "register" ? "Edit the authoritative asset record." : workspaceMode === "schedules" ? "Expand an asset to inspect its depreciation schedule." : "Only asset records needing attention appear below."}
+                </p>
               </div>
-            );
-          })}
-          {!visibleProperties.length ? (
-            <div className="px-4 py-6 text-sm text-slate-500">No property is available for this asset scope.</div>
-          ) : null}
-        </CardContent>
-      </Card>
+              <Badge variant="secondary">{pluralize(displayedAssetRows.length, "asset")} in scope</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {rollProperties.map((property) => {
+              const propertyRows = assetRowsByPropertyId.get(property.id) || [];
+              const showPropertyGroup = propertyFilter === "all";
+              return (
+                <div key={property.id} className="border-b border-slate-200 last:border-b-0">
+                  {showPropertyGroup ? (
+                    <div className="flex items-center justify-between bg-slate-50/80 px-4 py-2">
+                      <div>
+                        <div className="font-semibold text-slate-900">{property.name}</div>
+                        <div className="text-xs text-slate-500">{property.address}</div>
+                      </div>
+                      <Badge variant="secondary">{pluralize(propertyRows.length, "asset")}</Badge>
+                    </div>
+                  ) : null}
+                  {propertyRows.length ? (
+                    <div className="divide-y divide-slate-200">
+                      {propertyRows.map(({ asset, issues, readiness, sourceStatus }) => (
+                        <AssetRollRow
+                          key={asset.id}
+                          adjustedAssetDepreciationForYear={adjustedAssetDepreciationForYear}
+                          asset={asset}
+                          assetIssues={issues}
+                          assetReadiness={readiness}
+                          assetSchedule={assetSchedule}
+                          currency={currency}
+                          isExpanded={expandedAssetIds.has(asset.id)}
+                          leases={leases}
+                          normalizeBonusRate={normalizeBonusRate}
+                          onToggle={() => toggleAsset(asset.id)}
+                          openAssetEditor={openAssetEditor}
+                          openAssetSourceTransaction={openAssetSourceTransaction}
+                          openAssetSourceWorkOrder={openAssetSourceWorkOrder}
+                          openReviewCenter={openReviewCenter}
+                          prefetchAssetEditorDialog={prefetchAssetEditorDialog}
+                          property={propertyById[asset.propertyId]}
+                          selectedYearNum={selectedYearNum}
+                          sourceStatus={sourceStatus}
+                          transactionById={transactionById}
+                          units={units}
+                          usePeriods={usePeriods}
+                          workOrderById={workOrderById}
+                          workspaceMode={workspaceMode}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-4 py-6 text-sm text-slate-500">{emptyRollMessage}</div>
+                  )}
+                </div>
+              );
+            })}
+            {!rollProperties.length ? <div className="px-4 py-6 text-sm text-slate-500">{emptyRollMessage}</div> : null}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -66,7 +66,7 @@ import { formatPercentInput, formatUsPhone } from "./app/formatHelpers.js";
 import {
   leaseActualEndLabel,
 } from "./app/leaseShared.js";
-import { navItems, viewDetails } from "./app/navigationShared.js";
+import { navGroups, navItems, viewDetails } from "./app/navigationShared.js";
 import {
   likelyNextViewsByView,
   prefetchDialog,
@@ -143,6 +143,7 @@ const EMPTY_DOCUMENTS = [];
 export default function App() {
   const { appSettings, settingsSavedVisible, setSetting: persistSetting, setDashboardCardSetting: persistDashboardCardSetting, resetToDefaults: resetStoredSettings, replaceSettings } = useAppSettings();
   const [view, setView] = useState(() => appSettings.defaultView || "dashboard");
+  const [newWorkOrderRequestKey, setNewWorkOrderRequestKey] = useState(0);
   const runtimePerformanceMetrics = useRuntimePerformanceMetrics(view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => appSettings.sidebarCollapsedByDefault);
   const {
@@ -1919,14 +1920,18 @@ export default function App() {
   });
 
   const primaryAction = usePrimaryAction({
-    openDashboardQuickAdd,
+    openDocumentImportPicker,
     openNewLeaseForUnit,
     propertyFilter,
     setPropertyQuickAddOpen,
+    setView,
     startAddAsset,
     startAddLoan,
+    startNewWorkOrder: () => {
+      setNewWorkOrderRequestKey((key) => key + 1);
+      setView("maintenance");
+    },
     unitFilter,
-    view,
   });
 
   const appWorkspaceProps = {
@@ -2142,6 +2147,7 @@ export default function App() {
     maintenanceTotalCost,
     maintenanceVendors,
     maintenanceVisibleWorkOrders,
+    newWorkOrderRequestKey,
     markTransactionCapitalImprovement,
     markTransactionsTaxReviewed,
     markTransactionSupportUnavailable,
@@ -2663,7 +2669,7 @@ export default function App() {
       <div className={`mx-auto grid max-w-[1720px] grid-cols-[minmax(0,1fr)] gap-4 lg:items-start ${sidebarCollapsed ? "lg:grid-cols-[72px_1fr]" : "lg:grid-cols-[200px_1fr]"}`}>
         <AppSidebar
           currentView={currentView}
-          navItems={navItems}
+          navGroups={navGroups}
           prefetchWorkspace={prefetchWorkspace}
           properties={activeProperties}
           propertyFilter={propertyFilter}

@@ -28,12 +28,14 @@ function leaseIsActiveByDate(lease: Lease, dateStr: string) {
     return lease.actualEndDate >= dateStr;
   }
 
-  if (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm) {
+  if (leaseIsOpenEnded(lease)) {
     return true;
   }
 
   return lease.endDate >= dateStr;
 }
+
+import { leaseIsOpenEnded } from "./leaseTerms.js";
 
 function findMatchingUsePeriod(usePeriods: UsePeriod[], propertyId: string, unit: string, date: string) {
   return usePeriods

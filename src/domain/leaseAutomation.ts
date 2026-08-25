@@ -1,7 +1,13 @@
 import type { Lease, TenantLedgerEntry } from "../models.ts";
 import { buildTenantLedgerSummary } from "./tenantLedger.ts";
 import { normalizeTenantLedgerAccountingTreatment } from "./tenantLedgerPosting.ts";
-import { proratedRentForMonth30Day } from "./rentProration.js";
+import { rentAmountForLeasePayment } from "./rentProration.js";
+import {
+  leaseBillingAmount,
+  leaseBillingIntervalDays,
+  leaseIsOpenEnded,
+  normalizeLeaseBillingCadence,
+} from "./leaseTerms.js";
 import { formatUnitLabel } from "./unitLabels.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -135,7 +141,7 @@ function minDate(a: string, b: string) {
 }
 
 function isOpenEndedLease(lease: Lease) {
-  return lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm && !lease.actualEndDate;
+  return leaseIsOpenEnded(lease);
 }
 
 function leaseEndForSchedules(lease: Lease, todayIso: string) {
@@ -182,8 +188,33 @@ function listRentDueDatesThroughToday(lease: Lease, todayIso: string, config: Le
   if (!lease.startDate || !todayIso) return [];
   const effectiveEnd = minDate(todayIso, leaseEndForSchedules(lease, todayIso));
   const currentYearStart = `${todayIso.slice(0, 4)}-01-01`;
-  const effectiveStart = lease.startDate > currentYearStart ? lease.startDate : currentYearStart;
+  const cadence = normalizeLeaseBillingCadence(lease);
+  const firstDueDate = String(lease.firstRentDueDate || lease.startDate).slice(0, 10);
+  const scheduleStart = firstDueDate < lease.startDate ? firstDueDate : lease.startDate;
+  const effectiveStart = scheduleStart > currentYearStart ? scheduleStart : currentYearStart;
   if (effectiveStart > effectiveEnd) return [];
+
+  if (cadence === "full_term") {
+    return firstDueDate >= effectiveStart && firstDueDate <= effectiveEnd ? [firstDueDate] : [];
+  }
+
+  if (cadence !== "monthly") {
+    const intervalDays = leaseBillingIntervalDays(lease);
+    if (!intervalDays) return [];
+    const dueDates: string[] = [];
+    let dueDate = firstDueDate;
+    let guard = 0;
+    while (dueDate < effectiveStart && guard < 6000) {
+      dueDate = addDaysIso(dueDate, intervalDays);
+      guard += 1;
+    }
+    while (dueDate <= effectiveEnd && guard < 6000) {
+      if (dueDate >= lease.startDate) dueDates.push(dueDate);
+      dueDate = addDaysIso(dueDate, intervalDays);
+      guard += 1;
+    }
+    return dueDates;
+  }
 
   const dueDates: string[] = [];
   let cursor = monthStartIso(effectiveStart);
@@ -205,6 +236,27 @@ function listRentDueDatesThroughToday(lease: Lease, todayIso: string, config: Le
 function findNextDueDate(lease: Lease, todayIso: string, config: LeaseAutomationConfig) {
   if (!todayIso) return "";
   const reminderEnd = leaseEndForReminders(lease);
+  const cadence = normalizeLeaseBillingCadence(lease);
+  const firstDueDate = String(lease.firstRentDueDate || lease.startDate).slice(0, 10);
+
+  if (cadence === "full_term") {
+    if (firstDueDate < todayIso) return "";
+    return reminderEnd && firstDueDate > reminderEnd ? "" : firstDueDate;
+  }
+
+  if (cadence !== "monthly") {
+    const intervalDays = leaseBillingIntervalDays(lease);
+    if (!intervalDays) return "";
+    let dueDate = firstDueDate;
+    let guard = 0;
+    while (dueDate < todayIso && guard < 6000) {
+      dueDate = addDaysIso(dueDate, intervalDays);
+      guard += 1;
+    }
+    if (reminderEnd && dueDate > reminderEnd) return "";
+    return dueDate;
+  }
+
   let cursor = monthStartIso(todayIso);
 
   for (let idx = 0; idx < 36; idx += 1) {
@@ -259,14 +311,14 @@ export function buildLeaseAutomationPlan(args: {
 
   leases.forEach((lease) => {
     if (!lease?.id) return;
-    const monthlyRent = roundMoney(Math.max(0, Number(lease.monthlyRent || 0)));
-    if (monthlyRent <= 0) return;
+    const billingAmount = leaseBillingAmount(lease);
+    if (billingAmount <= 0) return;
 
     const config = resolveLeaseAutomationConfig(lease, args.defaults);
     const dueDates = listRentDueDatesThroughToday(lease, todayIso, config);
 
     dueDates.forEach((dueDate) => {
-      const scheduledRent = roundMoney(proratedRentForMonth30Day(lease, dueDate) ?? monthlyRent);
+      const scheduledRent = roundMoney(rentAmountForLeasePayment(lease, dueDate) ?? billingAmount);
       if (scheduledRent <= 0) return;
       const automationKey = rentChargeAutomationKey(lease.id, dueDate);
       const existing = existingByAutomationKey.get(automationKey);
@@ -303,8 +355,8 @@ export function buildLeaseAutomationPlan(args: {
 
   leases.forEach((lease) => {
     if (!lease?.id) return;
-    const monthlyRent = roundMoney(Math.max(0, Number(lease.monthlyRent || 0)));
-    if (monthlyRent <= 0) return;
+    const billingAmount = leaseBillingAmount(lease);
+    if (billingAmount <= 0) return;
     if (!lease.startDate || lease.startDate > todayIso) return;
 
     const config = resolveLeaseAutomationConfig(lease, args.defaults);
@@ -350,7 +402,7 @@ export function buildLeaseAutomationPlan(args: {
         const lateAutomationKey = lateFeeAutomationKey(lease.id, row.dueDate);
         if (existingByAutomationKey.has(lateAutomationKey)) return;
 
-        const monthlyRentValue = Number(row.chargeEntry.amount || monthlyRent);
+        const monthlyRentValue = Number(row.chargeEntry.amount || billingAmount);
         const lateAmount =
           row.config.lateFeeType === "percent"
             ? roundMoney((monthlyRentValue * row.config.lateFeeValue) / 100)
@@ -387,7 +439,7 @@ export function buildLeaseAutomationPlan(args: {
       kind,
       dueDate: nextDueDate,
       daysUntilDue,
-      amount: roundMoney(proratedRentForMonth30Day(lease, nextDueDate) ?? monthlyRent),
+      amount: roundMoney(rentAmountForLeasePayment(lease, nextDueDate) ?? billingAmount),
       title: daysUntilDue === 0 ? `${leaseLabelText} rent due today` : `${leaseLabelText} rent due soon`,
       message:
         daysUntilDue === 0

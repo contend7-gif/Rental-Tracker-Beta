@@ -6,7 +6,13 @@ import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { field } from "../shared/uiHelpers.jsx";
 import { selectableProperties } from "../../domain/propertyLifecycle.js";
-import { isSingleMonthFixedTermLease, rentAmountForLeasePayment } from "../../domain/rentProration.js";
+import { isFullTermBillingLease, rentAmountForLeasePayment } from "../../domain/rentProration.js";
+import {
+  leaseBillingCadenceLabel,
+  leaseIsOpenEnded,
+  leaseRentSummaryLabel,
+  leaseTermSummaryLabel,
+} from "../../domain/leaseTerms.js";
 import { CircleDollarSign, Droplets, Home, Landmark, MoreHorizontal, RotateCcw, Wrench } from "lucide-react";
 
 function TransactionSection({ title, children, action, className = "" }) {
@@ -62,6 +68,7 @@ function transactionUnitKey(value) {
 }
 
 function leaseEndDate(lease) {
+  if (leaseIsOpenEnded(lease)) return "9999-12-31";
   return lease?.actualEndDate || lease?.endDate || "9999-12-31";
 }
 
@@ -534,7 +541,7 @@ export function QuickAddWorkspace({
                   )
                 : null}
               {form.type === "Income" && form.category === "Rents received"
-                ? field("Rent month / period", <Input type="month" value={form.rentPeriod || ""} onChange={(e) => setForm({ ...form, rentPeriod: e.target.value, rentLeaseId: "" })} />)
+                ? field("Rent reporting month", <Input type="month" value={form.rentPeriod || ""} onChange={(e) => setForm({ ...form, rentPeriod: e.target.value, rentLeaseId: "" })} />)
                 : null}
               <div className="md:col-span-2">
                 {field("Description / memo", <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />, getSuggestedFieldOptions("description", "Description"))}
@@ -542,9 +549,13 @@ export function QuickAddWorkspace({
             </div>
             {isRentPayment && rentLeaseForPayment ? (
               <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
-                {isSingleMonthFixedTermLease(rentLeaseForPayment)
-                  ? `Prepaid fixed term: ${rentLeaseForPayment.startDate} to ${leaseEndDate(rentLeaseForPayment)}. One full rent charge of ${currency(rentLeaseForPayment.monthlyRent)}; no second calendar-month charge.`
-                  : `Rent coverage follows ${rentLeaseForPayment.tenantName}'s lease (${rentLeaseForPayment.startDate} to ${leaseEndDate(rentLeaseForPayment)}).`}
+                <div className="font-semibold">{leaseTermSummaryLabel(rentLeaseForPayment)}</div>
+                <div className="mt-1">{leaseBillingCadenceLabel(rentLeaseForPayment)} | {leaseRentSummaryLabel(rentLeaseForPayment, currency)}</div>
+                <div className="mt-1">
+                  {isFullTermBillingLease(rentLeaseForPayment)
+                    ? `This payment covers the full fixed term (${rentLeaseForPayment.startDate} to ${leaseEndDate(rentLeaseForPayment)}); no second calendar-month charge is created.`
+                    : `The reporting month organizes income reports. Exact ${leaseBillingCadenceLabel(rentLeaseForPayment).toLowerCase()} charges and payment allocation remain in the tenant ledger.`}
+                </div>
               </div>
             ) : null}
             {rentWarnings.length ? (

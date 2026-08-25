@@ -101,6 +101,7 @@ const REVIEW_WORKSPACE_PROP_KEYS = [
   "markTransactionCapitalImprovement",
   "markTransactionSupportUnavailable",
   "markTransactionsTaxReviewed",
+  "navigateWithDashboardContext",
   "occupancyReviewInbox",
   "openAssetEditor",
   "openLease",

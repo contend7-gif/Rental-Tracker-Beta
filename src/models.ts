@@ -297,8 +297,14 @@ export type Lease = {
   endDate: string;
   actualEndDate?: string;
   monthlyRent: number;
+  rentAmount?: number;
   securityDeposit?: number;
   rentalType: "Long-term" | "Mid-term" | "Short-term";
+  agreementType?: "fixed_term" | "month_to_month" | "fixed_then_month_to_month";
+  billingCadence?: "full_term" | "weekly" | "biweekly" | "monthly" | "custom";
+  billingIntervalDays?: number;
+  firstRentDueDate?: string;
+  prorationMethod?: "none" | "thirty_day";
   utilitiesIncluded: boolean;
   monthToMonthAfterTerm: boolean;
   extensionTermMonths: number;

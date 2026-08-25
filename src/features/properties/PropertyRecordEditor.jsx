@@ -3,7 +3,8 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { CalendarRange, Eye, EyeOff, FileText, TrendingUp } from "lucide-react";
+import { CalendarRange, ChevronRight, Eye, EyeOff, FileText, Pencil, TrendingUp } from "lucide-react";
+import { leaseRentSummaryLabel } from "../../domain/leaseTerms.js";
 import { field } from "../shared/uiHelpers.jsx";
 import {
   DEFAULT_PROPERTY_DOCUMENT_TYPE,
@@ -70,6 +71,8 @@ export function PropertyRecordEditor({
   openDocumentImportPicker,
   openDocumentPreview,
   openLeaseForUnit,
+  openUnitDetail,
+  openUnitEditor,
   planningAssumptions,
   properties,
   propertyFilter,
@@ -700,12 +703,12 @@ export function PropertyRecordEditor({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <div className="font-semibold text-slate-900">{formatUnitName(unit.name)}</div>
+                            {openUnitDetail ? <button type="button" className="flex items-center gap-1 font-semibold text-slate-900 hover:text-teal-700" onClick={() => openUnitDetail(unit)}>{formatUnitName(unit.name)}<ChevronRight className="h-3.5 w-3.5" /></button> : <div className="font-semibold text-slate-900">{formatUnitName(unit.name)}</div>}
                             <Badge variant="secondary">{unitStatusLabel[unitStatus] || unitStatus}</Badge>
                           </div>
                           {activeLease ? (
                             <div className="text-xs text-slate-500">
-                              {leaseSummaryLabel}: {activeLease.tenantName} ({activeLease.endDate})
+                              {leaseSummaryLabel}: {activeLease.tenantName} | {leaseRentSummaryLabel(activeLease, currency)} | ends {activeLease.actualEndDate || activeLease.endDate}
                             </div>
                           ) : (
                             <div className="text-xs text-slate-500">No active lease</div>
@@ -721,6 +724,12 @@ export function PropertyRecordEditor({
                               Manage occupancy
                             </Button>
                           )}
+                          {openUnitEditor ? (
+                            <Button size="sm" variant="secondary" className="h-10 px-3" title={`Edit ${formatUnitName(unit.name)}`} onClick={() => openUnitEditor(unit)} disabled={!canCreateEditRecords}>
+                              <Pencil className="h-4 w-4" />
+                              <span className="sr-only">Edit {formatUnitName(unit.name)}</span>
+                            </Button>
+                          ) : null}
                         </div>
                       </div>
                       <div className="mt-3 border-t border-slate-100 pt-2">

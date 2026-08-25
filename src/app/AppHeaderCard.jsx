@@ -1,8 +1,19 @@
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, CalendarDays, ChevronDown, Home, PlusCircle } from "lucide-react";
+import { Building2, CalendarDays, ChevronDown, FilePlus2, Home, Landmark, PlusCircle, Receipt, Wallet, Wrench } from "lucide-react";
 import { getWorkspaceFilterVisibility } from "./workspaceFilterVisibility.js";
+
+const newActionIcons = {
+  transaction: Receipt,
+  lease: CalendarDays,
+  workOrder: Wrench,
+  document: FilePlus2,
+  property: Building2,
+  asset: Wallet,
+  loan: Landmark,
+};
 
 export function AppHeaderCard({
   currentView,
@@ -23,8 +34,75 @@ export function AppHeaderCard({
   const dashboardAsOfLabel = /^\d{4}-\d{2}-\d{2}$/.test(String(dashboardAsOfDate || ""))
     ? new Date(`${dashboardAsOfDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
     : dashboardAsOfDate;
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  const newMenuRef = useRef(null);
 
-  const primaryActionButton = primaryAction ? (
+  useEffect(() => {
+    if (!newMenuOpen) return undefined;
+    const closeFromOutside = (event) => {
+      if (!newMenuRef.current?.contains(event.target)) setNewMenuOpen(false);
+    };
+    const closeFromKeyboard = (event) => {
+      if (event.key === "Escape") setNewMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeFromOutside);
+    document.addEventListener("keydown", closeFromKeyboard);
+    return () => {
+      document.removeEventListener("pointerdown", closeFromOutside);
+      document.removeEventListener("keydown", closeFromKeyboard);
+    };
+  }, [newMenuOpen]);
+
+  const primaryActionButton = primaryAction?.items?.length ? (
+    <div ref={newMenuRef} className="relative shrink-0 self-center">
+      <Button
+        size="sm"
+        className="!h-12 min-w-24 rounded-md font-semibold"
+        onClick={() => setNewMenuOpen((open) => !open)}
+        aria-expanded={newMenuOpen}
+        aria-haspopup="menu"
+      >
+        <PlusCircle className="h-4 w-4" />
+        {primaryAction.label}
+        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${newMenuOpen ? "rotate-180" : ""}`} />
+      </Button>
+      {newMenuOpen ? (
+        <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="border-b border-slate-100 px-3 py-2.5">
+            <div className="text-sm font-semibold text-slate-950">Create new</div>
+            <div className="mt-0.5 text-xs text-slate-500">Choose the record you want to add.</div>
+          </div>
+          <div className="grid gap-1 p-2">
+            {primaryAction.items.map((action) => {
+              const ActionIcon = newActionIcons[action.key] || PlusCircle;
+              return (
+                <button
+                  key={action.key}
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                  onClick={() => {
+                    setNewMenuOpen(false);
+                    action.onClick();
+                  }}
+                  onMouseEnter={() => action.prefetchKey && prefetchDialog(action.prefetchKey)}
+                  onFocus={() => action.prefetchKey && prefetchDialog(action.prefetchKey)}
+                >
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-teal-700">
+                    <ActionIcon className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-slate-900">{action.label}</span>
+                    <span className="mt-0.5 block text-xs leading-4 text-slate-500">{action.detail}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  ) : primaryAction ? (
     <Button
       size="sm"
       className="!h-12 shrink-0 self-center rounded-md font-semibold"

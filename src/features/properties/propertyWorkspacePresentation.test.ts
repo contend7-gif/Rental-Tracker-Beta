@@ -2,12 +2,29 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   VISIBLE_RENT_SCHEDULE_HELP,
+  buildPropertyWorkspaceModes,
   buildUnitOccupancyTimeline,
   documentRenewalStatus,
   propertyActivityEntries,
   readinessRecordSection,
   usefulPropertyDocumentTags,
 } from "./propertyWorkspacePresentation.js";
+
+test("property workspace modes give overview, units, records, and photos distinct jobs", () => {
+  const modes = buildPropertyWorkspaceModes({
+    openItemCount: 3,
+    operationNoteCount: 2,
+    photoCount: 4,
+    propertyDocumentCount: 5,
+    unitCount: 2,
+    valuationCount: 1,
+  });
+
+  assert.deepEqual(modes.map((mode) => mode.key), ["overview", "units", "records", "photos"]);
+  assert.deepEqual(modes.map((mode) => mode.badge), ["3 open", "2 units", "8 records", "4 photos"]);
+  assert.match(modes[1].description, /occupancy history/i);
+  assert.match(modes[2].description, /valuation support/i);
+});
 
 test("readiness routes operations issues to the operations records tab", () => {
   assert.equal(readinessRecordSection("operations"), "notes");

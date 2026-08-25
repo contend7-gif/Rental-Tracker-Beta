@@ -178,6 +178,71 @@ test("buildLeaseAutomationPlan bills a one-month mid-term lease once and repairs
   assert.equal(plan.entries.some((entry) => entry.date.startsWith("2026-09")), false);
 });
 
+test("buildLeaseAutomationPlan bills a longer fixed term once when paid upfront", () => {
+  const plan = buildLeaseAutomationPlan({
+    leases: [baseLease({
+      startDate: "2026-06-15",
+      endDate: "2026-09-14",
+      rentalType: "Mid-term",
+      agreementType: "fixed_term",
+      billingCadence: "full_term",
+      rentAmount: 4800,
+      monthlyRent: 1600,
+      firstRentDueDate: "2026-06-01",
+    })],
+    tenantLedgerEntries: [],
+    todayIso: "2026-09-14",
+    defaults: DEFAULTS,
+  });
+
+  const rentEntries = plan.entries.filter((entry) => String(entry.automationKey || "").startsWith("auto-rent:"));
+  assert.equal(rentEntries.length, 1);
+  assert.equal(rentEntries[0].date, "2026-06-01");
+  assert.equal(rentEntries[0].amount, 4800);
+});
+
+test("buildLeaseAutomationPlan supports weekly fixed-term billing", () => {
+  const plan = buildLeaseAutomationPlan({
+    leases: [baseLease({
+      startDate: "2026-08-01",
+      endDate: "2026-08-31",
+      rentalType: "Short-term",
+      agreementType: "fixed_term",
+      billingCadence: "weekly",
+      rentAmount: 500,
+      firstRentDueDate: "2026-08-01",
+    })],
+    tenantLedgerEntries: [],
+    todayIso: "2026-08-31",
+    defaults: DEFAULTS,
+  });
+
+  const rentEntries = plan.entries.filter((entry) => String(entry.automationKey || "").startsWith("auto-rent:"));
+  assert.deepEqual(rentEntries.map((entry) => entry.date), ["2026-08-01", "2026-08-08", "2026-08-15", "2026-08-22", "2026-08-29"]);
+  assert.equal(rentEntries.every((entry) => entry.amount === 500), true);
+});
+
+test("buildLeaseAutomationPlan supports open-ended biweekly billing", () => {
+  const plan = buildLeaseAutomationPlan({
+    leases: [baseLease({
+      startDate: "2026-01-05",
+      endDate: "2026-01-05",
+      rentalType: "Long-term",
+      agreementType: "month_to_month",
+      billingCadence: "biweekly",
+      rentAmount: 700,
+      firstRentDueDate: "2026-01-05",
+      monthToMonthAfterTerm: true,
+    })],
+    tenantLedgerEntries: [],
+    todayIso: "2026-02-16",
+    defaults: DEFAULTS,
+  });
+
+  const rentEntries = plan.entries.filter((entry) => String(entry.automationKey || "").startsWith("auto-rent:"));
+  assert.deepEqual(rentEntries.map((entry) => entry.date), ["2026-01-05", "2026-01-19", "2026-02-02", "2026-02-16"]);
+});
+
 test("buildLeaseAutomationPlan does not mark prepaid manual rent as late when the charge row is reused", () => {
   const plan = buildLeaseAutomationPlan({
     leases: [baseLease({ startDate: "2026-03-01", endDate: "2026-03-31" })],

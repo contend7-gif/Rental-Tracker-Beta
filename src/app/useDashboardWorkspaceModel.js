@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { getRentReportingMonth, isRentIncomeTransaction } from "../features/transactions/transactionPresentation.js";
 import { leaseIsActiveByDate } from "./leaseShared.js";
+import { leaseIsOpenEnded } from "../domain/leaseTerms.js";
 
 const FAR_FUTURE_DATE = "9999-12-31";
 
@@ -126,7 +127,7 @@ export function useDashboardWorkspaceModel({
 
         const propertyLeases = activeLeases.filter((lease) => lease.propertyId === property.id);
         const nextScheduledEnd = propertyLeases
-          .filter((lease) => !(lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm && !lease.actualEndDate))
+          .filter((lease) => !leaseIsOpenEnded(lease))
           .sort((a, b) => a.endDate.localeCompare(b.endDate))[0];
 
         return {
@@ -210,7 +211,7 @@ export function useDashboardWorkspaceModel({
         const leaseSegments = leases
           .filter((lease) => lease.propertyId === property.id && lease.unit === unit.name)
           .map((lease) => {
-            const leaseEnd = lease.actualEndDate || (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm ? FAR_FUTURE_DATE : lease.endDate);
+            const leaseEnd = lease.actualEndDate || (leaseIsOpenEnded(lease) ? FAR_FUTURE_DATE : lease.endDate);
             const clipped = clipRange(lease.startDate, leaseEnd, auditStart, auditEnd);
             if (!clipped) return null;
             return {

@@ -1,5 +1,6 @@
 import { getRentReportingMonth, isRentIncomeTransaction } from "../transactions/transactionPresentation.js";
 import { proratedRentForMonth30Day } from "../../domain/rentProration.js";
+import { leaseBillingAmount, leaseBillingCadenceLabel, leaseIsOpenEnded } from "../../domain/leaseTerms.js";
 
 const FAR_FUTURE_DATE = "9999-12-31";
 
@@ -22,7 +23,7 @@ function matchesScope(item, propertyFilter = "all", unitFilter = "all") {
 
 function leaseEndDate(lease) {
   if (lease?.actualEndDate) return lease.actualEndDate;
-  if (lease?.rentalType === "Long-term" && lease?.monthToMonthAfterTerm) return FAR_FUTURE_DATE;
+  if (leaseIsOpenEnded(lease)) return FAR_FUTURE_DATE;
   return lease?.endDate || FAR_FUTURE_DATE;
 }
 
@@ -154,6 +155,8 @@ export function deriveRentCollectionSummary({
             label: formatDashboardUnitLabel(unit.name),
             status: activeLease ? "Occupied" : unit.status === "Owner-Occupied" ? "Owner" : "Vacant",
             monthlyRent: money(activeLease?.monthlyRent),
+            rentAmount: activeLease ? leaseBillingAmount(activeLease) : 0,
+            rentCadenceLabel: activeLease ? leaseBillingCadenceLabel(activeLease) : "",
             expectedYtd: unitExpected,
             collectedYtd: unitCollected,
             outstanding: Math.max(0, unitExpected - unitCollected),
@@ -206,7 +209,7 @@ export function countUpcomingLeaseExpirations(leases = [], asOfDate, withinDays 
   if (!Number.isFinite(start)) return 0;
   const end = start + withinDays * 86400000;
   return leases.filter((lease) => {
-    if (lease?.rentalType === "Long-term" && lease?.monthToMonthAfterTerm && !lease?.actualEndDate) return false;
+    if (leaseIsOpenEnded(lease)) return false;
     const leaseEnd = new Date(`${leaseEndDate(lease)}T00:00:00Z`).getTime();
     return Number.isFinite(leaseEnd) && leaseEnd >= start && leaseEnd <= end;
   }).length;
@@ -243,7 +246,7 @@ export function deriveDashboardActionStatus({
   }
   if (reviewCount > 0 || packetOpenCount > 0) {
     const count = reviewCount || packetOpenCount;
-    return { key: "needs_review", label: "Needs Review", tone: "warning", explanation: `${count} source-record item${count === 1 ? "" : "s"} still ${count === 1 ? "needs" : "need"} review.` };
+    return { key: "needs_review", label: "Needs Review", tone: "warning", explanation: `${count} tax cross-check${count === 1 ? "" : "s"} still ${count === 1 ? "needs" : "need"} review.` };
   }
   if (planningAtRisk) {
     return { key: "at_risk", label: "At Risk", tone: "destructive", explanation: planningHealth?.primaryConcern || "The working plan needs attention before relying on current projections." };

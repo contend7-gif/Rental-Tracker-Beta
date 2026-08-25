@@ -15,6 +15,14 @@ import {
 import {
   createBlankTenantLedgerDraft,
 } from "./draftFactories.js";
+import {
+  leaseBillingAmount,
+  leaseBillingIntervalDays,
+  leaseMonthlyEquivalent,
+  normalizeLeaseAgreementType,
+  normalizeLeaseBillingCadence,
+  normalizeLeaseDurationType,
+} from "../domain/leaseTerms.js";
 
 const FAR_FUTURE_DATE = "9999-12-31";
 
@@ -354,9 +362,15 @@ export function useLeaseTenantLedgerController({
     const draft = {
       ...lease,
       monthlyRent: String(lease.monthlyRent),
+      rentAmount: String(leaseBillingAmount(lease)),
       securityDeposit: String(lease.securityDeposit || ""),
       actualEndDate: lease.actualEndDate || "",
       rentalType: lease.rentalType || "Long-term",
+      agreementType: normalizeLeaseAgreementType(lease),
+      billingCadence: normalizeLeaseBillingCadence(lease),
+      billingIntervalDays: leaseBillingIntervalDays(lease) || 30,
+      firstRentDueDate: lease.firstRentDueDate || lease.startDate,
+      prorationMethod: lease.prorationMethod === "none" ? "none" : "thirty_day",
       utilitiesIncluded: Boolean(lease.utilitiesIncluded),
       monthToMonthAfterTerm: lease.monthToMonthAfterTerm ?? true,
       extensionTermMonths: lease.extensionTermMonths ?? 0,
@@ -398,10 +412,16 @@ export function useLeaseTenantLedgerController({
       endDate: startDate,
       actualEndDate: "",
       monthlyRent: "0",
+      rentAmount: "0",
       securityDeposit: "",
       rentalType: "Long-term",
+      agreementType: "fixed_term",
+      billingCadence: "monthly",
+      billingIntervalDays: 30,
+      firstRentDueDate: startDate,
+      prorationMethod: "thirty_day",
       utilitiesIncluded: false,
-      monthToMonthAfterTerm: true,
+      monthToMonthAfterTerm: false,
       extensionTermMonths: 0,
       status: "Active",
       notes: "",
@@ -438,10 +458,16 @@ export function useLeaseTenantLedgerController({
       endDate: todayIso,
       actualEndDate: "",
       monthlyRent: "0",
+      rentAmount: "0",
       securityDeposit: "",
       rentalType: "Long-term",
+      agreementType: "fixed_term",
+      billingCadence: "monthly",
+      billingIntervalDays: 30,
+      firstRentDueDate: todayIso,
+      prorationMethod: "thirty_day",
       utilitiesIncluded: false,
-      monthToMonthAfterTerm: true,
+      monthToMonthAfterTerm: false,
       extensionTermMonths: 0,
       status: "Active",
       notes: "",
@@ -593,25 +619,35 @@ export function useLeaseTenantLedgerController({
   const saveLease = () => {
     if (!requirePermission("create_edit_records", "This access profile cannot save leases.")) return;
     if (!leaseDraft || leaseEditorMode !== "full") return;
-    const monthlyRent = Number(leaseDraft.monthlyRent);
-    if (!Number.isFinite(monthlyRent) || monthlyRent <= 0) {
-      setLeaseValidationDialog({ open: true, message: "Enter a monthly rent greater than 0." });
+    const rentAmount = Number(leaseDraft.rentAmount ?? leaseDraft.monthlyRent);
+    if (!Number.isFinite(rentAmount) || rentAmount <= 0) {
+      setLeaseValidationDialog({ open: true, message: "Enter a rent amount greater than 0." });
+      return;
+    }
+    const agreementType = normalizeLeaseAgreementType(leaseDraft);
+    if (agreementType !== "month_to_month" && (!leaseDraft.endDate || leaseDraft.endDate < leaseDraft.startDate)) {
+      setLeaseValidationDialog({ open: true, message: "Enter a term end date on or after the start date." });
+      return;
+    }
+    const billingCadence = normalizeLeaseBillingCadence(leaseDraft);
+    if (billingCadence === "full_term" && agreementType !== "fixed_term") {
+      setLeaseValidationDialog({ open: true, message: "Full-term upfront billing requires a fixed-term agreement." });
       return;
     }
     const normalizedActualEndDate = (leaseDraft.actualEndDate || "").trim();
-    const savedLease = {
+    const leaseWithTerms = {
       ...leaseDraft,
-      monthlyRent,
+      rentAmount,
       securityDeposit: Math.max(0, Number(leaseDraft.securityDeposit || 0)),
-      actualEndDate:
-        leaseDraft.rentalType === "Mid-term"
-          ? normalizedActualEndDate || leaseDraft.endDate
-          : leaseDraft.rentalType === "Long-term" && !leaseDraft.monthToMonthAfterTerm
-            ? leaseDraft.endDate
-            : normalizedActualEndDate,
-      rentalType: leaseDraft.rentalType || "Long-term",
+      actualEndDate: normalizedActualEndDate,
+      rentalType: normalizeLeaseDurationType(leaseDraft),
+      agreementType,
+      billingCadence,
+      billingIntervalDays: leaseBillingIntervalDays(leaseDraft),
+      firstRentDueDate: String(leaseDraft.firstRentDueDate || leaseDraft.startDate).slice(0, 10),
+      prorationMethod: leaseDraft.prorationMethod === "none" ? "none" : "thirty_day",
       utilitiesIncluded: Boolean(leaseDraft.utilitiesIncluded),
-      monthToMonthAfterTerm: Boolean(leaseDraft.monthToMonthAfterTerm),
+      monthToMonthAfterTerm: agreementType !== "fixed_term",
       extensionTermMonths: Number(leaseDraft.extensionTermMonths || 0),
       rentDueDay: Math.max(
         1,
@@ -629,11 +665,15 @@ export function useLeaseTenantLedgerController({
       lateFeeValue: Math.max(0, Number(leaseDraft.lateFeeValue ?? appSettings.leaseLateFeeValue ?? 0)),
       autoLateFeeEnabled: leaseDraft.autoLateFeeEnabled === true,
     };
+    const savedLease = {
+      ...leaseWithTerms,
+      monthlyRent: leaseMonthlyEquivalent(leaseWithTerms),
+    };
     actions.updateLease(savedLease);
     const leaseStart = savedLease.startDate;
     const leaseEnd =
       savedLease.actualEndDate ||
-      (savedLease.rentalType === "Long-term" && savedLease.monthToMonthAfterTerm ? FAR_FUTURE_DATE : savedLease.endDate);
+      (normalizeLeaseAgreementType(savedLease) !== "fixed_term" ? FAR_FUTURE_DATE : savedLease.endDate);
     getUnitOccupancyPeriods(savedLease.propertyId, savedLease.unit).forEach((period) => {
       const periodEnd = period.endDate || FAR_FUTURE_DATE;
       if (!rangesOverlap(period.startDate, periodEnd, leaseStart, leaseEnd)) return;

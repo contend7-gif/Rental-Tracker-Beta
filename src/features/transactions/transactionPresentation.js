@@ -73,6 +73,55 @@ export function summarizeLedgerTransactions(transactions = [], { todayIso = "", 
   };
 }
 
+export function buildTransactionWorkspaceModes({
+  attentionCount = 0,
+  bankMatchOpenCount = 0,
+  expectedRecurringCount = 0,
+  importedCount = 0,
+  recurringCount = 0,
+  transactionCount = 0,
+} = {}) {
+  return [
+    {
+      key: "activity",
+      label: "Activity",
+      count: transactionCount,
+      description: "Browse and edit posted income, expenses, payments, and transfers.",
+    },
+    {
+      key: "attention",
+      label: "Needs attention",
+      count: attentionCount,
+      description: "Inspect flagged transactions here; resolve cleanup in Work Queue.",
+    },
+    {
+      key: "recurring",
+      label: "Recurring",
+      count: recurringCount,
+      description: expectedRecurringCount > 0
+        ? `${expectedRecurringCount} expected posting${expectedRecurringCount === 1 ? "" : "s"} due in this scope.`
+        : "Recurring schedules are current in this scope.",
+    },
+    {
+      key: "imports",
+      label: "Imports & matching",
+      count: importedCount,
+      description: bankMatchOpenCount > 0
+        ? `${bankMatchOpenCount} imported transaction${bankMatchOpenCount === 1 ? "" : "s"} still need a bank match.`
+        : "Upload statements and review bank matches.",
+    },
+  ];
+}
+
+export function ledgerViewForTransactionWorkspaceMode(mode = "activity") {
+  return {
+    activity: "all",
+    attention: "review",
+    recurring: "recurring",
+    imports: "imported",
+  }[mode] || "all";
+}
+
 export function transactionScheduleLabel(transaction) {
   if (isRentIncomeTransaction(transaction)) return "Schedule E: Rent";
   if (transaction?.type !== "Expense") return "";

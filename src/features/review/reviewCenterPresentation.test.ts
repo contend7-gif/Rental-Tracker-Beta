@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { splitDoFirstItems, summarizeIssueLabels, summarizeReviewSections, visibleReviewItemsForSection } from "./reviewCenterPresentation.js";
+import { groupRelatedReviewItems, isGroupedReviewItem, sortReviewSeriesMembers, splitDoFirstItems, summarizeIssueLabels, summarizeReviewSections, visibleReviewItemsForSection } from "./reviewCenterPresentation.js";
 
 const reviewItems = [
   { key: "normal-tax", sectionKey: "tax", title: "Tax readiness", urgency: "medium" },
@@ -75,4 +75,32 @@ test("Review Center duplicate issue grouping keeps overflow count distinct", () 
   ], 2);
 
   assert.deepEqual(labels, ["A · 2 related checks", "B", "+2 more"]);
+});
+
+test("Review Center groups only records with the same explicit series key", () => {
+  const grouped = groupRelatedReviewItems([
+    { key: "jan", groupKey: "recurring:chatgpt", groupTitle: "ChatGPT Pro", title: "January", urgency: "high", issueLabels: ["Missing receipt"], checkCount: 2 },
+    { key: "feb", groupKey: "recurring:chatgpt", groupTitle: "ChatGPT Pro", title: "February", urgency: "medium", issueLabels: ["Missing receipt", "Review category"], checkCount: 3 },
+    { key: "manual", title: "ChatGPT Pro", urgency: "high", issueLabels: ["Missing receipt"] },
+  ]);
+
+  assert.equal(grouped.length, 2);
+  assert.equal(grouped[0].key, "group-recurring:chatgpt");
+  assert.equal(grouped[0].title, "ChatGPT Pro");
+  assert.equal(grouped[0].groupCount, 2);
+  assert.equal(grouped[0].checkCount, 5);
+  assert.deepEqual(grouped[0].issueLabels, ["Missing receipt", "Review category"]);
+  assert.equal(grouped[1].key, "manual");
+  assert.equal(isGroupedReviewItem(grouped[0]), true);
+  assert.equal(isGroupedReviewItem(grouped[1]), false);
+});
+
+test("recurring-series previews show newest transactions first", () => {
+  const sorted = sortReviewSeriesMembers([
+    { key: "jun", title: "June", transaction: { date: "2026-06-05" } },
+    { key: "feb", title: "February", transaction: { date: "2026-02-05" } },
+    { key: "jul", title: "July", transaction: { date: "2026-07-05" } },
+  ]);
+
+  assert.deepEqual(sorted.map((item) => item.key), ["jul", "jun", "feb"]);
 });

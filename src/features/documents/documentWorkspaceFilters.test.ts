@@ -18,14 +18,15 @@ test("status filters show their direct visible results even when the active tab 
   assert.deepEqual(documents, [linkedNeedingText]);
 });
 
-test("all-documents mode still respects the selected workspace tab", () => {
+test("library reviewed view selects reviewed documents", () => {
   const inbox = { id: "doc-inbox" };
   const reviewed = { id: "doc-reviewed" };
 
   assert.deepEqual(
     selectDocumentsForWorkspaceTab({
       documentStatusFilter: "all",
-      documentsTab: "reviewed",
+      documentsTab: "library",
+      documentSubview: "reviewed",
       inboxDocuments: [inbox],
       reviewedDocuments: [reviewed],
       visibleDocuments: [inbox, reviewed],
@@ -34,17 +35,50 @@ test("all-documents mode still respects the selected workspace tab", () => {
   );
 });
 
-test("OCR quality tab selects only documents needing field corrections", () => {
+test("Inbox OCR view selects only documents needing field corrections", () => {
   const qualityDocument = { id: "doc-ocr-quality" };
 
   assert.deepEqual(
     selectDocumentsForWorkspaceTab({
       documentStatusFilter: "all",
-      documentsTab: "ocr_quality",
+      documentsTab: "inbox",
+      documentSubview: "ocr_quality",
       inboxDocuments: [],
       ocrQualityDocuments: [qualityDocument],
       visibleDocuments: [qualityDocument],
     }),
     [qualityDocument],
+  );
+});
+
+test("library defaults to every visible document", () => {
+  const inbox = { id: "doc-inbox" };
+  const reviewed = { id: "doc-reviewed" };
+
+  assert.deepEqual(
+    selectDocumentsForWorkspaceTab({
+      documentStatusFilter: "all",
+      documentsTab: "library",
+      documentSubview: "all",
+      inboxDocuments: [inbox],
+      reviewedDocuments: [reviewed],
+      visibleDocuments: [inbox, reviewed],
+    }),
+    [inbox, reviewed],
+  );
+});
+
+test("library unlinked view stays local to the Library", () => {
+  const unlinked = { id: "doc-unlinked" };
+
+  assert.deepEqual(
+    selectDocumentsForWorkspaceTab({
+      documentStatusFilter: "all",
+      documentsTab: "library",
+      documentSubview: "unlinked",
+      unlinkedDocuments: [unlinked],
+      visibleDocuments: [unlinked, { id: "doc-linked" }],
+    }),
+    [unlinked],
   );
 });

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   buildAssetReviewGroups,
   buildAssetSummary,
+  buildAssetWorkspaceModes,
   getAssetSourceStatus,
 } from "./assetWorkspacePresentation.js";
 
@@ -22,6 +23,22 @@ const readyAsset = {
 };
 
 describe("asset workspace presentation helpers", () => {
+  it("separates the depreciation workspace into four clear modes", () => {
+    const modes = buildAssetWorkspaceModes({ assetCount: 3, cleanupCount: 2, year: 2026 });
+
+    assert.deepEqual(modes.map((mode) => mode.key), ["overview", "register", "schedules", "cleanup"]);
+    assert.equal(modes.find((mode) => mode.key === "register")?.badge, "3 assets");
+    assert.equal(modes.find((mode) => mode.key === "schedules")?.badge, "2026 tax year");
+    assert.equal(modes.find((mode) => mode.key === "cleanup")?.badge, "2 open");
+  });
+
+  it("shows a clear cleanup state when no asset work is open", () => {
+    const cleanup = buildAssetWorkspaceModes({ assetCount: 1, cleanupCount: 0, year: 2026 })
+      .find((mode) => mode.key === "cleanup");
+
+    assert.equal(cleanup?.badge, "Clear");
+  });
+
   it("summarizes selected-year cost, basis, depreciation, review, and source counts", () => {
     const summary = buildAssetSummary({
       assets: [

@@ -2,9 +2,11 @@ const FAR_FUTURE_DATE = "9999-12-31";
 
 function effectiveLeaseEnd(lease) {
   if (lease?.actualEndDate) return lease.actualEndDate;
-  if (lease?.rentalType === "Long-term" && lease?.monthToMonthAfterTerm) return FAR_FUTURE_DATE;
+  if (leaseIsOpenEnded(lease)) return FAR_FUTURE_DATE;
   return lease?.endDate || "";
 }
+
+import { leaseIsOpenEnded } from "../../domain/leaseTerms.js";
 
 function activeOn(lease, date) {
   return Boolean(lease?.startDate && lease.startDate <= date && effectiveLeaseEnd(lease) >= date);

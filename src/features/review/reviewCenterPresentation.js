@@ -65,3 +65,60 @@ export function summarizeIssueLabels(issues = [], limit = 3) {
   if (groupedIssues.size > limit) labels.push(`+${groupedIssues.size - limit} more`);
   return labels;
 }
+
+export function groupRelatedReviewItems(items = []) {
+  const groupedByKey = new Map();
+  const orderedEntries = [];
+
+  items.forEach((item) => {
+    const groupKey = String(item?.groupKey || "").trim();
+    if (!groupKey) {
+      orderedEntries.push(item);
+      return;
+    }
+    if (!groupedByKey.has(groupKey)) {
+      const entry = { groupKey, items: [] };
+      groupedByKey.set(groupKey, entry);
+      orderedEntries.push(entry);
+    }
+    groupedByKey.get(groupKey).items.push(item);
+  });
+
+  return orderedEntries.map((entry) => {
+    if (!entry?.items) return entry;
+    if (entry.items.length === 1) return entry.items[0];
+
+    const members = sortReviewItems(entry.items);
+    const lead = members[0];
+    const issueLabels = [...new Set(members.flatMap((item) => item.issueLabels || []))];
+    const checkCount = members.reduce(
+      (sum, item) => sum + Math.max(1, Number(item.checkCount || item.issueLabels?.length || 1)),
+      0,
+    );
+
+    return {
+      ...lead,
+      key: `group-${entry.groupKey}`,
+      title: lead.groupTitle || lead.title,
+      actionLabel: lead.groupActionLabel || "Review first",
+      groupCount: members.length,
+      checkCount,
+      issueLabels,
+      memberItems: members,
+    };
+  });
+}
+
+export function isGroupedReviewItem(item) {
+  return Number(item?.groupCount || 0) > 1 && Array.isArray(item?.memberItems) && item.memberItems.length > 1;
+}
+
+export function sortReviewSeriesMembers(items = []) {
+  return [...items].sort((left, right) => {
+    const leftDate = String(left?.transaction?.date || "");
+    const rightDate = String(right?.transaction?.date || "");
+    const dateDelta = rightDate.localeCompare(leftDate);
+    if (dateDelta !== 0) return dateDelta;
+    return String(left?.title || "").localeCompare(String(right?.title || ""));
+  });
+}

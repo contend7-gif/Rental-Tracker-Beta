@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DocumentItem, Lease, TenantLedgerEntry, Unit, UsePeriod } from "../models.ts";
-import { createLeaseActions } from "./leaseStore.ts";
+import { createLeaseActions, leaseIsEndedByDate, normalizeLease } from "./leaseStore.ts";
 
 const baseLease: Lease = {
   id: "lease-1",
@@ -80,4 +80,37 @@ test("lease status sync updates leases and unit occupancy from current records",
   actions.syncLeaseStatuses("2026-06-01");
   assert.equal(leases.find((lease) => lease.id === "lease-ended")?.status, "Ended");
   assert.deepEqual(units.map((unit) => unit.status), ["Rental", "Vacant", "Owner-Occupied"]);
+});
+
+test("lease normalization preserves old monthly leases and adds explicit term fields", () => {
+  const normalized = normalizeLease(baseLease);
+  assert.equal(normalized.agreementType, "fixed_term");
+  assert.equal(normalized.billingCadence, "monthly");
+  assert.equal(normalized.rentAmount, 1200);
+  assert.equal(normalized.monthlyRent, 1200);
+});
+
+test("lease normalization keeps a prepaid mid-term lease as one full-term amount", () => {
+  const normalized = normalizeLease({
+    ...baseLease,
+    startDate: "2026-08-12",
+    endDate: "2026-09-11",
+    rentalType: "Mid-term",
+    monthlyRent: 1550,
+  });
+  assert.equal(normalized.billingCadence, "full_term");
+  assert.equal(normalized.rentAmount, 1550);
+  assert.equal(normalized.monthlyRent, 1550);
+});
+
+test("month-to-month leases stay active without depending on duration classification", () => {
+  const normalized = normalizeLease({
+    ...baseLease,
+    rentalType: "Short-term",
+    agreementType: "month_to_month",
+    billingCadence: "weekly",
+    rentAmount: 400,
+    endDate: "2026-01-01",
+  });
+  assert.equal(leaseIsEndedByDate(normalized, "2026-06-01"), false);
 });

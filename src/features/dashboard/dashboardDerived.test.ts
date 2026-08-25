@@ -51,6 +51,8 @@ test("rent collection derives scheduled and recorded rent without fake balances"
   assert.equal(summary.scheduleCoveragePartial, false);
   assert.equal(summary.mode, "units");
   assert.equal(summary.rows[0].monthlyRent, 1000);
+  assert.equal(summary.rows[0].rentAmount, 1000);
+  assert.equal(summary.rows[0].rentCadenceLabel, "Monthly");
 
   const unitSummary = deriveRentCollectionSummary({
     transactions: [{ id: "t1", date: "2026-01-02", propertyId: "p1", unit: "A", type: "Income", category: "Rent", amount: 1000 }],
@@ -74,6 +76,29 @@ test("rent collection derives scheduled and recorded rent without fake balances"
   });
   assert.equal(partialSchedule.showCollectionRate, false);
   assert.equal(partialSchedule.scheduleCoveragePartial, true);
+});
+
+test("unit snapshot keeps a prepaid full-term lease distinct from monthly rent", () => {
+  const summary = deriveRentCollectionSummary({
+    transactions: [],
+    leases: [{
+      ...lease,
+      startDate: "2026-08-12",
+      endDate: "2026-09-11",
+      rentalType: "Mid-term",
+      agreementType: "fixed_term",
+      billingCadence: "full_term",
+      rentAmount: 1550,
+      monthlyRent: 1550,
+    }],
+    properties: [property],
+    units,
+    yearFilter: "2026",
+    asOfDate: "2026-08-17",
+  });
+
+  assert.equal(summary.rows[0].rentAmount, 1550);
+  assert.equal(summary.rows[0].rentCadenceLabel, "Full term, paid upfront");
 });
 
 test("rent collection uses prorated ledger rent charges and ignores security deposits", () => {
@@ -175,9 +200,9 @@ test("action status uses clear landlord-facing labels", () => {
   assert.equal(deriveDashboardActionStatus({ openReviewCount: 3 }).label, "Needs Review");
   assert.equal(
     deriveDashboardActionStatus({ openReviewCount: 2, taxReadinessSummary: { reviewCount: 4 } }).explanation,
-    "2 source-record items still need review.",
+    "2 tax cross-checks still need review.",
   );
-  assert.equal(deriveDashboardActionStatus({ openReviewCount: 1 }).explanation, "1 source-record item still needs review.");
+  assert.equal(deriveDashboardActionStatus({ openReviewCount: 1 }).explanation, "1 tax cross-check still needs review.");
   assert.equal(deriveDashboardActionStatus({ planningHealth: { status: "fragile" }, openReviewCount: 2 }).label, "Needs Review");
   assert.equal(deriveDashboardActionStatus({ planningHealth: { status: "fragile" }, openReviewCount: 5 }).label, "At Risk");
   assert.equal(deriveDashboardActionStatus({ planningHealth: { status: "fragile", primaryConcern: "Reserve coverage is thin." } }).explanation, "Reserve coverage is thin.");

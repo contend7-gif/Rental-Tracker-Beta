@@ -1,5 +1,6 @@
 export function selectDocumentsForWorkspaceTab({
   documentStatusFilter = "all",
+  documentSubview = "all",
   documentsTab = "inbox",
   inboxDocuments = [],
   linkedDocuments = [],
@@ -7,14 +8,18 @@ export function selectDocumentsForWorkspaceTab({
   ocrQualityDocuments = [],
   reviewedDocuments = [],
   supportingDocuments = [],
+  unlinkedDocuments = [],
   visibleDocuments = [],
 } = {}) {
   if (documentStatusFilter !== "all") return visibleDocuments;
-  if (documentsTab === "reviewed") return reviewedDocuments;
-  if (documentsTab === "all") return visibleDocuments;
-  if (documentsTab === "needs_review") return needsReviewDocuments;
-  if (documentsTab === "ocr_quality") return ocrQualityDocuments;
-  if (documentsTab === "linked") return linkedDocuments;
-  if (documentsTab === "supporting") return supportingDocuments;
+  if (documentsTab === "library") {
+    if (documentSubview === "linked") return linkedDocuments;
+    if (documentSubview === "unlinked") return unlinkedDocuments;
+    if (documentSubview === "supporting") return supportingDocuments;
+    if (documentSubview === "reviewed") return reviewedDocuments;
+    return visibleDocuments;
+  }
+  if (documentSubview === "needs_review") return needsReviewDocuments;
+  if (documentSubview === "ocr_quality") return ocrQualityDocuments;
   return inboxDocuments;
 }

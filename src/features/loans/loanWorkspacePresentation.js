@@ -1,5 +1,34 @@
 import { getPropertyPurchaseValueSupport } from "../properties/propertyOperations.js";
 
+export function buildLoanWorkspaceModes({ loanCount = 0, paymentCount = 0, reviewCount = 0 } = {}) {
+  return [
+    {
+      key: "overview",
+      label: "Portfolio overview",
+      badge: `${loanCount} ${loanCount === 1 ? "loan" : "loans"}`,
+      description: "See balances, leverage, and property-level debt.",
+    },
+    {
+      key: "payments",
+      label: "Payments",
+      badge: `${paymentCount} recorded`,
+      description: "Record payments and review each loan's payment history.",
+    },
+    {
+      key: "tax",
+      label: "Tax & escrow",
+      badge: reviewCount > 0 ? `${reviewCount} open` : "Ready",
+      description: "Reconcile interest, 1098s, escrow, PMI, and year-end review.",
+    },
+    {
+      key: "details",
+      label: "Loan details",
+      badge: `${loanCount} ${loanCount === 1 ? "loan" : "loans"}`,
+      description: "Maintain lender, rate, lien, schedule, and amortization.",
+    },
+  ];
+}
+
 export function combinedLtvPresentation(totalBalance, propertySummaries = []) {
   if (!propertySummaries.length) {
     return { value: null, helper: "Valuation missing - update in Properties", basis: "missing" };

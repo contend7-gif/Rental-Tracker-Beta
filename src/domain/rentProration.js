@@ -18,23 +18,26 @@ function isoDayDifference(startDate, endDate) {
 }
 
 export function isSingleMonthFixedTermLease(lease) {
-  if (!lease?.startDate || !lease?.endDate || lease.rentalType === "Long-term") return false;
-  if (Number(lease.extensionTermMonths || 0) > 0) return false;
-  const effectiveEnd = lease.actualEndDate || lease.endDate;
-  const termDays = isoDayDifference(lease.startDate, effectiveEnd);
+  if (!lease?.startDate || !lease?.endDate || normalizeLeaseAgreementType(lease) !== "fixed_term") return false;
+  if (normalizeLeaseBillingCadence(lease) !== "full_term") return false;
+  const termDays = leaseTermDays(lease);
   return termDays != null && termDays >= 27 && termDays <= 31;
 }
 
+export function isFullTermBillingLease(lease) {
+  return normalizeLeaseBillingCadence(lease) === "full_term";
+}
+
 export function rentAmountForLeasePayment(lease, billingDate) {
-  if (isSingleMonthFixedTermLease(lease)) {
-    return Math.round(Number(lease.monthlyRent || 0) * 100) / 100;
+  if (normalizeLeaseBillingCadence(lease) !== "monthly") {
+    return leaseBillingAmount(lease);
   }
   return proratedRentForMonth30Day(lease, billingDate);
 }
 
 export function leaseEffectiveEndDateForMonth(lease, monthEnd) {
   if (lease.actualEndDate) return lease.actualEndDate < monthEnd ? lease.actualEndDate : monthEnd;
-  if (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm) return monthEnd;
+  if (leaseIsOpenEnded(lease)) return monthEnd;
   return lease.endDate < monthEnd ? lease.endDate : monthEnd;
 }
 
@@ -42,19 +45,31 @@ export function proratedRentForMonth30Day(lease, billingDate) {
   const bounds = monthBounds(billingDate);
   if (!bounds || !lease?.startDate || !lease?.endDate) return null;
 
-  if (isSingleMonthFixedTermLease(lease)) {
+  if (isFullTermBillingLease(lease)) {
     return lease.startDate.slice(0, 7) === bounds.monthStart.slice(0, 7)
-      ? Math.round(Number(lease.monthlyRent || 0) * 100) / 100
+      ? leaseBillingAmount(lease)
       : 0;
   }
+
+  if (normalizeLeaseBillingCadence(lease) !== "monthly") return leaseBillingAmount(lease);
 
   const activeStart = lease.startDate > bounds.monthStart ? lease.startDate : bounds.monthStart;
   const activeEnd = leaseEffectiveEndDateForMonth(lease, bounds.monthEnd);
   if (activeStart > activeEnd) return null;
 
+  if (lease?.prorationMethod === "none") return leaseBillingAmount(lease);
+
   const startDay = activeStart === bounds.monthStart ? 1 : Math.min(30, Number(activeStart.slice(8, 10)));
   const endDay = activeEnd === bounds.monthEnd ? 30 : Math.min(30, Number(activeEnd.slice(8, 10)));
   const activeDays = Math.max(0, endDay - startDay + 1);
-  const prorated = (Number(lease.monthlyRent || 0) * activeDays) / 30;
+  const prorated = (leaseBillingAmount(lease) * activeDays) / 30;
   return Math.round(prorated * 100) / 100;
 }
+
+import {
+  leaseBillingAmount,
+  leaseIsOpenEnded,
+  leaseTermDays,
+  normalizeLeaseAgreementType,
+  normalizeLeaseBillingCadence,
+} from "./leaseTerms.js";

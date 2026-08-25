@@ -105,7 +105,7 @@ function buildChecklistItems({ supportBuckets, taxPacketSummary, taxReadinessSum
 function buildNextActions({ counts, supportBuckets, taxReadinessSummary }) {
   const actions = [];
   if (counts.blockingIssues > 0) {
-    actions.push({ key: "review", title: "Open Review Center", helper: `Resolve ${pluralize(counts.blockingIssues, "blocking issue")}`, action: { kind: "view", target: "review" } });
+    actions.push({ key: "review", title: "Open Work Queue", helper: `Resolve ${pluralize(counts.blockingIssues, "blocking issue")}`, action: { kind: "view", target: "review" } });
   }
   const loanCount = sectionCount(taxReadinessSummary, "loans") + (supportBuckets.find((bucket) => bucket.key === "loan")?.rows.length || 0);
   if (loanCount > 0) {
@@ -230,7 +230,7 @@ export function TaxCenterOverviewTab({
                 {hasOpenReviewWork ? (
                   <Button size="sm" variant="secondary" className="mt-3 gap-2" onClick={() => navigateWithDashboardContext("review")}>
                     <ClipboardCheck className="h-4 w-4" />
-                    Open Review Center
+                    Open Work Queue
                   </Button>
                 ) : null}
               </div>

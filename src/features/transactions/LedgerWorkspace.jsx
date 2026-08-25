@@ -5,14 +5,16 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { AlertTriangle, ArrowLeftRight, Banknote, FileSearch, Filter, ReceiptText, Upload, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Banknote, FileSearch, Filter, ReceiptText, Repeat2, Upload, WalletCards } from "lucide-react";
 import { canRunSafeBulkReview } from "../shared/auditBadges.js";
 import { ResponsiveTableFrame } from "../shared/uiHelpers.jsx";
 import {
+  buildTransactionWorkspaceModes,
   formatRentReportingMonth,
   formatTransactionUnitLabel,
   getTransactionVisual,
   isFutureDatedTransaction,
+  ledgerViewForTransactionWorkspaceMode,
   summarizeLedgerTransactions,
   transactionCategoryStatusLabel,
   transactionPostingStatusLabel,
@@ -24,6 +26,12 @@ import {
 
 const LEDGER_PANEL_CLASS = "rounded-xl border border-slate-200 bg-white shadow-none";
 const LEDGER_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
+const TRANSACTION_MODE_ICONS = {
+  activity: FileSearch,
+  attention: AlertTriangle,
+  recurring: Repeat2,
+  imports: Upload,
+};
 
 export function LedgerWorkspace({
   activeProperties,
@@ -82,15 +90,12 @@ export function LedgerWorkspace({
 }) {
   const propertyOptions = activeProperties || properties;
   const [ledgerView, setLedgerView] = useState("all");
+  const [workspaceMode, setWorkspaceMode] = useState("activity");
   const [reviewReasonFilter, setReviewReasonFilter] = useState("all");
   const [summaryView, setSummaryView] = useState("posted");
   const [selectedReviewIds, setSelectedReviewIds] = useState([]);
-  const [reviewInboxExpanded, setReviewInboxExpanded] = useState(false);
   const [importPanelOpen, setImportPanelOpen] = useState(false);
   const [matchingRulesOpen, setMatchingRulesOpen] = useState(false);
-  const openReviewTransaction = (transaction) => {
-    openTransaction(transaction, "ledger", false);
-  };
   const reviewReasonOptions = useMemo(() => {
     const byKey = new Map();
     transactionReviewInbox.forEach((record) => {
@@ -116,6 +121,14 @@ export function LedgerWorkspace({
     () => ledgerTransactions.filter((transaction) => transaction.bankImportId && !transaction.reconciled),
     [ledgerTransactions],
   );
+  const recurringTransactions = useMemo(
+    () => ledgerTransactions.filter((transaction) => transaction.recurringTemplateId),
+    [ledgerTransactions],
+  );
+  const importedTransactions = useMemo(
+    () => ledgerTransactions.filter((transaction) => transaction.bankImportId),
+    [ledgerTransactions],
+  );
   const filteredReviewRecords = useMemo(
     () =>
       transactionReviewInbox.filter((record) => {
@@ -130,6 +143,10 @@ export function LedgerWorkspace({
       ? receiptGapRecords.map((record) => record.transaction)
       : ledgerView === "unreconciled"
         ? unreconciledTransactions
+        : ledgerView === "imported"
+          ? importedTransactions
+          : ledgerView === "recurring"
+            ? recurringTransactions
         : ledgerView === "tax_open"
           ? taxOpenRecords.map((record) => record.transaction)
           : ledgerView === "future"
@@ -149,33 +166,51 @@ export function LedgerWorkspace({
       { label: "Expenses", value: currency(summary.expenses), helper: summaryModeHelper, tone: "text-rose-700", icon: WalletCards, iconTone: "border-rose-200 bg-rose-50 text-rose-700" },
       { label: "Net cashflow", value: currency(summary.netCashflow), helper: summaryModeHelper, tone: summary.netCashflow >= 0 ? "text-emerald-700" : "text-rose-700", icon: ArrowLeftRight, iconTone: summary.netCashflow >= 0 ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700" },
       { label: "Transactions", value: summary.transactionCount, helper: summaryModeHelper, icon: FileSearch, iconTone: "border-blue-200 bg-blue-50 text-blue-700" },
-      { label: "Needs review", value: transactionReviewInbox.length, tone: transactionReviewInbox.length > 0 ? "text-amber-700" : "", icon: AlertTriangle, iconTone: transactionReviewInbox.length > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-50 text-slate-500" },
-      { label: "Receipt gaps", value: receiptGapRecords.length, tone: receiptGapRecords.length > 0 ? "text-amber-700" : "", icon: ReceiptText, iconTone: receiptGapRecords.length > 0 ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-50 text-slate-500" },
-      {
-        label: "Bank match",
-        value: unreconciledTransactions.length,
-        helper: `${unreconciledTransactions.length} imported row${unreconciledTransactions.length === 1 ? "" : "s"} open | ${bankImportUnmatchedRows.length} unmatched import${bankImportUnmatchedRows.length === 1 ? "" : "s"}`,
-        tone: unreconciledTransactions.length || bankImportUnmatchedRows.length ? "text-amber-700" : "",
-        icon: Upload,
-        iconTone: unreconciledTransactions.length || bankImportUnmatchedRows.length ? "border-amber-200 bg-amber-50 text-amber-700" : "border-slate-200 bg-slate-50 text-slate-500",
-      },
     ];
-  }, [bankImportUnmatchedRows.length, currency, ledgerTransactions, receiptGapRecords.length, summaryView, todayIso, transactionReviewInbox.length, unreconciledTransactions.length]);
-  const quickFilters = [
-    { key: "all", label: "All", count: ledgerTransactions.length },
-    { key: "review", label: "Needs review", count: transactionReviewInbox.length },
-    { key: "receipts", label: "Receipt gaps", count: receiptGapRecords.length },
-    { key: "unreconciled", label: "Needs bank match", count: unreconciledTransactions.length },
-    { key: "tax_open", label: "Review open", count: taxOpenRecords.length },
-    { key: "future", label: "Future-dated", count: futureTransactions.length },
-  ];
+  }, [currency, ledgerTransactions, summaryView, todayIso]);
+  const workspaceModes = buildTransactionWorkspaceModes({
+    attentionCount: transactionReviewInbox.length,
+    bankMatchOpenCount: unreconciledTransactions.length + bankImportUnmatchedRows.length,
+    expectedRecurringCount: expectedRecurringTransactions.length,
+    importedCount: importedTransactions.length,
+    recurringCount: recurringTransactions.length,
+    transactionCount: ledgerTransactions.length,
+  });
+  const quickFilters = {
+    activity: [
+      { key: "all", label: "All activity", count: ledgerTransactions.length },
+      { key: "future", label: "Future-dated", count: futureTransactions.length },
+    ],
+    attention: [
+      { key: "review", label: "All flagged", count: transactionReviewInbox.length },
+      { key: "receipts", label: "Receipt gaps", count: receiptGapRecords.length },
+      { key: "tax_open", label: "Tax review open", count: taxOpenRecords.length },
+    ],
+    recurring: [
+      { key: "recurring", label: "Recurring history", count: recurringTransactions.length },
+    ],
+    imports: [
+      { key: "imported", label: "All imported", count: importedTransactions.length },
+      { key: "unreconciled", label: "Needs bank match", count: unreconciledTransactions.length },
+    ],
+  }[workspaceMode];
+  const modeListPresentation = {
+    activity: { title: "Transaction activity", helper: "Browse or edit every transaction in the selected scope." },
+    attention: { title: "Transactions needing attention", helper: "Inspect the exact records behind each flag. Use Work Queue for guided cleanup." },
+    recurring: { title: "Recurring activity", helper: "Review transactions created from recurring templates and monitor the next expected posting." },
+    imports: { title: "Imported activity", helper: "Review statement-sourced transactions and anything still waiting for a bank match." },
+  }[workspaceMode];
+  const changeWorkspaceMode = (mode) => {
+    setWorkspaceMode(mode);
+    setLedgerView(ledgerViewForTransactionWorkspaceMode(mode));
+    setReviewReasonFilter("all");
+    setSelectedReviewIds([]);
+    if (mode === "imports") setImportPanelOpen(true);
+  };
   const displayedReviewIds = new Set(displayedTransactions.map((transaction) => transaction.id));
   const selectedDisplayedReviewIds = selectedReviewIds.filter((id) => displayedReviewIds.has(id));
   const selectedDisplayedReviewRecords = selectedDisplayedReviewIds.map((id) => transactionReviewById[id]).filter(Boolean);
   const selectedBulkReviewIsSafe = canRunSafeBulkReview(selectedDisplayedReviewRecords);
-  const visibleReviewLimit = reviewInboxExpanded ? filteredReviewRecords.length : 4;
-  const visibleReviewRecords = filteredReviewRecords.slice(0, visibleReviewLimit);
-  const hiddenReviewCount = Math.max(filteredReviewRecords.length - visibleReviewRecords.length, 0);
   const toggleSelectedReviewId = (id) => {
     setSelectedReviewIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
@@ -211,43 +246,68 @@ export function LedgerWorkspace({
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-3 !p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
-          <div className="text-xs text-slate-500">
-            Summary view controls whether income, expenses, net cashflow, and transaction count include future-dated entries.
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">
-              {displayedTransactions.length} txn{displayedTransactions.length === 1 ? "" : "s"}
-            </Badge>
-            <div className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5">
-              <Button size="sm" variant={summaryView === "posted" ? "default" : "ghost"} onClick={() => setSummaryView("posted")}>
-                Posted to date
-              </Button>
-              <Button size="sm" variant={summaryView === "full_year" ? "default" : "ghost"} onClick={() => setSummaryView("full_year")}>
-                Full selected year
-              </Button>
-            </div>
-          </div>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-          {ledgerSummary.map((card) => {
-            const SummaryIcon = card.icon;
+        <div role="tablist" aria-label="Transaction workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {workspaceModes.map((mode) => {
+            const ModeIcon = TRANSACTION_MODE_ICONS[mode.key];
+            const selected = workspaceMode === mode.key;
             return (
-              <div key={`ledger-summary-${card.label}`} className="rounded-lg border border-slate-200 bg-white p-3 shadow-none">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-xs uppercase text-slate-500">{card.label}</div>
-                    <div className={`mt-1 text-base font-semibold leading-tight text-slate-900 ${card.tone || ""}`}>{card.value}</div>
-                    {card.helper ? <div className="mt-1 text-[11px] leading-4 text-slate-500">{card.helper}</div> : null}
-                  </div>
-                  <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${card.iconTone}`}>
-                    <SummaryIcon className="h-4 w-4" aria-hidden="true" />
+              <button
+                key={`transaction-mode-${mode.key}`}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={`rounded-xl border p-3 text-left transition ${selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/60"}`}
+                onClick={() => changeWorkspaceMode(mode.key)}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 text-sm font-semibold">
+                    <ModeIcon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />
+                    {mode.label}
                   </span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.count}</span>
                 </div>
-              </div>
+                <div className={`mt-2 text-xs leading-4 ${selected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+              </button>
             );
           })}
         </div>
+
+        {workspaceMode === "activity" ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+              <div className="text-xs text-slate-500">
+                Choose whether activity totals stop at today or include every entry in the selected year.
+              </div>
+              <div className="flex rounded-md border border-slate-200 bg-white p-0.5">
+                <Button size="sm" variant={summaryView === "posted" ? "default" : "ghost"} onClick={() => setSummaryView("posted")}>
+                  Posted to date
+                </Button>
+                <Button size="sm" variant={summaryView === "full_year" ? "default" : "ghost"} onClick={() => setSummaryView("full_year")}>
+                  Full selected year
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {ledgerSummary.map((card) => {
+                const SummaryIcon = card.icon;
+                return (
+                  <div key={`ledger-summary-${card.label}`} className="rounded-lg border border-slate-200 bg-white p-3 shadow-none">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-xs uppercase text-slate-500">{card.label}</div>
+                        <div className={`mt-1 text-base font-semibold leading-tight text-slate-900 ${card.tone || ""}`}>{card.value}</div>
+                        {card.helper ? <div className="mt-1 text-[11px] leading-4 text-slate-500">{card.helper}</div> : null}
+                      </div>
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${card.iconTone}`}>
+                        <SummaryIcon className="h-4 w-4" aria-hidden="true" />
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
 
         <div className={LEDGER_MUTED_PANEL_CLASS + " p-3"}>
           <div className="mb-2 flex flex-wrap gap-2">
@@ -288,29 +348,33 @@ export function LedgerWorkspace({
                 <SelectItem value="category_asc">Category A-Z</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={ledgerReconciliationFilter} onValueChange={setLedgerReconciliationFilter}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All bank-match states</SelectItem>
-                <SelectItem value="unreconciled">Needs bank match</SelectItem>
-                <SelectItem value="reconciled">Bank matched / accepted</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={reviewReasonFilter} onValueChange={setReviewReasonFilter}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All review reasons</SelectItem>
-                {reviewReasonOptions.map((option) => (
-                  <SelectItem key={`review-reason-${option.key}`} value={option.key}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {workspaceMode === "activity" || workspaceMode === "imports" ? (
+              <Select value={ledgerReconciliationFilter} onValueChange={setLedgerReconciliationFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All bank-match states</SelectItem>
+                  <SelectItem value="unreconciled">Needs bank match</SelectItem>
+                  <SelectItem value="reconciled">Bank matched / accepted</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
+            {workspaceMode === "attention" ? (
+              <Select value={reviewReasonFilter} onValueChange={setReviewReasonFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All review reasons</SelectItem>
+                  {reviewReasonOptions.map((option) => (
+                    <SelectItem key={`review-reason-${option.key}`} value={option.key}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : null}
             <Button
               variant="secondary"
               className="whitespace-nowrap xl:justify-self-start"
@@ -320,6 +384,7 @@ export function LedgerWorkspace({
                 setLedgerReconciliationFilter("all");
                 setLedgerSort("date_desc");
                 setReviewReasonFilter("all");
+                setLedgerView(ledgerViewForTransactionWorkspaceMode(workspaceMode));
               }}
             >
               <Filter className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -328,173 +393,46 @@ export function LedgerWorkspace({
           </div>
         </div>
 
-        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
+        {workspaceMode === "attention" ? <div className={`rounded-xl border p-3 ${transactionReviewInbox.length > 0 ? "border-amber-200 bg-amber-50/70" : "border-emerald-200 bg-emerald-50/70"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2">
-              <FileSearch className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
+              <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${transactionReviewInbox.length > 0 ? "text-amber-700" : "text-emerald-700"}`} aria-hidden="true" />
               <div className="min-w-0">
-              <div className="text-sm font-semibold text-slate-900">Transaction Review Inbox</div>
-              <div className="mt-1 text-xs text-slate-600">
-                Cleanup queue for receipts, categories, service periods, owner-use overrides, de minimis treatment, imported rows, and tax-open items.
-              </div>
+                <div className="text-sm font-semibold text-slate-900">{transactionReviewInbox.length > 0 ? `${transactionReviewInbox.length} transactions have open flags` : "No transaction flags are open"}</div>
+                <div className="mt-1 text-xs text-slate-600">
+                  {transactionReviewInbox.length > 0
+                    ? `${receiptGapRecords.length} receipt gap${receiptGapRecords.length === 1 ? "" : "s"} · ${taxOpenRecords.length} tax sign-off${taxOpenRecords.length === 1 ? "" : "s"}. Inspect records here or use Work Queue for guided cleanup.`
+                    : "This view will collect transaction-level receipt, category, service-period, bank-match, and tax flags."}
+                </div>
               </div>
             </div>
-            <Badge variant="secondary" className={transactionReviewInbox.length > 0 ? "!bg-blue-100 !text-blue-700" : "!bg-emerald-100 !text-emerald-700"}>
-              {transactionReviewInbox.length > 0 ? `${visibleReviewRecords.length} shown / ${transactionReviewInbox.length} total` : "Ready"}
-            </Badge>
+            {transactionReviewInbox.length > 0 && openReviewCenter ? <Button size="sm" onClick={openReviewCenter}>Open Work Queue</Button> : null}
           </div>
-          {transactionReviewInbox.length === 0 ? (
-            <div className="mt-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-              No transaction cleanup items in the current year/property/unit/search scope.
-            </div>
-          ) : filteredReviewRecords.length === 0 ? (
-            <div className="mt-3 rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
-              No transactions match the selected review reason.
-            </div>
-          ) : (
-            <div className="mt-3 grid gap-2 lg:grid-cols-2">
-              {visibleReviewRecords.map((record) => {
-                const { Icon, iconClass } = getTransactionVisual(record.transaction);
-                return <div
-                  key={`txn-review-${record.transaction.id}`}
-                  role="button"
-                  tabIndex={0}
-                  className="rounded-lg border border-blue-100 bg-white px-3 py-2 text-left text-sm transition hover:border-blue-300 hover:bg-blue-50"
-                  onClick={() => openReviewTransaction(record.transaction)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openReviewTransaction(record.transaction);
-                    }
-                  }}
-                  onMouseEnter={prefetchTransactionDialog}
-                  onFocus={prefetchTransactionDialog}
-                  onTouchStart={prefetchTransactionDialog}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={selectedReviewIds.includes(record.transaction.id)}
-                      onChange={(event) => {
-                        event.stopPropagation();
-                        toggleSelectedReviewId(record.transaction.id);
-                      }}
-                      onClick={(event) => event.stopPropagation()}
-                      aria-label={`Select ${record.transaction.description || "transaction"} for bulk review`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start gap-2">
-                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${iconClass}`}><Icon className="h-3.5 w-3.5" /></span>
-                        <div className="min-w-0"><div className="truncate font-medium text-slate-900">{record.transaction.description || "(No description)"}</div>
-                        <div className="mt-1 text-xs text-slate-500">{record.transaction.date} | {propertyNameById[record.transaction.propertyId] || record.transaction.propertyId} | {record.transaction.category}</div></div>
-                      </div>
-                    </div>
-                    <Badge variant="secondary">{record.issues.length}</Badge>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {record.issues.slice(0, 3).map((issue) => (
-                      <button
-                        key={`${record.transaction.id}-${issue.key}`}
-                        type="button"
-                        className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 hover:border-blue-300 hover:bg-blue-50"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openTransaction(record.transaction, "ledger", false, issue.key);
-                        }}
-                      >
-                        {issue.label}
-                      </button>
-                    ))}
-                    {record.issues.length > 3 ? <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">+{record.issues.length - 3}</span> : null}
-                  </div>
-                  {record.issues.some((issue) => issue.key === "possible_improvement" || issue.key === "capital_improvement_needs_asset") ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {record.issues.some((issue) => issue.key === "possible_improvement") ? (
-                        <>
-                          <Button size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); markTransactionCapitalImprovement(record.transaction.id, false); }}>
-                            Mark as repair
-                          </Button>
-                          <Button size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); markTransactionCapitalImprovement(record.transaction.id, true); }}>
-                            Mark capital improvement
-                          </Button>
-                        </>
-                      ) : null}
-                      <Button size="sm" onClick={(event) => { event.stopPropagation(); startCreateAssetFromTransaction(record.transaction); }}>
-                        Create asset
-                      </Button>
-                    </div>
-                  ) : null}
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {record.issues.some((issue) => issue.key === "missing_receipt") ? (
-                      <Button size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); openTransaction(record.transaction, "ledger", false, "missing_receipt"); }}>
-                        Add receipt
-                      </Button>
-                    ) : null}
-                    {record.issues.some((issue) => issue.key === "missing_service_period") ? (
-                      <Button size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); openTransaction(record.transaction, "ledger", false, "missing_service_period"); }}>
-                        Add service period
-                      </Button>
-                    ) : null}
-                    {record.issues.some((issue) => issue.key === "tax_open") ? (
-                      <Button size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); openTransaction(record.transaction, "ledger", false, "tax_open"); }}>
-                        Review tax
-                      </Button>
-                    ) : null}
-                    <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); openReviewTransaction(record.transaction); }}>
-                      Open transaction
-                    </Button>
-                  </div>
-                </div>;
-              })}
-            </div>
-          )}
-          {hiddenReviewCount > 0 || reviewInboxExpanded ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {hiddenReviewCount > 0 ? <span className="text-xs text-slate-600">{hiddenReviewCount} more review item{hiddenReviewCount === 1 ? "" : "s"} hidden.</span> : null}
-              <Button size="sm" variant="secondary" onClick={() => setReviewInboxExpanded((prev) => !prev)}>
-                {reviewInboxExpanded ? "Show fewer" : "View all"}
-              </Button>
-              {openReviewCenter ? (
-                <Button size="sm" variant="ghost" onClick={openReviewCenter}>
-                  View all in Review Center
-                </Button>
-              ) : null}
-            </div>
-          ) : null}
-          {selectedDisplayedReviewIds.length > 0 ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-white px-3 py-2 text-xs text-slate-600">
-              <span className="font-medium text-slate-800">{selectedDisplayedReviewIds.length} selected</span>
-              <Button size="sm" variant="secondary" onClick={() => markTransactionsTaxReviewed(selectedDisplayedReviewIds)} disabled={!selectedBulkReviewIsSafe}>Mark tax reviewed</Button>
-              <Button size="sm" variant="secondary" onClick={() => reconcileTransactions(selectedDisplayedReviewIds)} disabled={!selectedBulkReviewIsSafe}>Mark bank matched</Button>
-              <Button size="sm" variant="secondary" onClick={() => useTransactionDatesAsServicePeriods(selectedDisplayedReviewIds)} disabled={!selectedBulkReviewIsSafe}>Use date as service period</Button>
-              <Button size="sm" variant="ghost" onClick={clearSelectedReviewIds}>Clear selection</Button>
-              {!selectedBulkReviewIsSafe ? <span className="text-[11px] text-amber-700">Bulk actions unlock only after selected rows have no blocking review issues.</span> : null}
-            </div>
-          ) : null}
-        </div>
+        </div> : null}
 
-        {expectedRecurringTransactions.length > 0 ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+        {workspaceMode === "recurring" ? (
+          <div className={`rounded-xl border p-3 ${expectedRecurringTransactions.length > 0 ? "border-amber-200 bg-amber-50/70" : "border-emerald-200 bg-emerald-50/70"}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-slate-900">Expected recurring watch</div>
-                <div className="mt-1 text-xs text-slate-600">Recurring templates due in the current scope that have not posted yet.</div>
+                <div className="text-sm font-semibold text-slate-900">Recurring schedule</div>
+                <div className="mt-1 text-xs text-slate-600">{expectedRecurringTransactions.length > 0 ? "Expected transactions that have not posted yet." : "Every recurring template due in this scope has posted."}</div>
               </div>
-              <Button size="sm" variant="secondary" onClick={postDueRecurringTransactions}>Post due recurring</Button>
+              {expectedRecurringTransactions.length > 0 ? <Button size="sm" variant="secondary" onClick={postDueRecurringTransactions}>Post due recurring</Button> : null}
             </div>
-            <div className="mt-2 grid gap-2 lg:grid-cols-2">
-              {expectedRecurringTransactions.slice(0, 4).map((template) => (
-                <div key={`expected-recurring-${template.id}`} className="rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm">
-                  <div className="font-medium text-slate-900">{template.description}</div>
-                  <div className="mt-1 text-xs text-slate-500">{template.nextDueDate} | {propertyNameById[template.propertyId] || template.propertyId} | Unit {template.unit} | {template.category}</div>
-                </div>
-              ))}
-            </div>
+            {expectedRecurringTransactions.length > 0 ? (
+              <div className="mt-2 grid gap-2 lg:grid-cols-2">
+                {expectedRecurringTransactions.slice(0, 4).map((template) => (
+                  <div key={`expected-recurring-${template.id}`} className="rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm">
+                    <div className="font-medium text-slate-900">{template.description}</div>
+                    <div className="mt-1 text-xs text-slate-500">{template.nextDueDate} | {propertyNameById[template.propertyId] || template.propertyId} | {formatTransactionUnitLabel(template.unit)} | {template.category}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        <div className={LEDGER_PANEL_CLASS + " p-3"}>
+        {workspaceMode === "imports" ? <div className={LEDGER_PANEL_CLASS + " p-3"}>
           <input ref={bankImportInputRef} type="file" accept=".csv,.qbo,.ofx,text/csv,application/x-ofx,application/ofx" className="hidden" onChange={onBankImportInputChange} />
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex min-w-0 items-start gap-2">
@@ -693,7 +631,26 @@ export function LedgerWorkspace({
               {bankImportRows.length > 20 && <div className="mt-2 text-xs text-slate-500">Showing first 20 rows in preview.</div>}
             </>
           )}
+        </div> : null}
+
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-2">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900">{modeListPresentation.title}</h2>
+            <div className="mt-0.5 text-xs text-slate-500">{modeListPresentation.helper}</div>
+          </div>
+          <Badge variant="secondary">{displayedTransactions.length} shown</Badge>
         </div>
+
+        {selectedDisplayedReviewIds.length > 0 ? (
+          <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-slate-600 shadow-sm">
+            <span className="font-semibold text-slate-900">{selectedDisplayedReviewIds.length} selected</span>
+            {workspaceMode === "attention" ? <Button size="sm" variant="secondary" onClick={() => markTransactionsTaxReviewed(selectedDisplayedReviewIds)} disabled={!selectedBulkReviewIsSafe}>Mark tax reviewed</Button> : null}
+            {workspaceMode === "attention" ? <Button size="sm" variant="secondary" onClick={() => useTransactionDatesAsServicePeriods(selectedDisplayedReviewIds)} disabled={!selectedBulkReviewIsSafe}>Use date as service period</Button> : null}
+            {workspaceMode === "imports" ? <Button size="sm" variant="secondary" onClick={() => reconcileTransactions(selectedDisplayedReviewIds)} disabled={!selectedBulkReviewIsSafe}>Mark bank matched</Button> : null}
+            <Button size="sm" variant="ghost" onClick={clearSelectedReviewIds}>Clear</Button>
+            {!selectedBulkReviewIsSafe ? <span className="text-[11px] text-amber-700">Resolve blocking issues before using bulk actions.</span> : null}
+          </div>
+        ) : null}
 
         {displayedTransactions.length === 0 ? (
           <div className={LEDGER_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>
@@ -703,6 +660,10 @@ export function LedgerWorkspace({
                 ? "No receipt gaps in this scope."
             : ledgerView === "unreconciled"
               ? "No imported transactions need a bank match in this scope."
+              : ledgerView === "imported"
+                ? "No statement-sourced transactions are in this scope yet."
+                : ledgerView === "recurring"
+                  ? "No transactions from recurring templates are in this scope yet."
                   : ledgerView === "tax_open"
                     ? "No tax-open transactions in this scope."
                     : ledgerView === "future"
@@ -751,7 +712,7 @@ export function LedgerWorkspace({
                   <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${iconClass}`}><Icon className="h-4 w-4" /></span>
                   <div className="min-w-0">
                     <div className="flex items-start gap-2">
-                      {ledgerView !== "all" ? (
+                      {workspaceMode === "attention" || workspaceMode === "imports" ? (
                         <input
                           type="checkbox"
                           className="mt-0.5 shrink-0"
@@ -830,9 +791,6 @@ export function LedgerWorkspace({
                         View/Edit
                       </Button>
                     )}
-                    <Button size="sm" variant="secondary" onClick={(event) => { event.stopPropagation(); openTransaction(t, "ledger", false); }}>
-                      More
-                    </Button>
                   </div>
                 </div>
               </div>

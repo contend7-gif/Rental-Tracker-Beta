@@ -184,6 +184,7 @@ export function DocumentsWorkspace({
   propertyNameById,
 }) {
   const [documentsTab, setDocumentsTab] = useState("inbox");
+  const [documentSubview, setDocumentSubview] = useState("all");
   const [documentGroupMode, setDocumentGroupMode] = useState("none");
   const [reviewDocument, setReviewDocument] = useState(null);
 
@@ -332,8 +333,13 @@ export function DocumentsWorkspace({
     () => visibleDocuments.filter((document) => isSupportingOnlyDocument(document)),
     [visibleDocuments],
   );
+  const unlinkedDocuments = useMemo(
+    () => visibleDocuments.filter((document) => !document.transactionId && !document.leaseId && !document.workOrderId && !getDocumentLinkedWorkOrder(document)),
+    [getDocumentLinkedWorkOrder, visibleDocuments],
+  );
   const documentsForTab = selectDocumentsForWorkspaceTab({
     documentStatusFilter,
+    documentSubview,
     documentsTab,
     inboxDocuments,
     linkedDocuments,
@@ -341,6 +347,7 @@ export function DocumentsWorkspace({
     ocrQualityDocuments,
     reviewedDocuments,
     supportingDocuments,
+    unlinkedDocuments,
     visibleDocuments,
   });
   const documentGroupContext = useMemo(() => ({
@@ -481,15 +488,27 @@ export function DocumentsWorkspace({
 
   const showInboxStatus = (status) => {
     setDocumentsTab("inbox");
+    setDocumentSubview("all");
     setDocumentStatusFilter(status);
   };
 
-  const handleStatusFilterChange = (status) => {
-    setDocumentStatusFilter(status);
-    if (["needs_indexing", "ocr_queue", "expense_queue", "work_order_queue"].includes(status)) {
-      setDocumentsTab("inbox");
-    }
+  const changeDocumentsTab = (tab) => {
+    setDocumentsTab(tab);
+    setDocumentSubview("all");
+    setDocumentStatusFilter("all");
   };
+
+  const handleShowFilterChange = (value) => {
+    if (value.startsWith("local:")) {
+      setDocumentSubview(value.slice("local:".length));
+      setDocumentStatusFilter("all");
+      return;
+    }
+    setDocumentSubview("all");
+    setDocumentStatusFilter(value);
+  };
+
+  const showFilterValue = documentSubview === "all" ? documentStatusFilter : `local:${documentSubview}`;
 
   const runAction = (document, action) => {
     if (action.key === "extract_text") return queueDocumentForOcr(document);
@@ -554,7 +573,7 @@ export function DocumentsWorkspace({
         <MobileInboxPanel desktopCompanionApi={desktopCompanionApi} onImport={openMobileCompanionImport} />
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => setDocumentsTab("inbox")}>
+          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => changeDocumentsTab("inbox")}>
             <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <DocumentStatIcon icon={Inbox} tone="inbox" />
               <span>Inbox</span>
@@ -570,7 +589,7 @@ export function DocumentsWorkspace({
             <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{visibleDocumentsMissingIndex.length}</div>
             <div className="mt-1 text-xs text-slate-500">Files that still need searchable text.</div>
           </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("inbox"); selectExpenseQueueFilter(); }}>
+          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectExpenseQueueFilter(); }}>
             <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <DocumentStatIcon icon={ReceiptText} tone="expense" />
               <span>Expense drafts</span>
@@ -578,7 +597,7 @@ export function DocumentsWorkspace({
             <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{pendingExpenseReviewCount}</div>
             <div className="mt-1 text-xs text-slate-500">OCR expense suggestions waiting for review.</div>
           </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("inbox"); selectWorkOrderQueueFilter(); }}>
+          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectWorkOrderQueueFilter(); }}>
             <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <DocumentStatIcon icon={Wrench} tone="workOrder" />
               <span>Work order drafts</span>
@@ -586,7 +605,7 @@ export function DocumentsWorkspace({
             <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{pendingWorkOrderReviewCount}</div>
             <div className="mt-1 text-xs text-slate-500">Maintenance suggestions waiting for review.</div>
           </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("linked"); setDocumentStatusFilter("linked"); }}>
+          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("library"); setDocumentSubview("linked"); setDocumentStatusFilter("all"); }}>
             <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <DocumentStatIcon icon={Link2} tone="linked" />
               <span>Linked documents</span>
@@ -594,7 +613,7 @@ export function DocumentsWorkspace({
             <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{linkedDocuments.length}</div>
             <div className="mt-1 text-xs text-slate-500">Files already supporting records.</div>
           </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("supporting"); setDocumentStatusFilter("all"); }}>
+          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("library"); setDocumentSubview("supporting"); setDocumentStatusFilter("all"); }}>
             <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
               <DocumentStatIcon icon={FileCheck2} tone="supporting" />
               <span>Supporting only</span>
@@ -646,7 +665,7 @@ export function DocumentsWorkspace({
                 </Button>
               ) : null}
               {ocrQualityDocuments.length > 0 ? (
-                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => setDocumentsTab("ocr_quality")}>
+                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("ocr_quality"); setDocumentStatusFilter("all"); }}>
                   Review OCR fixes ({ocrQualityDocuments.length})
                 </Button>
               ) : null}
@@ -671,12 +690,12 @@ export function DocumentsWorkspace({
                 </Button>
               ) : null}
               {pendingExpenseReviewCount > 0 ? (
-                <Button size="sm" className="w-full sm:w-auto" variant={documentStatusFilter === "expense_queue" ? "default" : "secondary"} onClick={() => { setDocumentsTab("inbox"); selectExpenseQueueFilter(); }}>
+                <Button size="sm" className="w-full sm:w-auto" variant={documentStatusFilter === "expense_queue" ? "default" : "secondary"} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectExpenseQueueFilter(); }}>
                   Expense drafts ({pendingExpenseReviewCount})
                 </Button>
               ) : null}
               {pendingWorkOrderReviewCount > 0 ? (
-                <Button size="sm" className="w-full sm:w-auto" variant={documentStatusFilter === "work_order_queue" ? "default" : "secondary"} onClick={() => { setDocumentsTab("inbox"); selectWorkOrderQueueFilter(); }}>
+                <Button size="sm" className="w-full sm:w-auto" variant={documentStatusFilter === "work_order_queue" ? "default" : "secondary"} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectWorkOrderQueueFilter(); }}>
                   Work order drafts ({pendingWorkOrderReviewCount})
                 </Button>
               ) : null}
@@ -727,19 +746,33 @@ export function DocumentsWorkspace({
               <Input className="mt-1" placeholder="Search files, tags, extracted text, tenant, vendor, work order, property, or unit" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} />
             </div>
             <div>
-              <Label className="text-xs text-slate-600">Status filter</Label>
-              <Select value={documentStatusFilter} onValueChange={handleStatusFilterChange}>
+              <Label className="text-xs text-slate-600">Show</Label>
+              <Select value={showFilterValue} onValueChange={handleShowFilterChange} disabled={documentsTab === "receipt_gaps"}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All documents</SelectItem>
-                  <SelectItem value="needs_attention">Needs attention</SelectItem>
-                  <SelectItem value="needs_tags">Needs tags</SelectItem>
-                  <SelectItem value="needs_indexing">Needs text extraction</SelectItem>
-                  <SelectItem value="ocr_queue">Needs OCR</SelectItem>
-                  <SelectItem value="expense_queue">Expense drafts</SelectItem>
-                  <SelectItem value="work_order_queue">Work order drafts</SelectItem>
-                  <SelectItem value="linked">Linked records</SelectItem>
-                  <SelectItem value="unlinked">Unlinked only</SelectItem>
+                  {documentsTab === "inbox" ? (
+                    <>
+                      <SelectItem value="all">All inbox items</SelectItem>
+                      <SelectItem value="local:ocr_quality">OCR fixes</SelectItem>
+                      <SelectItem value="local:needs_review">Flagged for review</SelectItem>
+                      <SelectItem value="needs_attention">Missing text or tags</SelectItem>
+                      <SelectItem value="needs_tags">Needs tags</SelectItem>
+                      <SelectItem value="needs_indexing">Needs text extraction</SelectItem>
+                      <SelectItem value="ocr_queue">Needs OCR</SelectItem>
+                      <SelectItem value="expense_queue">Expense drafts</SelectItem>
+                      <SelectItem value="work_order_queue">Work order drafts</SelectItem>
+                    </>
+                  ) : documentsTab === "library" ? (
+                    <>
+                      <SelectItem value="all">All files</SelectItem>
+                      <SelectItem value="local:linked">Linked records</SelectItem>
+                      <SelectItem value="local:unlinked">Unlinked files</SelectItem>
+                      <SelectItem value="local:supporting">Supporting only</SelectItem>
+                      <SelectItem value="local:reviewed">Reviewed</SelectItem>
+                    </>
+                  ) : (
+                    <SelectItem value="all">Missing receipt support</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -772,37 +805,33 @@ export function DocumentsWorkspace({
           </div>
         </div>
 
-        <Tabs value={documentsTab} onValueChange={setDocumentsTab}>
+        <Tabs value={documentsTab} onValueChange={changeDocumentsTab}>
           <TabsList className={DOCUMENT_MUTED_PANEL_CLASS + " h-auto w-full justify-start overflow-x-auto p-1 sm:w-auto"}>
-            <Inbox className="ml-1 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
-            <TabsTrigger value="inbox">Inbox ({inboxDocuments.length})</TabsTrigger>
-            <TabsTrigger value="ocr_quality"><FileWarning className="mr-1 h-3.5 w-3.5 text-amber-700" />OCR fixes ({ocrQualityDocuments.length})</TabsTrigger>
-            <TabsTrigger value="needs_review"><FileWarning className="mr-1 h-3.5 w-3.5 text-amber-700" />Needs Review ({needsReviewDocuments.length})</TabsTrigger>
-            <TabsTrigger value="linked"><Link2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Linked ({linkedDocuments.length})</TabsTrigger>
-            <TabsTrigger value="receipt_gaps">Missing Receipts ({missingReceiptGapRecords.length})</TabsTrigger>
-            <TabsTrigger value="supporting"><FileCheck2 className="mr-1 h-3.5 w-3.5 text-emerald-700" />Supporting ({supportingDocuments.length})</TabsTrigger>
-            <TabsTrigger value="reviewed">Reviewed ({reviewedDocuments.length})</TabsTrigger>
-            <TabsTrigger value="all">All Files ({visibleDocuments.length})</TabsTrigger>
+            <TabsTrigger value="inbox"><Inbox className="mr-1 h-3.5 w-3.5 text-blue-700" />Inbox ({inboxDocuments.length})</TabsTrigger>
+            <TabsTrigger value="library"><FileCheck2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Library ({filteredDocuments.length})</TabsTrigger>
+            <TabsTrigger value="receipt_gaps"><ReceiptText className="mr-1 h-3.5 w-3.5 text-amber-700" />Missing Support ({missingReceiptGapRecords.length})</TabsTrigger>
           </TabsList>
-          {["inbox", "ocr_quality", "needs_review", "linked", "supporting", "reviewed", "all"].map((tab) => (
+          {["inbox", "library"].map((tab) => (
             <TabsContent key={tab} value={tab} className="space-y-2">
               {filteredDocuments.length === 0 ? (
                 <div className={DOCUMENT_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>No documents for the current property/unit filter.</div>
               ) : documentsForTab.length === 0 ? (
                 <div className={DOCUMENT_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>
-                  {tab === "inbox"
-                    ? "No documents need review in the current search/filter."
-                    : tab === "ocr_quality"
-                      ? "No OCR field corrections are waiting in the current search/filter."
-                    : tab === "needs_review"
+                  {tab === "inbox" && documentSubview === "ocr_quality"
+                    ? "No OCR field corrections are waiting in the current search/filter."
+                    : tab === "inbox" && documentSubview === "needs_review"
                       ? "No flagged documents match the current search/filter."
-                      : tab === "linked"
-                        ? "No linked documents match the current search/filter."
-                        : tab === "supporting"
-                          ? "No supporting-only documents match the current search/filter."
-                          : tab === "reviewed"
-                            ? "No reviewed documents match the current search/filter."
-                            : "No documents match the current search."}
+                      : tab === "inbox"
+                        ? "No documents need action in the current search/filter."
+                        : documentSubview === "linked"
+                          ? "No linked documents match the current search/filter."
+                          : documentSubview === "unlinked"
+                            ? "No unlinked documents match the current search/filter."
+                          : documentSubview === "supporting"
+                            ? "No supporting-only documents match the current search/filter."
+                            : documentSubview === "reviewed"
+                              ? "No reviewed documents match the current search/filter."
+                              : "No files match the current search/filter."}
                 </div>
               ) : (
                 renderDocumentCards(documentsForTab)

@@ -14,11 +14,12 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { readinessBadgeClass } from "../shared/auditBadges.js";
 import { routeForReviewSection, routeForTransactionReview, runReviewRoute } from "../shared/reviewRouting.js";
 import { getLoanYearEndReview } from "../loans/loanReview.js";
-import { sortReviewItems, splitDoFirstItems, summarizeIssueLabels, summarizeReviewSections, visibleReviewItemsForSection } from "./reviewCenterPresentation.js";
+import { groupRelatedReviewItems, isGroupedReviewItem, sortReviewItems, sortReviewSeriesMembers, splitDoFirstItems, summarizeIssueLabels, summarizeReviewSections, visibleReviewItemsForSection } from "./reviewCenterPresentation.js";
 
 function inboxRecords(inbox) {
   if (Array.isArray(inbox)) return inbox;
@@ -182,6 +183,11 @@ function ActionRows({ items, emptyText = "No open items here." }) {
                   {itemUrgencyLabel(item)}
                 </Badge>
               ) : null}
+              {item.groupCount > 1 ? (
+                <Badge variant="outline" className="border-slate-300 bg-white text-[11px] text-slate-700">
+                  {item.groupCount} records
+                </Badge>
+              ) : null}
             </div>
             <div className="mt-0.5 text-xs text-slate-500">{item.subtitle}</div>
           </div>
@@ -304,6 +310,7 @@ export function ReviewCenterWorkspace({
   markTransactionCapitalImprovement,
   markTransactionSupportUnavailable,
   markLoanYearReviewed,
+  navigateWithDashboardContext,
   updateLoanYearEndReview,
   occupancyReviewInbox,
   openAssetEditor,
@@ -332,6 +339,7 @@ export function ReviewCenterWorkspace({
   yearFilter,
 }) {
   const [activeSection, setActiveSection] = useState("all");
+  const [batchPreview, setBatchPreview] = useState(null);
 
   const transactionRecords = inboxRecords(transactionReviewInbox);
   const assetTransactionCandidates = assetReviewInbox?.transactionCandidates || [];
@@ -343,14 +351,14 @@ export function ReviewCenterWorkspace({
   const assetReviewCount = assetTransactionCandidates.length + assetWarningRecords.length;
   const documentReviewCount = Number(pendingExpenseReviewCount || 0) + Number(pendingWorkOrderReviewCount || 0) + visibleDocumentsMissingIndex.length + Number(visibleSafeSuggestionCount || 0);
   const leaseReviewCount = occupancyRecords.length + tenantLedgerRecords.length;
-  const totalOpen =
+  const actionableRecordCount =
     transactionRecords.length +
     documentReviewCount +
     assetReviewCount +
     maintenanceRecords.length +
     leaseReviewCount +
-    loanRecords.length +
-    Number(taxReviewOpenCount || 0);
+    loanRecords.length;
+  const taxCrossCheckCount = Number(taxReviewOpenCount || 0);
 
   const runMaintenanceAction = (record) => {
     if (record.primaryAction === "create_expense" || record.primaryAction === "view_expense") return createWorkOrderExpense?.(record.workOrder);
@@ -435,11 +443,17 @@ export function ReviewCenterWorkspace({
     ].filter(Boolean);
     return {
       key: `txn-${transaction.id}`,
+      groupKey: transaction.recurringTemplateId ? `recurring:${transaction.recurringTemplateId}` : "",
+      groupTitle: transaction.description || transaction.vendor || transaction.category || "Recurring transactions",
+      groupActionLabel: "Review first",
       sectionKey: "transactions",
       title: transaction.vendor || transaction.description || transaction.category || "Transaction",
       subtitle: `${transaction.date || "No date"}${transaction.unit ? ` | Unit ${transaction.unit}` : ""} | ${currency?.(Number(transaction.amount || 0))}`,
       what: issueSummary(record.issues),
       issueLabels: summarizeIssueLabels(record.issues),
+      issueKeys: [...issueKeys],
+      checkCount: Math.max(1, record.issues?.length || 0),
+      transaction,
       why: firstIssueHelp(record.issues, "This ledger row is not ready for source-record confidence yet."),
       fix: transactionFixHint(record.issues),
       urgency: transactionUrgency(record.issues),
@@ -570,7 +584,7 @@ export function ReviewCenterWorkspace({
         key: "tax-open",
         sectionKey: "tax",
         title: "Tax Center source readiness",
-        subtitle: `${taxReviewOpenCount} source cleanup item${taxReviewOpenCount === 1 ? "" : "s"} still open`,
+        subtitle: `${taxReviewOpenCount} reporting cross-check${taxReviewOpenCount === 1 ? "" : "s"} still open`,
         what: "Tax Center still sees source cleanup before totals should be relied on.",
         why: "The Tax Overview is the final cross-check across documents, ledger, assets, leases, and loans.",
         fix: "Tax readiness open.",
@@ -593,18 +607,93 @@ export function ReviewCenterWorkspace({
     ],
     [documentItems, transactionItems, assetItems, maintenanceItems, occupancyItems, tenantLedgerItems, loanItems, taxItems],
   );
-  const sortedAllItems = useMemo(() => sortReviewItems(allItems), [allItems]);
+  const groupedAllItems = useMemo(() => groupRelatedReviewItems(allItems).map((item) => {
+    if (!isGroupedReviewItem(item) || item.sectionKey !== "transactions") return item;
+    const members = sortReviewSeriesMembers(item.memberItems || []);
+    const transactionIds = members.map((member) => member.transaction?.id).filter(Boolean);
+    const dates = members.map((member) => String(member.transaction?.date || "")).filter(Boolean).sort();
+    const totalAmount = members.reduce((sum, member) => sum + Number(member.transaction?.amount || 0), 0);
+    const allHaveIssue = (issueKey) => members.every((member) => member.issueKeys?.includes(issueKey));
+    const onlyTaxReview = members.every((member) => member.issueKeys?.length === 1 && member.issueKeys[0] === "tax_open");
+    const batchActions = [
+      allHaveIssue("missing_receipt") && markTransactionSupportUnavailable
+        ? {
+            key: "series-support-unavailable",
+            label: "Review support for series",
+            onAction: () => setBatchPreview({
+              title: "Mark support unavailable for this series?",
+              description: "This records that a receipt or document is unavailable for every listed transaction. It does not mark the tax review complete.",
+              confirmLabel: `Apply to ${transactionIds.length} transactions`,
+              members,
+              onConfirm: () => transactionIds.forEach((id) => markTransactionSupportUnavailable(id)),
+            }),
+          }
+        : null,
+      allHaveIssue("missing_service_period") && useTransactionDatesAsServicePeriods
+        ? {
+            key: "series-service-period",
+            label: "Set dates for series",
+            onAction: () => setBatchPreview({
+              title: "Use each transaction date as its service period?",
+              description: "Each listed transaction will use its own posted date as both the service-period start and end.",
+              confirmLabel: `Apply to ${transactionIds.length} transactions`,
+              members,
+              onConfirm: () => useTransactionDatesAsServicePeriods(transactionIds),
+            }),
+          }
+        : null,
+      onlyTaxReview && markTransactionsTaxReviewed
+        ? {
+            key: "series-tax-reviewed",
+            label: "Review series",
+            onAction: () => setBatchPreview({
+              title: "Mark this recurring series reviewed?",
+              description: "Every listed transaction has only the final tax-review check open.",
+              confirmLabel: `Mark ${transactionIds.length} reviewed`,
+              members,
+              onConfirm: () => markTransactionsTaxReviewed(transactionIds),
+            }),
+          }
+        : null,
+    ].filter(Boolean);
+    const dateRange = dates.length > 1 ? `${dates[0]} to ${dates.at(-1)}` : dates[0] || "Dates not set";
+
+    return {
+      ...item,
+      subtitle: `${members.length} recurring transactions | ${dateRange} | ${currency?.(totalAmount)} total`,
+      fix: `${members.length} related records can be reviewed as one series.`,
+      why: "Grouping keeps repeated monthly issues together without assuming unrelated transactions are the same.",
+      secondaryActions: batchActions,
+      extraContent: (
+        <details className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-700">Preview {members.length} transactions</summary>
+          <div className="mt-2 divide-y divide-slate-200">
+            {members.map((member) => (
+              <div key={member.key} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-800">{member.transaction?.date || "No date"} | {currency?.(Number(member.transaction?.amount || 0))}</div>
+                  <div className="truncate text-slate-500">{member.issueLabels?.join(", ") || "Review open"}</div>
+                </div>
+                <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={member.onAction}>Review</Button>
+              </div>
+            ))}
+          </div>
+        </details>
+      ),
+    };
+  }), [allItems, currency, markTransactionSupportUnavailable, markTransactionsTaxReviewed, useTransactionDatesAsServicePeriods]);
+  const sortedAllItems = useMemo(() => sortReviewItems(groupedAllItems), [groupedAllItems]);
   const { doFirstItems, remainingItems } = useMemo(() => splitDoFirstItems(sortedAllItems, 3), [sortedAllItems]);
 
   const sectionTabs = [
-    { key: "all", label: "All", count: totalOpen },
+    { key: "all", label: "All records", count: actionableRecordCount },
     { key: "documents", label: "Documents", count: documentReviewCount },
     { key: "transactions", label: "Transactions", count: transactionRecords.length },
     { key: "assets", label: "Assets", count: assetReviewCount },
     { key: "maintenance", label: "Maintenance", count: maintenanceRecords.length },
     { key: "leases", label: "Leases", count: leaseReviewCount },
     { key: "loans", label: "Loans", count: loanRecords.length },
-    { key: "tax", label: "Tax", count: Number(taxReviewOpenCount || 0) },
+    { key: "tax", label: "Tax cross-checks", count: taxCrossCheckCount },
   ];
 
   const activeTab = sectionTabs.find((tab) => tab.key === activeSection) || sectionTabs[0];
@@ -612,19 +701,20 @@ export function ReviewCenterWorkspace({
   const nextActionItem = doFirstItems[0] || sortedAllItems[0] || null;
   const visibleNextItems = activeSection === "all"
     ? remainingItems.slice(0, 8)
-    : visibleReviewItemsForSection(allItems, activeSection, doFirstItems, 10);
+    : visibleReviewItemsForSection(groupedAllItems, activeSection, doFirstItems, 10);
 
   return (
+    <>
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-3 !p-3">
         <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(220px,0.55fr)_minmax(220px,0.55fr)_auto]">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-slate-900">
-              {totalOpen > 0 ? `${totalOpen} open checks` : "Review complete"}
+              {actionableRecordCount > 0 ? `${actionableRecordCount} records need attention` : "Review complete"}
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              {totalOpen > 0
-                ? "Work this list before relying on year-end totals. The highest-risk items stay at the top."
+              {actionableRecordCount > 0
+                ? `Shown as ${groupedAllItems.length} action group${groupedAllItems.length === 1 ? "" : "s"}. Tax Center has ${taxCrossCheckCount} cross-check${taxCrossCheckCount === 1 ? "" : "s"} that summarize source readiness; they are not another set of records.`
                 : "All selected records are ready for this review scope."}
             </div>
           </div>
@@ -634,7 +724,7 @@ export function ReviewCenterWorkspace({
               {sectionInsight.primarySection ? sectionInsight.primarySection.label : "Nothing open"}
             </div>
             <div className="mt-0.5 text-xs text-slate-500">
-              {sectionInsight.primarySection ? `${sectionInsight.primarySection.count} item${sectionInsight.primarySection.count === 1 ? "" : "s"} in this area` : `${sectionInsight.clearSectionCount} areas clear`}
+              {sectionInsight.primarySection ? `${sectionInsight.primarySection.count} record${sectionInsight.primarySection.count === 1 ? "" : "s"} in this area` : `${sectionInsight.clearSectionCount} areas clear`}
             </div>
           </div>
           <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
@@ -649,6 +739,15 @@ export function ReviewCenterWorkspace({
               {nextActionItem.actionLabel || "Start next"}
             </Button>
           ) : null}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          <span className="font-semibold text-slate-800">Workflow:</span>
+          <span>Fix issues here</span>
+          <span aria-hidden="true">→</span>
+          <button type="button" className="font-medium text-teal-700 hover:text-teal-800" onClick={() => setView?.("ledger")}>inspect activity in Transactions</button>
+          <span aria-hidden="true">→</span>
+          <button type="button" className="font-medium text-teal-700 hover:text-teal-800" onClick={() => executeReviewRoute(routeForReviewSection("tax"))}>verify reporting in Tax Center</button>
         </div>
 
         <div className="grid gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 p-1.5 sm:grid-cols-2 xl:grid-cols-4">
@@ -683,7 +782,7 @@ export function ReviewCenterWorkspace({
                 </div>
                 <div>
                 <div className="text-sm font-semibold text-slate-900">Do first</div>
-                <div className="mt-1 text-xs text-amber-900">Highest priority open checks.</div>
+                <div className="mt-1 text-xs text-amber-900">Highest-priority action groups.</div>
                 </div>
               </div>
               <Badge variant="outline" className="border-amber-300 bg-white text-amber-800">
@@ -704,7 +803,7 @@ export function ReviewCenterWorkspace({
                 <BadgeCheck className="h-4 w-4" />
               </div>
               <div>
-              <div className="text-sm font-semibold text-slate-900">{activeSection === "all" ? "Remaining open checks" : `${activeTab.label} open checks`}</div>
+              <div className="text-sm font-semibold text-slate-900">{activeSection === "all" ? "Remaining action groups" : `${activeTab.label} needing attention`}</div>
               <div className="mt-1 text-xs text-slate-600">{activeSection === "all" ? "Excludes the Do first items above." : "Filtered by selected area."}</div>
               </div>
             </div>
@@ -723,9 +822,9 @@ export function ReviewCenterWorkspace({
                 sectionKey="transactions"
                 activeSection={activeSection}
                 title="Transactions"
-                helper="Ledger cleanup checks."
+                helper="Transaction cleanup checks."
                 count={transactionRecords.length}
-                actionLabel="Open Ledger"
+                actionLabel="Open Transactions"
                 onAction={() => setView?.("ledger")}
               />
 
@@ -787,8 +886,8 @@ export function ReviewCenterWorkspace({
               sectionKey="tax"
               activeSection={activeSection}
               title="Tax Center"
-              helper="Tax readiness checks."
-              count={Number(taxReviewOpenCount || 0)}
+              helper="Reporting cross-checks that summarize source readiness."
+              count={taxCrossCheckCount}
               actionLabel="Open Tax Overview"
               onAction={() => setView?.("tax")}
               badges={[`Tax readiness: ${taxReadinessSummary?.label || taxReadinessSummary?.status || "Unknown"}`]}
@@ -797,5 +896,33 @@ export function ReviewCenterWorkspace({
         ) : null}
       </CardContent>
     </Card>
+    <Dialog open={Boolean(batchPreview)} onOpenChange={(open) => { if (!open) setBatchPreview(null); }}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{batchPreview?.title || "Review recurring series"}</DialogTitle>
+        </DialogHeader>
+        <div className="text-sm text-slate-600">{batchPreview?.description}</div>
+        <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
+          {(batchPreview?.members || []).map((member) => (
+            <div key={member.key} className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 text-sm last:border-b-0">
+              <div>
+                <div className="font-medium text-slate-800">{member.transaction?.date || "No date"}</div>
+                <div className="text-xs text-slate-500">{member.issueLabels?.join(", ") || "Review open"}</div>
+              </div>
+              <div className="font-semibold text-slate-800">{currency?.(Number(member.transaction?.amount || 0))}</div>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => setBatchPreview(null)}>Cancel</Button>
+          <Button onClick={() => {
+            const action = batchPreview?.onConfirm;
+            setBatchPreview(null);
+            action?.();
+          }}>{batchPreview?.confirmLabel || "Apply"}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

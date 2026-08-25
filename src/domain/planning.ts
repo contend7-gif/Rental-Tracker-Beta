@@ -2,6 +2,7 @@ import { getPropertyCostBasis, type Asset, type Lease, type Loan, type Property,
 import { deductibleMortgageInterest, getRentalUsePctForDate, loanBreakdown } from "./accounting.ts";
 import { adjustedAssetDepreciationForYear } from "./assetDepreciation.ts";
 import { formatUnitLabel } from "./unitLabels.js";
+import { leaseIsOpenEnded, normalizeLeaseAgreementType } from "./leaseTerms.js";
 
 export type PlanningAssumptions = {
   horizonMonths: number;
@@ -499,7 +500,7 @@ function leaseIsActiveByDate(lease: Lease, dateText: string) {
   if (!dateText) return false;
   if (lease.startDate > dateText) return false;
   if (lease.actualEndDate) return lease.actualEndDate >= dateText;
-  if (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm) return true;
+  if (leaseIsOpenEnded(lease)) return true;
   return lease.endDate >= dateText;
 }
 
@@ -1019,7 +1020,7 @@ function buildPlanningForecastRerentAssumptions(args: {
         .filter((lease) => lease.propertyId === unit.propertyId && lease.unit === unit.name)
         .sort((left, right) => left.startDate.localeCompare(right.startDate));
       const activeLease = unitLeases.find((lease) => leaseIsActiveByDate(lease, args.today));
-      if (!activeLease || activeLease.monthToMonthAfterTerm || !activeLease.endDate) return [];
+      if (!activeLease || normalizeLeaseAgreementType(activeLease) !== "fixed_term" || !activeLease.endDate) return [];
 
       const successorLease = unitLeases.find((lease) => lease.startDate > activeLease.endDate);
       if (successorLease) return [];

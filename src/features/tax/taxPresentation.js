@@ -1,3 +1,36 @@
+export function buildTaxWorkspaceModes({ packageStatus = "Preliminary", reviewCount = 0, sourceRowCount = 0 } = {}) {
+  return [
+    {
+      key: "summary",
+      label: "Summary",
+      badge: packageStatus,
+      description: "See computed results, readiness, and the most useful next actions.",
+      tabs: ["overview"],
+    },
+    {
+      key: "schedule",
+      label: "Schedule E",
+      badge: `${sourceRowCount} source row${sourceRowCount === 1 ? "" : "s"}`,
+      description: "Review line totals and the source records behind each amount.",
+      tabs: ["schedule", "details"],
+    },
+    {
+      key: "review",
+      label: "Review & support",
+      badge: reviewCount > 0 ? `${reviewCount} open` : "Ready",
+      description: "Resolve tax checks, depreciation, loan, escrow, and support items.",
+      tabs: ["review", "depreciation", "loans", "tools"],
+    },
+    {
+      key: "filing",
+      label: "Filing package",
+      badge: packageStatus,
+      description: "Prepare exports, printouts, and the tax-preparer handoff packet.",
+      tabs: ["packet"],
+    },
+  ];
+}
+
 export function groupByLabel(items = []) {
   const grouped = new Map();
   items.forEach((item) => {

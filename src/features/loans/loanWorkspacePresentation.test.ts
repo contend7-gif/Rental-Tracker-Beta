@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { combinedLtvPresentation, loanPaymentTiming, loanReviewSummary } from "./loanWorkspacePresentation.js";
+import { buildLoanWorkspaceModes, combinedLtvPresentation, loanPaymentTiming, loanReviewSummary } from "./loanWorkspacePresentation.js";
+
+test("loan workspace modes give each debt workflow one clear job", () => {
+  const modes = buildLoanWorkspaceModes({ loanCount: 2, paymentCount: 14, reviewCount: 3 });
+
+  assert.deepEqual(modes.map((mode) => mode.key), ["overview", "payments", "tax", "details"]);
+  assert.equal(modes[0].badge, "2 loans");
+  assert.equal(modes[1].badge, "14 recorded");
+  assert.equal(modes[2].badge, "3 open");
+  assert.match(modes[3].description, /lender, rate, lien/i);
+});
+
+test("loan tax mode reports ready when review work is clear", () => {
+  const taxMode = buildLoanWorkspaceModes({ loanCount: 1 }).find((mode) => mode.key === "tax");
+  assert.equal(taxMode?.badge, "Ready");
+});
 
 test("combined LTV prefers complete estimated current values", () => {
   const result = combinedLtvPresentation(150000, [

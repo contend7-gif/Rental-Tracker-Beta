@@ -5,6 +5,36 @@ function numberValue(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+export function buildAssetWorkspaceModes({ assetCount = 0, cleanupCount = 0, year } = {}) {
+  const assetLabel = `${assetCount} ${assetCount === 1 ? "asset" : "assets"}`;
+  return [
+    {
+      key: "overview",
+      label: "Overview",
+      badge: assetLabel,
+      description: "See basis, current-year depreciation, readiness, and source coverage.",
+    },
+    {
+      key: "register",
+      label: "Asset register",
+      badge: assetLabel,
+      description: "Maintain buildings, improvements, equipment, and placed-in-service details.",
+    },
+    {
+      key: "schedules",
+      label: "Schedules",
+      badge: year ? `${year} tax year` : assetLabel,
+      description: "Inspect depreciation by asset and preview prior and future schedule years.",
+    },
+    {
+      key: "cleanup",
+      label: "Cleanup & sources",
+      badge: cleanupCount > 0 ? `${cleanupCount} open` : "Clear",
+      description: "Resolve missing sources, basis issues, mixed-use review, and candidates.",
+    },
+  ];
+}
+
 export function assetSourceTransactionIds(asset) {
   return Array.from(new Set([
     asset?.sourceTransactionId,

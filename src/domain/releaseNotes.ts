@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.3.0",
+    releaseDate: "2026-08-24",
+    title: "Clearer workspaces and flexible lease billing",
+    summary: "Modernizes the main landlord workflows, supports flexible lease terms and billing schedules, and strengthens the packaged desktop runtime.",
+    changes: [
+      "Home, Transactions, Properties, Maintenance, Loans, Depreciation, Review Center, and Tax Center now organize related tools into clear job-focused modes with simpler navigation and next actions.",
+      "Lease setup and rent automation now support short-, mid-, fixed-, month-to-month, and open-ended agreements with full-term, monthly, weekly, biweekly, and custom billing schedules.",
+      "Prepaid fixed-term rent stays attached to the correct lease and coverage period, including overlapping tenants and terms that cross calendar months.",
+      "The desktop runtime and updater dependency chain were upgraded to remove known high-severity vulnerabilities, with packaged regression coverage across ten core workflows.",
+    ],
+  },
+  {
     version: "1.2.0",
     releaseDate: "2026-08-15",
     title: "Mobile receipt capture and clearer prepaid rent",

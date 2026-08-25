@@ -21,7 +21,7 @@ const navIconColors = {
 
 export function AppSidebar({
   currentView,
-  navItems,
+  navGroups,
   prefetchWorkspace,
   properties,
   propertyFilter,
@@ -99,8 +99,15 @@ export function AppSidebar({
         </Select> : null}
       </div> : null}
 
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-1 lg:overflow-visible lg:px-0 lg:pb-0">
-        {navItems.map(([key, label, Icon]) => {
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 lg:mx-0 lg:block lg:space-y-3 lg:overflow-visible lg:px-0 lg:pb-0">
+        {navGroups.map((group) => (
+          <div key={group.key} className="flex gap-2 lg:block lg:space-y-1">
+            {group.label ? (
+              <div className={`hidden px-3 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 lg:block ${sidebarCollapsed ? "lg:text-center lg:px-0" : ""}`}>
+                {sidebarCollapsed ? <span aria-hidden="true">-</span> : group.label}
+              </div>
+            ) : null}
+            {group.items.map(([key, label, Icon]) => {
           const isActive = view === key;
           const iconColor = navIconColors[key] || "text-slate-500 group-hover:text-slate-700";
           return (
@@ -125,7 +132,9 @@ export function AppSidebar({
             <span className={sidebarCollapsed ? "inline lg:hidden" : "inline"}>{label}</span>
           </Button>
           );
-        })}
+            })}
+          </div>
+        ))}
       </div>
     </aside>
   );

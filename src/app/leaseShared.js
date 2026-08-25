@@ -30,7 +30,7 @@ export function leaseIsActiveByDate(lease, dateStr) {
     return lease.actualEndDate >= dateStr;
   }
 
-  if (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm) {
+  if (leaseIsOpenEnded(lease)) {
     return true;
   }
 
@@ -45,7 +45,7 @@ export function leaseStatusForDate(lease, dateStr) {
 
 export function leaseActualEndLabel(lease) {
   if (lease.actualEndDate) return lease.actualEndDate;
-  if (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm) return "Open (MTM)";
+  if (leaseIsOpenEnded(lease)) return "Open (MTM)";
   return lease.endDate;
 }
 
@@ -67,8 +67,7 @@ export function rentTxnIdFromAutomationKey(automationKey) {
 }
 
 export function leaseTypeLabel(lease) {
-  if (lease.rentalType === "Long-term") return lease.monthToMonthAfterTerm ? "Long-term (MTM after term)" : "Long-term";
-  if (lease.rentalType === "Mid-term") return lease.extensionTermMonths ? `Mid-term (+${lease.extensionTermMonths}m ext)` : "Mid-term";
-  return lease.rentalType || "Long-term";
+  return leaseTermSummaryLabel(lease);
 }
 import { leaseEffectiveEndDateForMonth, proratedRentForMonth30Day } from "../domain/rentProration.js";
+import { leaseIsOpenEnded, leaseTermSummaryLabel } from "../domain/leaseTerms.js";

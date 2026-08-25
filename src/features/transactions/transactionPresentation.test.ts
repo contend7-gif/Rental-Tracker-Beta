@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildTransactionWorkspaceModes,
   formatRentReportingMonth,
   formatTransactionUnitLabel,
   getRentReportingMonth,
   getTransactionVisual,
   isFutureDatedTransaction,
+  ledgerViewForTransactionWorkspaceMode,
   summarizeLedgerTransactions,
   transactionCategoryStatusLabel,
   transactionPostingStatusLabel,
@@ -13,6 +15,30 @@ import {
   transactionSupportStatusLabel,
   transactionTaxStatusLabel,
 } from "./transactionPresentation.js";
+
+test("transaction workspace modes keep activity, cleanup, recurring, and imports distinct", () => {
+  const modes = buildTransactionWorkspaceModes({
+    attentionCount: 31,
+    bankMatchOpenCount: 2,
+    expectedRecurringCount: 1,
+    importedCount: 8,
+    recurringCount: 6,
+    transactionCount: 59,
+  });
+
+  assert.deepEqual(modes.map((mode) => [mode.key, mode.count]), [
+    ["activity", 59],
+    ["attention", 31],
+    ["recurring", 6],
+    ["imports", 8],
+  ]);
+  assert.match(modes[1].description, /Work Queue/);
+  assert.match(modes[2].description, /1 expected posting due/);
+  assert.equal(ledgerViewForTransactionWorkspaceMode("activity"), "all");
+  assert.equal(ledgerViewForTransactionWorkspaceMode("attention"), "review");
+  assert.equal(ledgerViewForTransactionWorkspaceMode("recurring"), "recurring");
+  assert.equal(ledgerViewForTransactionWorkspaceMode("imports"), "imported");
+});
 
 test("rent reporting month prefers explicit period and understands month descriptions", () => {
   assert.equal(getRentReportingMonth({ type: "Income", category: "Rents received", date: "2026-03-29", rentPeriod: "2026-04" }), "2026-04");

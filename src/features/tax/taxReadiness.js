@@ -1,5 +1,5 @@
 const SECTION_DEFS = [
-  { key: "transactions", label: "Transactions", primaryActionLabel: "Go to Ledger", targetView: "ledger" },
+  { key: "transactions", label: "Transactions", primaryActionLabel: "Open Transactions", targetView: "ledger" },
   { key: "documents", label: "Documents", primaryActionLabel: "Review Documents", targetView: "documents" },
   { key: "assets", label: "Assets", primaryActionLabel: "Review Assets", targetView: "assets" },
   { key: "maintenance", label: "Maintenance", primaryActionLabel: "Review Maintenance", targetView: "maintenance" },

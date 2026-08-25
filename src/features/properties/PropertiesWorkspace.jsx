@@ -33,11 +33,13 @@ import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { isRentIncomeTransaction } from "../transactions/transactionPresentation.js";
+import { leaseRentSummaryLabel } from "../../domain/leaseTerms.js";
 import { PropertyRecordEditor } from "./PropertyRecordEditor.jsx";
 import { estimatePropertyValueAtDate } from "./propertyOperations.js";
 import {
   PROPERTY_PHOTO_CATEGORIES,
   VISIBLE_RENT_SCHEDULE_HELP,
+  buildPropertyWorkspaceModes,
   buildUnitOccupancyTimeline,
   documentRenewalStatus,
   propertyActivityEntries,
@@ -335,6 +337,14 @@ export function PropertiesWorkspace(props) {
     }] : []),
   ] : [];
   const readinessOpenItems = readinessItems.filter((item) => !item.ready);
+  const propertyWorkspaceModes = selected ? buildPropertyWorkspaceModes({
+    openItemCount: selected.openItems,
+    operationNoteCount: selected.property.operationNotes?.length || 0,
+    photoCount: selected.property.photos?.length || 0,
+    propertyDocumentCount: selected.propertyDocumentCount,
+    unitCount: selected.units.length,
+    valuationCount: selected.property.propertyValuations?.length || 0,
+  }) : [];
   const editingUnit = selected?.units.find((unit) => unit.id === unitDraft.id);
   const unitLinkSummary = editingUnit ? actions.getUnitLinkSummary?.(editingUnit.propertyId, editingUnit.name) : { counts: {}, total: 0 };
   const normalizedUnitName = unitDraft.name.trim().toLocaleLowerCase();
@@ -343,6 +353,10 @@ export function PropertiesWorkspace(props) {
   )));
 
   const openRecordSection = (section) => {
+    if (section === "occupancy") {
+      setTab("units");
+      return;
+    }
     setTab("records");
     setRecordSection(readinessRecordSection(section));
   };
@@ -496,15 +510,16 @@ export function PropertiesWorkspace(props) {
 
   return (
     <div className="space-y-3">
-      <Card className="overflow-hidden shadow-none">
+      {archivedPropertyCount ? (
+        <div className="flex justify-end">
+          <Button size="sm" variant="secondary" onClick={() => setShowArchived((value) => !value)}>
+            {showArchived ? "Hide archived" : `Show archived (${archivedPropertyCount})`}
+          </Button>
+        </div>
+      ) : null}
+
+      {rows.length !== 1 ? <Card className="overflow-hidden shadow-none">
         <CardContent className="space-y-2 !p-3">
-          {archivedPropertyCount ? (
-            <div className="flex justify-end rounded-lg border border-slate-200 bg-white px-3 py-2">
-              <Button size="sm" variant="secondary" onClick={() => setShowArchived((value) => !value)}>
-                {showArchived ? "Hide archived" : `Show archived (${archivedPropertyCount})`}
-              </Button>
-            </div>
-          ) : null}
           {rows.length > 1 ? <div className="hidden grid-cols-[minmax(220px,1.5fr)_90px_120px_150px_150px_90px_32px] gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-medium uppercase text-slate-500 lg:grid">
             <span>Property</span><span>Occupancy</span><span>YTD cash flow</span><span className="flex items-center gap-1" title={VISIBLE_RENT_SCHEDULE_HELP}>Recorded / visible schedule <Info className="h-3 w-3" aria-hidden="true" /><span className="sr-only">{VISIBLE_RENT_SCHEDULE_HELP}</span></span><span>Next lease expiration</span><span>Open items</span><span />
           </div> : null}
@@ -523,7 +538,7 @@ export function PropertiesWorkspace(props) {
             );
           })}
         </CardContent>
-      </Card>
+      </Card> : null}
 
       {selected ? (
         <Card className="overflow-hidden shadow-none">
@@ -542,12 +557,29 @@ export function PropertiesWorkspace(props) {
             <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onPhotoFiles} />
           </div>
           <CardContent className="!p-4">
-            <Tabs value={tab} onValueChange={setTab}>
-              <TabsList className="h-auto w-full justify-start overflow-x-auto p-1 sm:w-auto">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="photos">Photos ({selected.property.photos?.length || 0})</TabsTrigger>
-                <TabsTrigger value="records">Manage records</TabsTrigger>
-              </TabsList>
+            <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+              <div role="tablist" aria-label="Property workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {propertyWorkspaceModes.map((mode) => {
+                  const modeSelected = tab === mode.key;
+                  const ModeIcon = mode.key === "overview" ? ShieldCheck : mode.key === "units" ? Building2 : mode.key === "records" ? FileText : Camera;
+                  return (
+                    <button
+                      key={`property-mode-${mode.key}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={modeSelected}
+                      className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/60"}`}
+                      onClick={() => setTab(mode.key)}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
+                      </div>
+                      <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+                    </button>
+                  );
+                })}
+              </div>
 
               <TabsContent value="overview" className="space-y-4">
                 <div className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -558,45 +590,27 @@ export function PropertiesWorkspace(props) {
                   <Stat label="Open items" value={String(selected.openItems)} detail={`${selected.openReviewItems} review | ${selected.openMaintenance} maintenance`} tone={selected.openItems ? "text-amber-700" : "text-emerald-700"} />
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-[1.4fr_0.6fr]">
-                  <div className="overflow-hidden rounded-lg border border-slate-200">
-                    <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2"><div><div className="text-sm font-semibold text-slate-900">Units & leases</div><span className="text-xs text-slate-500">Select a unit for its full record summary.</span></div><Button size="sm" variant="secondary" onClick={() => openUnitEditor()} disabled={!canCreateEditRecords || Boolean(selected.property.archivedAt)}><Plus className="mr-1.5 h-4 w-4" />Add unit</Button></div>
-                    {selected.units.length ? selected.units.map((unit) => {
-                      const status = getUnitStatusForDate(unit, dashboardAsOfDate);
-                      const lease = leases.find((item) => item.propertyId === selected.property.id && item.unit === unit.name && leaseIsActiveByDate(item, dashboardAsOfDate));
-                      return (
-                        <div key={unit.id} className="grid items-center gap-2 border-b border-slate-200 px-3 py-2.5 last:border-b-0 sm:grid-cols-[1fr_130px_150px_auto]">
-                          <button type="button" onClick={() => setUnitDetailId(unit.id)} className="min-w-0 rounded-md text-left focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"><div className="flex items-center gap-1 text-sm font-medium text-slate-900">{/^unit\b/i.test(String(unit.name || "")) ? unit.name : `Unit ${unit.name}`}<ChevronRight className="h-3.5 w-3.5 text-slate-400" /></div><div className="truncate text-xs text-slate-500">{lease ? lease.tenantName : status === "Owner-Occupied" ? "Owner occupied" : "No active lease"}</div></button>
-                          <Badge variant="secondary" className="w-fit">{unitStatusLabel[status] || status}</Badge>
-                          <div className="text-xs text-slate-600">{lease ? <><span className="block font-medium text-slate-800">{currency(lease.monthlyRent)} / mo</span><span>Ends {lease.actualEndDate || lease.endDate}</span></> : "No rent scheduled"}</div>
-                          <div className="flex justify-end gap-1.5"><Button size="sm" variant="secondary" onClick={() => lease ? openLease(lease) : openLeaseForUnit(selected.property.id, unit.name)} disabled={Boolean(selected.property.archivedAt) && !lease}>{lease ? "Lease" : "Occupancy"}</Button><Button size="sm" variant="secondary" className="h-9 w-9 p-0" title={`Manage ${unit.name}`} onClick={() => openUnitEditor(unit)} disabled={Boolean(selected.property.archivedAt)}><Pencil className="h-4 w-4" /></Button></div>
-                        </div>
-                      );
-                    }) : <div className="p-4 text-sm text-slate-500">No units are attached to this property.</div>}
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-lg border border-slate-200 p-3">
+                    <div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-900">Property readiness</div><div className="text-[11px] text-slate-500">Open an item in the workspace responsible for it.</div></div><Badge className={readinessOpenItems.length ? "!bg-amber-50 !text-amber-800" : "!bg-emerald-50 !text-emerald-700"}>{readinessItems.length - readinessOpenItems.length}/{readinessItems.length} ready</Badge></div>
+                    <div className="mt-2 space-y-1">
+                      {readinessOpenItems.length ? readinessOpenItems.map((item) => (
+                        <button key={item.key} type="button" onClick={() => openReadinessItem(item)} className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-amber-50">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                          <span className="min-w-0 flex-1"><span className="block text-xs font-medium text-slate-800">{item.label}</span><span className="block text-[11px] text-slate-500">{item.detail}</span></span><ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
+                        </button>
+                      )) : <div className="flex items-center gap-2 px-2 py-2 text-xs text-emerald-700"><ShieldCheck className="h-4 w-4" />Core property records are ready.</div>}
+                    </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="rounded-lg border border-slate-200 p-3">
-                      <div className="flex items-center justify-between gap-3"><div><div className="text-sm font-semibold text-slate-900">Property readiness</div><div className="text-[11px] text-slate-500">Select an item to open the matching records.</div></div><Badge className={readinessOpenItems.length ? "!bg-amber-50 !text-amber-800" : "!bg-emerald-50 !text-emerald-700"}>{readinessItems.length - readinessOpenItems.length}/{readinessItems.length} ready</Badge></div>
-                      <div className="mt-2 space-y-1">
-                        {readinessOpenItems.length ? readinessOpenItems.map((item) => (
-                          <button key={item.key} type="button" onClick={() => openReadinessItem(item)} className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-amber-50">
-                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                            <span className="min-w-0 flex-1"><span className="block text-xs font-medium text-slate-800">{item.label}</span><span className="block text-[11px] text-slate-500">{item.detail}</span></span><ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden="true" />
-                          </button>
-                        )) : <div className="flex items-center gap-2 px-2 py-2 text-xs text-emerald-700"><ShieldCheck className="h-4 w-4" />Core property records are ready.</div>}
-                      </div>
-                    </div>
-
-                    <div className="rounded-lg border border-slate-200 p-3">
-                      <div className="text-sm font-semibold text-slate-900">Quick actions</div>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <Button size="sm" variant="secondary" className="justify-start" onClick={() => openDashboardQuickAddForScope?.(selected.property.id, "Shared")} disabled={Boolean(selected.property.archivedAt)}><ReceiptText className="mr-2 h-4 w-4" />Transaction</Button>
-                        <Button size="sm" variant="secondary" className="justify-start" onClick={() => { setLeaseUnit(selected.units[0]?.name || ""); setLeasePickerOpen(true); }} disabled={!selected.units.length || Boolean(selected.property.archivedAt)}><CalendarClock className="mr-2 h-4 w-4" />Lease</Button>
-                        <Button size="sm" variant="secondary" className="justify-start" onClick={startPropertyMaintenance} disabled={Boolean(selected.property.archivedAt)}><Wrench className="mr-2 h-4 w-4" />Maintenance</Button>
-                        <Button size="sm" variant="secondary" className="justify-start" onClick={() => openDocumentImportPicker?.({ propertyId: selected.property.id, unit: "Shared", tags: "property" })} disabled={Boolean(selected.property.archivedAt)}><FileText className="mr-2 h-4 w-4" />Document</Button>
-                        <Button size="sm" variant="secondary" className="col-span-2 justify-start" onClick={() => openUnitEditor()} disabled={!canCreateEditRecords || Boolean(selected.property.archivedAt)}><Plus className="mr-2 h-4 w-4" />Add unit</Button>
-                      </div>
+                  <div className="rounded-lg border border-slate-200 p-3">
+                    <div className="text-sm font-semibold text-slate-900">Quick actions</div>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <Button size="sm" variant="secondary" className="justify-start" onClick={() => openDashboardQuickAddForScope?.(selected.property.id, "Shared")} disabled={Boolean(selected.property.archivedAt)}><ReceiptText className="mr-2 h-4 w-4" />Transaction</Button>
+                      <Button size="sm" variant="secondary" className="justify-start" onClick={() => { setLeaseUnit(selected.units[0]?.name || ""); setLeasePickerOpen(true); }} disabled={!selected.units.length || Boolean(selected.property.archivedAt)}><CalendarClock className="mr-2 h-4 w-4" />Lease</Button>
+                      <Button size="sm" variant="secondary" className="justify-start" onClick={startPropertyMaintenance} disabled={Boolean(selected.property.archivedAt)}><Wrench className="mr-2 h-4 w-4" />Maintenance</Button>
+                      <Button size="sm" variant="secondary" className="justify-start" onClick={() => openDocumentImportPicker?.({ propertyId: selected.property.id, unit: "Shared", tags: "property" })} disabled={Boolean(selected.property.archivedAt)}><FileText className="mr-2 h-4 w-4" />Document</Button>
+                      <Button size="sm" variant="secondary" className="col-span-2 justify-start" onClick={() => { setTab("units"); openUnitEditor(); }} disabled={!canCreateEditRecords || Boolean(selected.property.archivedAt)}><Plus className="mr-2 h-4 w-4" />Add unit</Button>
                     </div>
                   </div>
                 </div>
@@ -616,6 +630,20 @@ export function PropertiesWorkspace(props) {
                 </div>
               </TabsContent>
 
+              <TabsContent value="units" className="space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Units & occupancy</div>
+                    <div className="text-xs text-slate-500">Current status, active agreements, and occupancy history for each unit.</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => setView?.("leases")}><CalendarClock className="mr-2 h-4 w-4" />Open lease workspace</Button>
+                    <Button size="sm" onClick={() => openUnitEditor()} disabled={!canCreateEditRecords || Boolean(selected.property.archivedAt)}><Plus className="mr-2 h-4 w-4" />Add unit</Button>
+                  </div>
+                </div>
+                <PropertyRecordEditor {...props} propertyFilter={selected.property.id} recordSection="occupancy" openUnitDetail={(unit) => setUnitDetailId(unit.id)} openUnitEditor={openUnitEditor} />
+              </TabsContent>
+
               <TabsContent value="photos">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3"><div><div className="text-sm font-semibold text-slate-900">Property photos</div><div className="text-xs text-slate-500">Use a cover image in the portfolio and keep up to date condition references.</div></div><Button size="sm" onClick={() => photoInputRef.current?.click()} disabled={!canCreateEditRecords || imageBusy || Boolean(selected.property.archivedAt)}><ImagePlus className="mr-2 h-4 w-4" />Add photos</Button></div>
                 {selected.property.photos?.length ? (
@@ -628,8 +656,8 @@ export function PropertiesWorkspace(props) {
               <TabsContent value="records" className="pt-1">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">Manage records</div>
-                    <div className="text-xs text-slate-500">Choose one record area to review or update.</div>
+                    <div className="text-sm font-semibold text-slate-900">Property records</div>
+                    <div className="text-xs text-slate-500">Choose valuation, documents, or operating notes without mixing in unit occupancy.</div>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                     <span>{selected.property.propertyValuations?.length || 0} valuations</span>
@@ -644,7 +672,6 @@ export function PropertiesWorkspace(props) {
                     <TabsTrigger value="valuation" className="gap-2"><TrendingUp className="h-4 w-4" />Valuation</TabsTrigger>
                     <TabsTrigger value="documents" className="gap-2"><FileText className="h-4 w-4" />Documents <span className="text-xs text-slate-400">{selected.propertyDocumentCount}</span></TabsTrigger>
                     <TabsTrigger value="notes" className="gap-2"><KeyRound className="h-4 w-4" />Operations <span className="text-xs text-slate-400">{selected.property.operationNotes?.length || 0}</span></TabsTrigger>
-                    <TabsTrigger value="occupancy" className="gap-2"><Building2 className="h-4 w-4" />Occupancy <span className="text-xs text-slate-400">{selected.units.length}</span></TabsTrigger>
                   </TabsList>
                   <PropertyRecordEditor {...props} propertyFilter={selected.property.id} recordSection={recordSection} />
                 </Tabs>
@@ -668,7 +695,7 @@ export function PropertiesWorkspace(props) {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Occupancy</div><div className="mt-1 text-sm font-semibold text-slate-900">{unitDetailLease?.tenantName || (unitDetailStatus === "Owner-Occupied" ? "Owner occupied" : unitStatusLabel[unitDetailStatus] || unitDetailStatus)}</div></div>
               <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Rent recorded YTD</div><div className="mt-1 text-sm font-semibold text-emerald-700">{currency(unitDetailRent)}</div></div>
-              <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Monthly rent</div><div className="mt-1 text-sm font-semibold text-slate-900">{unitDetailLease ? currency(unitDetailLease.monthlyRent) : "No rent scheduled"}</div></div>
+              <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Rent schedule</div><div className="mt-1 text-sm font-semibold text-slate-900">{unitDetailLease ? leaseRentSummaryLabel(unitDetailLease, currency) : "No rent scheduled"}</div></div>
             </div>
 
             <section className="rounded-lg border border-slate-200">

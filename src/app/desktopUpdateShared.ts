@@ -45,7 +45,19 @@ export const DESKTOP_UPDATE_STATUS_LABELS: Record<DesktopUpdateStatus, string> =
 
 export function formatDesktopUpdateDate(dateText: unknown): string {
   if (!dateText) return "";
-  const parsed = new Date(String(dateText));
+  const normalized = String(dateText).trim();
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (dateOnlyMatch) {
+    const [, yearText, monthText, dayText] = dateOnlyMatch;
+    const parsedLocalDate = new Date(Number(yearText), Number(monthText) - 1, Number(dayText));
+    if (
+      parsedLocalDate.getFullYear() !== Number(yearText)
+      || parsedLocalDate.getMonth() !== Number(monthText) - 1
+      || parsedLocalDate.getDate() !== Number(dayText)
+    ) return "";
+    return parsedLocalDate.toLocaleDateString();
+  }
+  const parsed = new Date(normalized);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleString();
 }

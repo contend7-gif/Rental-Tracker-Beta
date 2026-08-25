@@ -33,10 +33,10 @@ import { normalizeReviewRoute, routeForReviewSection } from "../shared/reviewRou
 import { loanIdsMatch } from "../../domain/loans.ts";
 import { scheduleEWorksheetPages, scheduleEWorksheetPageText } from "../../domain/reporting.ts";
 import { getLoanYearEndReview } from "../loans/loanReview.js";
-import { readinessCounts, readinessForScheduleLine, supportBuckets } from "./taxPresentation.js";
+import { buildTaxWorkspaceModes, readinessCounts, readinessForScheduleLine, supportBuckets } from "./taxPresentation.js";
 
 const TAX_SOURCE_LABELS = {
-  transaction: "From Ledger",
+  transaction: "From Transactions",
   loan: "From Loans",
   loan_review: "From loan review",
   override: "Manual override",
@@ -45,12 +45,13 @@ const TAX_SOURCE_LABELS = {
 
 const TAX_TAB_META = {
   overview: { label: "Overview", description: "Readiness", icon: ClipboardCheck, tone: "border-teal-200 bg-teal-50 text-teal-700" },
-  schedule: { label: "Schedule E", description: "Line totals", icon: FileSpreadsheet, tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-  details: { label: "Details", description: "Source rows", icon: TableProperties, tone: "border-blue-200 bg-blue-50 text-blue-700" },
+  schedule: { label: "Line totals", description: "Schedule E", icon: FileSpreadsheet, tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  details: { label: "Source details", description: "Supporting rows", icon: TableProperties, tone: "border-blue-200 bg-blue-50 text-blue-700" },
+  review: { label: "Review overview", description: "Open checks", icon: ClipboardCheck, tone: "border-amber-200 bg-amber-50 text-amber-700" },
   depreciation: { label: "Depreciation", description: "Asset support", icon: FileText, tone: "border-indigo-200 bg-indigo-50 text-indigo-700" },
-  loans: { label: "Loans & Escrow", description: "Interest + escrow", icon: Landmark, tone: "border-sky-200 bg-sky-50 text-sky-700" },
+  loans: { label: "Loans & escrow", description: "Interest + escrow", icon: Landmark, tone: "border-sky-200 bg-sky-50 text-sky-700" },
   packet: { label: "Tax Packet", description: "Handoff", icon: Printer, tone: "border-violet-200 bg-violet-50 text-violet-700" },
-  tools: { label: "Tools", description: "Optional", icon: Wrench, tone: "border-slate-200 bg-slate-50 text-slate-600" },
+  tools: { label: "Review queue & tools", description: "Notes + utilities", icon: Wrench, tone: "border-slate-200 bg-slate-50 text-slate-600" },
 };
 
 const TAX_SECTION_CLASS = "space-y-3 rounded-xl border border-slate-200 bg-white p-4";
@@ -408,7 +409,6 @@ export function TaxWorkspace({
   const [detailsPage, setDetailsPage] = useState(1);
   const [showZeroScheduleLines, setShowZeroScheduleLines] = useState(true);
   const [copiedScheduleEPage, setCopiedScheduleEPage] = useState(null);
-  const taxTabs = ["overview", "schedule", "details", "depreciation", "loans", "packet", "tools"];
   const taxLineDefs = taxReportingSummary?.lineDefs || [];
   const scheduleLineDefs = showZeroScheduleLines ? taxLineDefs : taxLineDefs.filter((line) => money(taxReportingSummary?.totals?.[line.key] || 0) !== 0);
   const scheduleEPropertyWorksheet = buildScheduleEPropertyWorksheet({ lineDefs: taxLineDefs, propertyFilter, propertyNameById, taxByPropertySchedule, taxReportingSummary, taxSnapshot });
@@ -441,6 +441,27 @@ export function TaxWorkspace({
     warning.key === "escrow_insurance_possible_duplicate" ||
     warning.key === "mortgage_interest_override_active"
   );
+  const taxWorkspaceReviewCount = Math.max(
+    taxReviewOpenCount,
+    taxReadinessCounts.blockingIssues + taxReadinessCounts.sourceWarnings + taxReadinessCounts.supportWarnings,
+  );
+  const taxWorkspaceModes = buildTaxWorkspaceModes({
+    packageStatus: taxReadinessCounts.packageStatus,
+    reviewCount: taxWorkspaceReviewCount,
+    sourceRowCount: taxSourceRowCount,
+  });
+  const activeWorkspaceMode = taxWorkspaceModes.find((mode) => mode.tabs.includes(activeTaxTab)) || taxWorkspaceModes[0];
+  const workspaceModeIcons = {
+    summary: ClipboardCheck,
+    schedule: FileSpreadsheet,
+    review: Wrench,
+    filing: Printer,
+  };
+  const openWorkspaceMode = (modeKey) => {
+    const mode = taxWorkspaceModes.find((item) => item.key === modeKey);
+    if (!mode) return;
+    setActiveTaxTab(mode.key === "review" ? "review" : mode.tabs[0]);
+  };
   const openDetailsForLine = (lineKey) => {
     setDetailsLineFilter(lineKey);
     setActiveTaxTab("details");
@@ -485,6 +506,29 @@ export function TaxWorkspace({
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-4 !p-4">
+        <div role="tablist" aria-label="Tax Center workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+          {taxWorkspaceModes.map((mode) => {
+            const modeSelected = activeWorkspaceMode.key === mode.key;
+            const ModeIcon = workspaceModeIcons[mode.key] || ClipboardCheck;
+            return (
+              <button
+                key={`tax-mode-${mode.key}`}
+                type="button"
+                role="tab"
+                aria-selected={modeSelected}
+                className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/60"}`}
+                onClick={() => openWorkspaceMode(mode.key)}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
+                </div>
+                <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+              </button>
+            );
+          })}
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <Badge variant={taxReportingSummary?.status === "preliminary" ? "secondary" : "outline"} className={taxReportingSummary?.status === "preliminary" ? "!bg-amber-100 !text-amber-800" : "!bg-emerald-50 !text-emerald-700"}>
@@ -496,43 +540,22 @@ export function TaxWorkspace({
             <Badge variant="secondary" className={taxReadinessCounts.blockingIssues > 0 ? "!bg-rose-100 !text-rose-700" : "!bg-emerald-50 !text-emerald-700"}>{taxReadinessCounts.blockingIssues} blocking</Badge>
             <Badge variant="secondary" className={taxReadinessCounts.sourceWarnings > 0 ? "!bg-amber-100 !text-amber-800" : ""}>{taxReadinessCounts.sourceWarnings} source warnings</Badge>
             <Badge variant="secondary" className={taxReadinessCounts.supportWarnings > 0 ? "!bg-blue-100 !text-blue-700" : ""}>{taxReadinessCounts.supportWarnings} support warnings</Badge>
-            {activeTaxTab !== "schedule" ? (
-              <Button size="sm" variant="secondary" className="w-full gap-2 sm:w-auto" onClick={exportScheduleEReport}>
-                <FileSpreadsheet className="h-4 w-4" />
-                Export Schedule E
-              </Button>
-            ) : null}
-            {activeTaxTab !== "details" ? (
-              <Button size="sm" variant="secondary" className="w-full gap-2 sm:w-auto" onClick={exportTaxDetailCsv}>
-                <Download className="h-4 w-4" />
-                Export details
-              </Button>
-            ) : null}
-            {activeTaxTab === "schedule" ? (
-              <Button size="sm" variant="secondary" className="w-full gap-2 sm:w-auto" onClick={exportScheduleEFilledPdf}>
-                <FileText className="h-4 w-4" />
-                Print filled Schedule E
-              </Button>
-            ) : null}
-            {activeTaxTab !== "packet" ? (
-              <Button className="h-10 w-full gap-2 px-4 text-sm font-semibold shadow-sm sm:w-auto" onClick={() => { setTaxPrintScope("current"); setTaxPrintProperty(propertyFilter); setTaxPrintUnit(unitFilter); setTaxPrintDialogOpen(true); }}>
-                <Printer className="h-4 w-4" />
-                Print
-              </Button>
-            ) : null}
           </div>
         </div>
-        <div className="grid gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 p-1.5 text-sm sm:grid-cols-2 xl:grid-cols-7">
-          {taxTabs.map((key) => {
+
+        {activeWorkspaceMode.tabs.length > 1 ? (
+          <div role="tablist" aria-label={`${activeWorkspaceMode.label} views`} className={`grid gap-1.5 rounded-xl border border-slate-200 bg-slate-50/80 p-1.5 text-sm sm:grid-cols-2 ${activeWorkspaceMode.tabs.length > 2 ? "xl:grid-cols-4" : "xl:grid-cols-2"}`}>
+          {activeWorkspaceMode.tabs.map((key) => {
             const tab = TAX_TAB_META[key];
             const Icon = tab.icon;
-            const isToolsTab = key === "tools";
             return (
             <button
               key={key}
               type="button"
+              role="tab"
+              aria-selected={activeTaxTab === key}
               onClick={() => setActiveTaxTab(key)}
-              className={`flex min-h-[48px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition ${activeTaxTab === key ? "border-slate-900 bg-slate-900 text-white shadow-sm" : isToolsTab ? "border-slate-200 bg-slate-50 text-slate-500 hover:border-slate-300 hover:text-slate-800" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950"}`}
+              className={`flex min-h-[48px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition ${activeTaxTab === key ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950"}`}
             >
               <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${activeTaxTab === key ? "border-white/20 bg-white/10 text-white" : tab.tone}`}>
                 <Icon className="h-4 w-4" aria-hidden="true" />
@@ -543,7 +566,8 @@ export function TaxWorkspace({
               </span>
             </button>
           );})}
-        </div>
+          </div>
+        ) : null}
 
         {activeTaxTab === "overview" ? (
           <TaxCenterOverviewTab
@@ -848,7 +872,7 @@ export function TaxWorkspace({
               <div className={TAX_SECTION_CLASS}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <div className="text-base font-semibold text-slate-900">Details</div>
+                    <div className="text-base font-semibold text-slate-900">Schedule E source details</div>
                     <div className="mt-1 text-sm text-slate-600">Expandable source rows behind each Schedule E line. Use filters to focus on categories and review source transactions.</div>
                   </div>
                   <Button size="sm" variant="secondary" className="gap-2" onClick={exportTaxDetailCsv}>
@@ -1020,12 +1044,50 @@ export function TaxWorkspace({
                   <div className={`rounded-lg border p-3 ${openIssueCount > 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}>
                     <div className="text-sm font-semibold">{openIssueCount > 0 ? "Source cleanup needed" : "Source rows look ready"}</div>
                     <div className="mt-1 text-xs">{openIssueCount > 0 ? `${openIssueCount} row${openIssueCount === 1 ? "" : "s"} still needs review or missing source.` : "All rows in this selection are reviewed or linked."}</div>
-                    {openIssueCount > 0 ? <Button size="sm" variant="secondary" className="mt-3" onClick={() => navigateWithDashboardContext("review")}>Open Review Center</Button> : null}
+                    {openIssueCount > 0 ? <Button size="sm" variant="secondary" className="mt-3" onClick={() => navigateWithDashboardContext("review")}>Open Work Queue</Button> : null}
                   </div>
                 </div>
               </div>
             );
           })()
+        ) : null}
+
+        {activeTaxTab === "review" ? (
+          <div className="space-y-3">
+            <div className={TAX_SECTION_CLASS}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-base font-semibold text-slate-900">Tax review overview</div>
+                  <div className="mt-1 text-sm text-slate-600">See what needs attention, then open the workspace that owns the underlying record.</div>
+                </div>
+                <Button size="sm" variant={hasTaxCleanupWork ? "default" : "secondary"} onClick={() => navigateWithDashboardContext("review")}>Open Work Queue</Button>
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className={TAX_TILE_CLASS}><div className="text-[11px] font-semibold uppercase text-slate-500">Blocking issues</div><div className={`mt-1 text-base font-semibold ${taxReadinessCounts.blockingIssues ? "text-rose-700" : "text-emerald-700"}`}>{taxReadinessCounts.blockingIssues}</div><div className="mt-0.5 text-xs text-slate-500">Must resolve before relying on the packet</div></div>
+                <div className={TAX_TILE_CLASS}><div className="text-[11px] font-semibold uppercase text-slate-500">Source warnings</div><div className={`mt-1 text-base font-semibold ${taxReadinessCounts.sourceWarnings ? "text-amber-700" : "text-emerald-700"}`}>{taxReadinessCounts.sourceWarnings}</div><div className="mt-0.5 text-xs text-slate-500">Records needing tax review</div></div>
+                <div className={TAX_TILE_CLASS}><div className="text-[11px] font-semibold uppercase text-slate-500">Support warnings</div><div className={`mt-1 text-base font-semibold ${taxReadinessCounts.supportWarnings ? "text-blue-700" : "text-emerald-700"}`}>{taxReadinessCounts.supportWarnings}</div><div className="mt-0.5 text-xs text-slate-500">Receipts and source documentation</div></div>
+                <div className={TAX_TILE_CLASS}><div className="text-[11px] font-semibold uppercase text-slate-500">Review queue</div><div className={`mt-1 text-base font-semibold ${taxReviewOpenCount ? "text-amber-700" : "text-emerald-700"}`}>{taxReviewOpenCount}</div><div className="mt-0.5 text-xs text-slate-500">Open checks in the selected scope</div></div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 lg:grid-cols-3">
+              <button type="button" className="rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50/40" onClick={() => setActiveTaxTab("depreciation")}>
+                <div className="flex items-center gap-2 font-semibold text-slate-900"><FileText className="h-4 w-4 text-indigo-600" />Depreciation support</div>
+                <div className="mt-2 text-sm text-slate-600">Review asset basis, current-year depreciation, and source support.</div>
+                <div className="mt-3 text-sm font-medium text-blue-700">Open depreciation review</div>
+              </button>
+              <button type="button" className="rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-sky-200 hover:bg-sky-50/40" onClick={() => setActiveTaxTab("loans")}>
+                <div className="flex items-center gap-2 font-semibold text-slate-900"><Landmark className="h-4 w-4 text-sky-600" />Loans & escrow support</div>
+                <div className="mt-2 text-sm text-slate-600">Verify 1098 interest, PMI, escrow allocations, and possible duplicates.</div>
+                <div className="mt-3 text-sm font-medium text-blue-700">Open loan review</div>
+              </button>
+              <button type="button" className="rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-amber-200 hover:bg-amber-50/40" onClick={() => setActiveTaxTab("tools")}>
+                <div className="flex items-center gap-2 font-semibold text-slate-900"><Wrench className="h-4 w-4 text-amber-600" />Review queue & tools</div>
+                <div className="mt-2 text-sm text-slate-600">Manage detailed checks, escrow disbursements, carryovers, and preparer notes.</div>
+                <div className="mt-3 text-sm font-medium text-blue-700">Open review tools</div>
+              </button>
+            </div>
+          </div>
         ) : null}
 
         {activeTaxTab === "depreciation" ? (
@@ -1108,7 +1170,7 @@ export function TaxWorkspace({
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <div className="text-sm font-semibold text-amber-900">Asset review needed</div>
                       <div className="mt-1 text-xs text-amber-800">Review asset source support before relying on depreciation totals.</div>
-                      <Button size="sm" variant="secondary" className="mt-3" onClick={() => navigateWithDashboardContext("review")}>Open Review Center</Button>
+                      <Button size="sm" variant="secondary" className="mt-3" onClick={() => navigateWithDashboardContext("review")}>Open Work Queue</Button>
                     </div>
                   ) : null}
                 </div>
@@ -1203,13 +1265,13 @@ export function TaxWorkspace({
                     <div className="text-sm font-semibold">{taxPacketStatusLabel}</div>
                     <div className="mt-1 text-xs">
                       {taxPacketNeedsCleanup
-                        ? "Resolve Review Center items or add notes for filed amount differences before relying on this packet."
+                        ? "Resolve Work Queue items or add notes for filed amount differences before relying on this packet."
                         : taxReadinessCounts.supportWarnings > 0
                           ? "Totals can be reviewed, but some source rows still need support review."
                           : "Source records and support look ready for the selected scope."}
                     </div>
                   </div>
-                  {taxPacketNeedsCleanup ? <Button size="sm" variant="secondary" onClick={() => navigateWithDashboardContext("review")}>Open Review Center</Button> : null}
+                  {taxPacketNeedsCleanup ? <Button size="sm" variant="secondary" onClick={() => navigateWithDashboardContext("review")}>Open Work Queue</Button> : null}
                 </div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
@@ -1310,12 +1372,12 @@ export function TaxWorkspace({
                 <div className="text-base font-semibold text-slate-900">Review cleanup</div>
                 <div className="mt-1 text-xs text-slate-500">
                   {hasTaxCleanupWork
-                    ? "Use Review Center for transaction, document, asset, maintenance, occupancy, tenant ledger, and loan cleanup."
+                    ? "Use the Work Queue for transaction, document, asset, maintenance, occupancy, tenant ledger, and loan cleanup."
                     : "No tax cleanup items are open in the current filing scope."}
                 </div>
               </div>
               {hasTaxCleanupWork ? (
-                <Button size="sm" variant="secondary" onClick={() => navigateWithDashboardContext("review")}>Open Review Center</Button>
+                <Button size="sm" variant="secondary" onClick={() => navigateWithDashboardContext("review")}>Open Work Queue</Button>
               ) : (
                 <Badge variant="secondary" className="!bg-emerald-50 !text-emerald-700">Clear</Badge>
               )}

@@ -49,9 +49,11 @@ function isLeaseEnded(lease, todayIso) {
   if (lease.status === "Ended") return true;
   const actualEnd = String(lease.actualEndDate || "").trim();
   if (actualEnd) return actualEnd < todayIso;
-  if (lease.rentalType === "Long-term" && lease.monthToMonthAfterTerm) return false;
+  if (leaseIsOpenEnded(lease)) return false;
   return String(lease.endDate || "") < todayIso;
 }
+
+import { leaseIsOpenEnded } from "../../domain/leaseTerms.js";
 
 function entryText(entry) {
   return String(entry?.memo || "").toLowerCase();

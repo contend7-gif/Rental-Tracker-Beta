@@ -6,6 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { DialogLoadFallback } from "../shared/CommonDialogs.jsx";
 import { field } from "../shared/uiHelpers.jsx";
 import { selectableProperties } from "../../domain/propertyLifecycle.js";
+import {
+  leaseAgreementTypeLabel,
+  leaseBillingCadenceLabel,
+  leaseMonthlyEquivalent,
+  leaseRentSummaryLabel,
+  normalizeLeaseAgreementType,
+  normalizeLeaseBillingCadence,
+} from "../../domain/leaseTerms.js";
 
 export function LeaseEditorDialog({
   TENANT_LEDGER_ACCOUNTING_OPTIONS,
@@ -74,6 +82,17 @@ export function LeaseEditorDialog({
   usePeriodDraft,
 }) {
   const propertyOptions = selectableProperties(properties, leaseDraft?.propertyId);
+  const agreementType = normalizeLeaseAgreementType(leaseDraft);
+  const billingCadence = normalizeLeaseBillingCadence(leaseDraft);
+  const rentAmountLabel = billingCadence === "full_term"
+    ? "Full-term rent"
+    : billingCadence === "weekly"
+      ? "Weekly rent"
+      : billingCadence === "biweekly"
+        ? "Rent every two weeks"
+        : billingCadence === "custom"
+          ? "Rent each interval"
+          : "Monthly rent";
   return (
     <Dialog open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
       <DialogContent className="flex max-h-[90vh] w-[min(96vw,1280px)] max-w-[1280px] flex-col overflow-hidden rounded-xl border bg-white shadow-lg">
@@ -112,21 +131,71 @@ export function LeaseEditorDialog({
                       </SelectContent>
                     </Select>,
                   )}
-                  {field("Monthly rent", <Input type="number" min="0" value={leaseDraft.monthlyRent} onChange={(e) => setLeaseDraft({ ...leaseDraft, monthlyRent: e.target.value })} />)}
-                  {field("Security deposit", <Input type="number" min="0" value={leaseDraft.securityDeposit || ""} onChange={(e) => setLeaseDraft({ ...leaseDraft, securityDeposit: e.target.value })} />)}
-                  {field("Rent due day", <Input type="number" min="1" max="28" value={leaseDraft.rentDueDay ?? appSettings.leaseDefaultRentDueDay} onChange={(e) => setLeaseDraft({ ...leaseDraft, rentDueDay: e.target.value })} />)}
-                  {field("Reminder days before due", <Input type="number" min="0" max="14" value={leaseDraft.reminderDaysBefore ?? appSettings.leaseReminderDaysBefore} onChange={(e) => setLeaseDraft({ ...leaseDraft, reminderDaysBefore: e.target.value })} />)}
+                  <div className="md:col-span-2 rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-950">
+                    <div className="font-semibold">Term and billing are tracked separately</div>
+                    <div className="mt-1">{leaseDraft.rentalType || "Long-term"} | {leaseAgreementTypeLabel(leaseDraft)} | {leaseBillingCadenceLabel(leaseDraft)}</div>
+                    <div className="mt-1">{leaseRentSummaryLabel(leaseDraft, currency)}{billingCadence !== "monthly" ? ` | ${currency(leaseMonthlyEquivalent(leaseDraft))} monthly equivalent for planning` : ""}</div>
+                  </div>
                   {field(
-                    "Rental type",
+                    "Stay length",
                     <Select value={leaseDraft.rentalType || "Long-term"} onValueChange={(value) => setLeaseDraft({ ...leaseDraft, rentalType: value })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Long-term">Long-term</SelectItem>
-                        <SelectItem value="Mid-term">Mid-term</SelectItem>
                         <SelectItem value="Short-term">Short-term</SelectItem>
+                        <SelectItem value="Mid-term">Mid-term</SelectItem>
+                        <SelectItem value="Long-term">Long-term</SelectItem>
                       </SelectContent>
                     </Select>,
                   )}
+                  {field(
+                    "Agreement",
+                    <Select value={agreementType} onValueChange={(value) => setLeaseDraft({
+                      ...leaseDraft,
+                      agreementType: value,
+                      monthToMonthAfterTerm: value !== "fixed_term",
+                      billingCadence: value !== "fixed_term" && billingCadence === "full_term" ? "monthly" : billingCadence,
+                    })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fixed_term">Fixed term</SelectItem>
+                        <SelectItem value="month_to_month">Month-to-month</SelectItem>
+                        <SelectItem value="fixed_then_month_to_month">Fixed, then month-to-month</SelectItem>
+                      </SelectContent>
+                    </Select>,
+                  )}
+                  {field(
+                    "Billing schedule",
+                    <Select value={billingCadence} onValueChange={(value) => setLeaseDraft({
+                      ...leaseDraft,
+                      billingCadence: value,
+                      prorationMethod: value === "monthly" ? (leaseDraft.prorationMethod || "thirty_day") : "none",
+                    })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {agreementType === "fixed_term" ? <SelectItem value="full_term">Full term, paid upfront</SelectItem> : null}
+                        <SelectItem value="weekly">Weekly</SelectItem>
+                        <SelectItem value="biweekly">Every two weeks</SelectItem>
+                        <SelectItem value="monthly">Monthly</SelectItem>
+                        <SelectItem value="custom">Custom day interval</SelectItem>
+                      </SelectContent>
+                    </Select>,
+                  )}
+                  {field(rentAmountLabel, <Input type="number" min="0" step="0.01" value={leaseDraft.rentAmount ?? leaseDraft.monthlyRent} onChange={(e) => setLeaseDraft({ ...leaseDraft, rentAmount: e.target.value })} />)}
+                  {field("Security deposit", <Input type="number" min="0" value={leaseDraft.securityDeposit || ""} onChange={(e) => setLeaseDraft({ ...leaseDraft, securityDeposit: e.target.value })} />)}
+                  {billingCadence === "monthly" && field("Rent due day", <Input type="number" min="1" max="28" value={leaseDraft.rentDueDay ?? appSettings.leaseDefaultRentDueDay} onChange={(e) => setLeaseDraft({ ...leaseDraft, rentDueDay: e.target.value })} />)}
+                  {billingCadence === "custom" && field("Days between charges", <Input type="number" min="1" max="366" value={leaseDraft.billingIntervalDays || 30} onChange={(e) => setLeaseDraft({ ...leaseDraft, billingIntervalDays: e.target.value })} />)}
+                  {billingCadence !== "monthly" && field(billingCadence === "full_term" ? "Full payment due" : "First payment due", <Input type="date" value={leaseDraft.firstRentDueDate || leaseDraft.startDate} onChange={(e) => setLeaseDraft({ ...leaseDraft, firstRentDueDate: e.target.value })} />)}
+                  {billingCadence === "monthly" && field(
+                    "Partial-month billing",
+                    <Select value={leaseDraft.prorationMethod === "none" ? "none" : "thirty_day"} onValueChange={(value) => setLeaseDraft({ ...leaseDraft, prorationMethod: value })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="thirty_day">Prorate on a 30-day month</SelectItem>
+                        <SelectItem value="none">Charge full billing periods</SelectItem>
+                      </SelectContent>
+                    </Select>,
+                  )}
+                  {field("Reminder days before due", <Input type="number" min="0" max="14" value={leaseDraft.reminderDaysBefore ?? appSettings.leaseReminderDaysBefore} onChange={(e) => setLeaseDraft({ ...leaseDraft, reminderDaysBefore: e.target.value })} />)}
                   {field(
                     "Utilities included",
                     <Select value={leaseDraft.utilitiesIncluded ? "Yes" : "No"} onValueChange={(value) => setLeaseDraft({ ...leaseDraft, utilitiesIncluded: value === "Yes" })}>
@@ -137,23 +206,13 @@ export function LeaseEditorDialog({
                       </SelectContent>
                     </Select>,
                   )}
-                  {leaseDraft.rentalType === "Long-term" && field(
-                    "Month-to-month after term",
-                    <Select value={leaseDraft.monthToMonthAfterTerm ? "Yes" : "No"} onValueChange={(value) => setLeaseDraft({ ...leaseDraft, monthToMonthAfterTerm: value === "Yes", actualEndDate: value === "No" ? leaseDraft.endDate : leaseDraft.actualEndDate })}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Yes">Yes</SelectItem>
-                        <SelectItem value="No">No</SelectItem>
-                      </SelectContent>
-                    </Select>,
-                  )}
                   {leaseDraft.rentalType === "Mid-term" && field(
                     "Extension term (months)",
                     <Input type="number" value={leaseDraft.extensionTermMonths ?? 0} onChange={(e) => setLeaseDraft({ ...leaseDraft, extensionTermMonths: e.target.value })} />,
                   )}
-                  {field("Initial term start", <Input type="date" value={leaseDraft.startDate} onChange={(e) => setLeaseDraft({ ...leaseDraft, startDate: e.target.value })} />)}
-                  {field("Initial term end", <Input type="date" value={leaseDraft.endDate} onChange={(e) => setLeaseDraft({ ...leaseDraft, endDate: e.target.value, actualEndDate: leaseDraft.rentalType === "Long-term" && !leaseDraft.monthToMonthAfterTerm ? e.target.value : leaseDraft.actualEndDate })} />)}
-                  {field("Actual end date", <Input type="date" disabled={leaseDraft.rentalType === "Long-term" && !leaseDraft.monthToMonthAfterTerm} value={leaseDraft.rentalType === "Long-term" && !leaseDraft.monthToMonthAfterTerm ? leaseDraft.endDate : (leaseDraft.actualEndDate || "")} onChange={(e) => setLeaseDraft({ ...leaseDraft, actualEndDate: e.target.value })} />)}
+                  {field("Occupancy starts", <Input type="date" value={leaseDraft.startDate} onChange={(e) => setLeaseDraft({ ...leaseDraft, startDate: e.target.value, firstRentDueDate: leaseDraft.firstRentDueDate || e.target.value })} />)}
+                  {agreementType !== "month_to_month" && field("Fixed term ends", <Input type="date" value={leaseDraft.endDate} onChange={(e) => setLeaseDraft({ ...leaseDraft, endDate: e.target.value })} />)}
+                  {field("Actual move-out date (optional)", <Input type="date" value={leaseDraft.actualEndDate || ""} onChange={(e) => setLeaseDraft({ ...leaseDraft, actualEndDate: e.target.value })} />)}
                   {field(
                     "Status",
                     <Select value={leaseDraft.status} onValueChange={(value) => setLeaseDraft({ ...leaseDraft, status: value })}>

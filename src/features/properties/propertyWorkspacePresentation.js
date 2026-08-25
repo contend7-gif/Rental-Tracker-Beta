@@ -15,6 +15,43 @@ export const VISIBLE_RENT_SCHEDULE_HELP = "Visible scheduled rent is calculated 
 export const SENSITIVE_NOTE_REVEAL_MS = 60_000;
 export const PROPERTY_PHOTO_CATEGORIES = ["Exterior", "Interior", "Unit", "Appliance", "System", "Condition", "Other"];
 
+export function buildPropertyWorkspaceModes({
+  openItemCount = 0,
+  operationNoteCount = 0,
+  photoCount = 0,
+  propertyDocumentCount = 0,
+  unitCount = 0,
+  valuationCount = 0,
+} = {}) {
+  const recordCount = operationNoteCount + propertyDocumentCount + valuationCount;
+  return [
+    {
+      key: "overview",
+      label: "Overview",
+      badge: openItemCount > 0 ? `${openItemCount} open` : "Clear",
+      description: "See property health, readiness, next actions, and recent changes.",
+    },
+    {
+      key: "units",
+      label: "Units & occupancy",
+      badge: `${unitCount} unit${unitCount === 1 ? "" : "s"}`,
+      description: "Manage unit status, current agreements, and occupancy history.",
+    },
+    {
+      key: "records",
+      label: "Property records",
+      badge: `${recordCount} record${recordCount === 1 ? "" : "s"}`,
+      description: "Keep valuation support, documents, and operating notes together.",
+    },
+    {
+      key: "photos",
+      label: "Photos",
+      badge: `${photoCount} photo${photoCount === 1 ? "" : "s"}`,
+      description: "Maintain the cover image and property or unit condition photos.",
+    },
+  ];
+}
+
 export function documentRenewalStatus(expiresOn, asOfDate, warningDays = 60) {
   const expiry = String(expiresOn || "").trim();
   const asOf = String(asOfDate || "").trim();
