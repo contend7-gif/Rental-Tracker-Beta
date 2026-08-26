@@ -137,10 +137,12 @@ export function DocumentsWorkspace({
   leases,
   loadDocumentForReview,
   markDocumentWarningsReviewed,
+  mobileCompanionEnabled,
   updateLinkedTransactionFromDocumentOcr,
   markVisibleDocumentsPendingOcr,
   onDocumentImportInputChange,
   openMobileCompanionImport,
+  openMobileCompanionSettings,
   openDocumentImportPicker,
   openDocumentLinkedRecord,
   openDocumentPreview,
@@ -570,7 +572,13 @@ export function DocumentsWorkspace({
           </Button>
         </div>
 
-        <MobileInboxPanel desktopCompanionApi={desktopCompanionApi} onImport={openMobileCompanionImport} />
+        {mobileCompanionEnabled ? (
+          <MobileInboxPanel
+            desktopCompanionApi={desktopCompanionApi}
+            onImport={openMobileCompanionImport}
+            onOpenSettings={openMobileCompanionSettings}
+          />
+        ) : null}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => changeDocumentsTab("inbox")}>

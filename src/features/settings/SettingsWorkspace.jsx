@@ -6,6 +6,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { MobileCompanionSettings } from "./MobileCompanionSettings.jsx";
 import {
   AUTO_RECURRING_HELPER_TEXT,
   DASHBOARD_METRIC_OPTIONS,
@@ -110,6 +111,7 @@ export function SettingsWorkspace({
   desktopDiagnosticsCheckedAtLabel,
   desktopDiagnosticsRecentEvents,
   desktopDiagnosticsReport,
+  desktopCompanionApi,
   desktopDocumentAiApi,
   desktopUpdateBadgeClass,
   desktopUpdateBusy,
@@ -378,6 +380,20 @@ export function SettingsWorkspace({
               <div className="mt-2 text-xs text-slate-500">Deletes, full backup/restore, demo-data loads, and access-profile changes stay reserved for Admin.</div>
             </div>
           </div>
+        </SettingsSectionShell>
+
+        <SettingsSectionShell
+          title="Mobile companion"
+          description="Optional phone capture integration. Rental Tracker remains complete and local-first when this feature is off."
+          badge={<Badge variant="secondary">{appSettings.mobileCompanionEnabled ? "Enabled" : "Optional"}</Badge>}
+          collapsed={settingsSectionCollapsed.companion}
+          onToggle={() => setSettingsSectionCollapsed((prev) => ({ ...prev, companion: !prev.companion }))}
+        >
+          <MobileCompanionSettings
+            appSettings={appSettings}
+            desktopCompanionApi={desktopCompanionApi}
+            setSetting={setSetting}
+          />
         </SettingsSectionShell>
 
         <SettingsSectionShell

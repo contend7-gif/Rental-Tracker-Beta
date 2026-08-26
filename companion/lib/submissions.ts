@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 768 * 1024;
 export const ALLOWED_CONTENT_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -72,7 +72,7 @@ export function cleanOptionalText(value: FormDataEntryValue | null, maxLength: n
 export function validateUpload(file: File): string | null {
   if (!ALLOWED_CONTENT_TYPES.has(file.type)) return "Use a JPEG, PNG, or PDF file.";
   if (file.size <= 0) return "The selected file is empty.";
-  if (file.size > MAX_UPLOAD_BYTES) return "Files must be 15 MB or smaller.";
+  if (file.size > MAX_UPLOAD_BYTES) return "The prepared upload must be 768 KB or smaller.";
   return null;
 }
 
@@ -234,8 +234,21 @@ function mapStoredSubmission(row: Record<string, unknown>): StoredSubmission {
 }
 
 function publicSubmission(stored: StoredSubmission): MobileSubmission {
-  const { ownerFingerprint: _owner, storageKey: _key, claimedAt: _claimed, importedAt: _imported, ...submission } = stored;
-  return submission;
+  return {
+    id: stored.id,
+    status: stored.status,
+    kind: stored.kind,
+    propertyLabel: stored.propertyLabel,
+    unitLabel: stored.unitLabel,
+    note: stored.note,
+    originalFileName: stored.originalFileName,
+    contentType: stored.contentType,
+    byteSize: stored.byteSize,
+    sha256: stored.sha256,
+    capturedAt: stored.capturedAt,
+    createdAt: stored.createdAt,
+    updatedAt: stored.updatedAt,
+  };
 }
 
 function nullableString(value: unknown): string | null {

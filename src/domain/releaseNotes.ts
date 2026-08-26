@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.4.0",
+    releaseDate: "2026-08-26",
+    title: "Optional mobile capture and safer pairing",
+    summary: "Makes the Mobile Companion a clearly optional, per-user integration while improving large receipt uploads and desktop pairing controls.",
+    changes: [
+      "New installs keep Mobile Inbox off and hidden until the user enables it, while existing paired installs retain their working connection after updating.",
+      "Settings now shows whether this computer is paired, verifies the live connection without exposing credentials, supports credential replacement, and provides a deliberate disconnect action.",
+      "Large JPEG and PNG receipt captures are resized and compressed before upload, with clearer guidance when a file or PDF exceeds the companion's cloud limit.",
+      "A reusable setup guide explains that every user owns a separate private Site, storage namespace, sync secret, and access token; the desktop app remains fully usable without any companion deployment.",
+    ],
+  },
+  {
     version: "1.3.0",
     releaseDate: "2026-08-24",
     title: "Clearer workspaces and flexible lease billing",

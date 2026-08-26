@@ -41,6 +41,7 @@ export function useAppDialogStateController({ prefetchDialog }) {
   const [settingsSectionCollapsed, setSettingsSectionCollapsed] = useState({
     access: false,
     ai: true,
+    companion: false,
     workspace: false,
     automation: false,
     branding: true,

@@ -262,6 +262,15 @@ test("AI settings are sanitized and preserved", () => {
   assert.equal(fallback.aiOpenAiModel, DEFAULT_APP_SETTINGS.aiOpenAiModel);
 });
 
+test("mobile companion is opt-in for fresh installs and preserves older installs", () => {
+  assert.equal(DEFAULT_APP_SETTINGS.mobileCompanionEnabled, false);
+  assert.equal(sanitizeAppSettings({}).mobileCompanionEnabled, false);
+  assert.equal(sanitizeAppSettings({ theme: "light", defaultView: "dashboard" }).mobileCompanionEnabled, true);
+  assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, mobileCompanionEnabled: false }).mobileCompanionEnabled, false);
+  assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, mobileCompanionEnabled: true }).mobileCompanionEnabled, true);
+  assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, mobileCompanionEnabled: "yes" }).mobileCompanionEnabled, false);
+});
+
 test("AI API key is stripped from localStorage-shaped and exported settings", () => {
   const stored = sanitizeAppSettingsForStorage({
     ...DEFAULT_APP_SETTINGS,

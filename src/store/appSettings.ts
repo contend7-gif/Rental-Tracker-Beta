@@ -94,6 +94,7 @@ export type AppSettings = {
   accessRole: AccessRole;
   operatorName: string;
   aiDocumentCopilotEnabled: boolean;
+  mobileCompanionEnabled: boolean;
   aiOpenAiApiKey: string;
   hasAiOpenAiApiKey: boolean;
   aiOpenAiModel: string;
@@ -144,6 +145,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   accessRole: "admin",
   operatorName: "Local admin",
   aiDocumentCopilotEnabled: false,
+  mobileCompanionEnabled: false,
   aiOpenAiApiKey: "",
   hasAiOpenAiApiKey: false,
   aiOpenAiModel: "gpt-4o-mini",
@@ -207,6 +209,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
   if (!isRecord(raw)) return DEFAULT_APP_SETTINGS;
   const dashboardCardsRaw = isRecord(raw.dashboardCards) ? raw.dashboardCards : {};
   const aiOpenAiApiKey = sanitizeShortText(raw.aiOpenAiApiKey, 240);
+  const hasSavedSettings = Object.keys(raw).length > 0;
   return {
     theme: raw.theme === "dark" ? "dark" : "light",
     defaultView: typeof raw.defaultView === "string" && raw.defaultView ? raw.defaultView : DEFAULT_APP_SETTINGS.defaultView,
@@ -254,6 +257,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         : "admin",
     operatorName: sanitizeShortText(raw.operatorName, 80) || DEFAULT_APP_SETTINGS.operatorName,
     aiDocumentCopilotEnabled: raw.aiDocumentCopilotEnabled === true,
+    // Older installs already exposed Mobile Inbox. Preserve that behavior when
+    // migrating their saved settings, while keeping fresh installs opt-in.
+    mobileCompanionEnabled: Object.prototype.hasOwnProperty.call(raw, "mobileCompanionEnabled")
+      ? raw.mobileCompanionEnabled === true
+      : hasSavedSettings,
     aiOpenAiApiKey,
     hasAiOpenAiApiKey: raw.hasAiOpenAiApiKey === true || Boolean(aiOpenAiApiKey),
     aiOpenAiModel: sanitizeShortText(raw.aiOpenAiModel, 80) || DEFAULT_APP_SETTINGS.aiOpenAiModel,

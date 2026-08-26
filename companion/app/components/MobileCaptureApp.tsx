@@ -10,6 +10,10 @@ type Props = {
 
 type ApiError = { error?: string };
 
+const MAX_SELECTED_FILE_BYTES = 15 * 1024 * 1024;
+const TARGET_UPLOAD_BYTES = 700 * 1024;
+const MAX_IMAGE_DIMENSION = 2400;
+
 export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [submissions, setSubmissions] = useState<MobileSubmission[]>([]);
   const [file, setFile] = useState<File | null>(null);
@@ -37,7 +41,8 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   }, []);
 
   useEffect(() => {
-    void loadSubmissions();
+    const timeoutId = window.setTimeout(() => void loadSubmissions(), 0);
+    return () => window.clearTimeout(timeoutId);
   }, [loadSubmissions]);
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
@@ -56,16 +61,17 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     setSaving(true);
     setError(null);
     setMessage(null);
-    const form = new FormData();
-    form.set("file", file);
-    form.set("propertyLabel", propertyLabel);
-    form.set("unitLabel", unitLabel);
-    form.set("note", note);
-    form.set("capturedAt", new Date().toISOString());
 
     try {
+      const preparedFile = await prepareUploadFile(file);
+      const form = new FormData();
+      form.set("file", preparedFile);
+      form.set("propertyLabel", propertyLabel);
+      form.set("unitLabel", unitLabel);
+      form.set("note", note);
+      form.set("capturedAt", new Date().toISOString());
       const response = await fetch("/api/submissions", { method: "POST", body: form });
-      const body = (await response.json()) as { submission?: MobileSubmission } & ApiError;
+      const body = await readApiResponse<{ submission?: MobileSubmission } & ApiError>(response);
       if (!response.ok || !body.submission) throw new Error(body.error || "Capture could not be saved.");
       setSubmissions((current) => [body.submission!, ...current]);
       setFile(null);
@@ -134,7 +140,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
             />
             <span className="camera-glyph" aria-hidden="true">+</span>
             <strong>{file ? file.name : "Take photo or choose file"}</strong>
-            <small>{file ? formatBytes(file.size) : "JPEG, PNG, or PDF · up to 15 MB"}</small>
+            <small>{file ? formatBytes(file.size) : "JPEG or PNG · large photos optimized · PDFs up to 700 KB"}</small>
           </label>
 
           <div className="form-grid">
@@ -228,6 +234,88 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       <footer>Desktop remains the system of record · Files are private</footer>
     </main>
   );
+}
+
+async function readApiResponse<T extends ApiError>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (contentType.includes("application/json")) return (await response.json()) as T;
+
+  const message = (await response.text()).trim();
+  if (response.status === 413 || /payload too large/i.test(message)) {
+    throw new Error("This file is still too large to send. Try a smaller photo or use Documents on the desktop.");
+  }
+  throw new Error(message || `The companion could not complete the upload (${response.status}).`);
+}
+
+async function prepareUploadFile(file: File): Promise<File> {
+  if (file.size > MAX_SELECTED_FILE_BYTES) {
+    throw new Error("Choose a photo or PDF smaller than 15 MB.");
+  }
+  if (file.size <= TARGET_UPLOAD_BYTES) return file;
+  if (file.type === "application/pdf") {
+    throw new Error("This PDF is too large for mobile capture. Add it from Documents on the desktop instead.");
+  }
+  if (file.type !== "image/jpeg" && file.type !== "image/png") {
+    throw new Error("Use a JPEG, PNG, or PDF file.");
+  }
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error("This photo could not be opened. Choose it from your gallery or send a screenshot instead.");
+  }
+  try {
+    let width = bitmap.width;
+    let height = bitmap.height;
+    const initialScale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
+    width = Math.max(1, Math.round(width * initialScale));
+    height = Math.max(1, Math.round(height * initialScale));
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("This photo could not be prepared for upload.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(bitmap, 0, 0, width, height);
+
+      const quality = Math.max(0.58, 0.86 - attempt * 0.06);
+      const blob = await canvasToBlob(canvas, quality);
+      if (blob.size <= TARGET_UPLOAD_BYTES) {
+        return new File([blob], jpegFileName(file.name), {
+          type: "image/jpeg",
+          lastModified: file.lastModified,
+        });
+      }
+
+      const reduction = Math.min(0.88, Math.sqrt(TARGET_UPLOAD_BYTES / blob.size) * 0.94);
+      if (Math.max(width, height) <= 1000) break;
+      width = Math.max(1, Math.round(width * reduction));
+      height = Math.max(1, Math.round(height * reduction));
+    }
+  } finally {
+    bitmap.close();
+  }
+
+  throw new Error("This photo could not be reduced enough. Try a screenshot or add it from Documents on the desktop.");
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => blob ? resolve(blob) : reject(new Error("This photo could not be prepared for upload.")),
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
+function jpegFileName(name: string): string {
+  const base = name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9._-]/g, "_") || "receipt";
+  return `${base}.jpg`;
 }
 
 function initials(value: string): string {

@@ -65,6 +65,7 @@ export type CompanionSubmission = {
 export type DesktopCompanionApi = {
   getStatus: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string; hasSyncSecret?: boolean; hasSitesBypassToken?: boolean }>;
   configure: (payload: { siteUrl: string; syncSecret: string; sitesBypassToken?: string }) => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
+  disconnect: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
   list: () => Promise<DesktopResult & { submissions?: CompanionSubmission[] }>;
   claim: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
   download: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission; dataUrl?: string }>;

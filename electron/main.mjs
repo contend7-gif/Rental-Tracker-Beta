@@ -17,6 +17,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isEndToEndTest = process.env.RENTAL_TRACKER_E2E === "1";
 const endToEndUserDataPath = String(process.env.RENTAL_TRACKER_E2E_USER_DATA_PATH || "").trim();
+if (isEndToEndTest) {
+  // Packaged smoke does not exercise GPU features. Avoid host-driver crashes
+  // before Playwright can attach to the first application window.
+  app.disableHardwareAcceleration();
+}
 if (isEndToEndTest && endToEndUserDataPath) {
   app.setPath("userData", path.resolve(endToEndUserDataPath));
 }

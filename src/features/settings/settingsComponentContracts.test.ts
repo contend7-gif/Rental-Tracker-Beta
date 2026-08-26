@@ -26,4 +26,16 @@ test("settings workspace exposes compact tab summaries and backup controls", () 
   assert.match(source, /Desktop keeps the newest 8 managed restore-point files/);
   assert.match(source, /Recovery tools/);
   assert.match(source, /Hidden for now\. Expand when you need to adjust these settings\./);
+  assert.match(source, /title="Mobile companion"/);
+  assert.match(source, /Rental Tracker remains complete and local-first when this feature is off/);
+});
+
+test("mobile companion settings expose opt-in, pairing status, and disconnect controls", () => {
+  const source = readFileSync(new URL("./MobileCompanionSettings.jsx", import.meta.url), "utf8");
+
+  assert.match(source, /Off and hidden/);
+  assert.match(source, /Paired securely/);
+  assert.match(source, /Update pairing/);
+  assert.match(source, /Remove saved credentials/);
+  assert.match(source, /Each user who wants mobile capture must deploy and privately own a separate companion Site/);
 });

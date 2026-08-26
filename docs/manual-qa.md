@@ -57,6 +57,13 @@ Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, 
 - Confirm Activity Log is not in primary nav.
 - Confirm access profile controls are under Settings/Advanced.
 - Open Settings and confirm the Workspace, Data & Backup, and Advanced tabs separate daily settings from admin tools.
+- On a fresh profile, confirm Mobile Companion defaults to Off and Mobile Inbox is absent from Documents.
+- On a previously paired profile, confirm the update preserves the Enabled setting and encrypted connection.
+- Open Settings > Admin & Tools > Mobile companion and confirm paired status, Site address, private-token status, Check connection, Update pairing, and Disconnect controls appear without revealing credential values.
+- Turn Mobile Companion off and confirm Mobile Inbox is hidden from Documents without deleting the saved pairing; turn it back on and confirm the connection is still available.
+- Use Check connection and confirm the desktop reports the number of waiting captures.
+- Upload a fictional JPEG or PNG larger than 700 KB from the mobile Site and confirm it is resized before upload and appears in the desktop Mobile Inbox.
+- Confirm another user's setup guide requires a separate private Site, D1/R2 storage, sync secret, and private-Site token rather than reusing the maintainer deployment.
 - Open Review Center from primary navigation.
 - Confirm Review Center summarizes Transactions, Documents, Assets, Maintenance, Leases & Occupancy, Loans, and Tax Center cleanup queues.
 - Confirm Review Center rows explain what is wrong, why it matters, and what button fixes it.

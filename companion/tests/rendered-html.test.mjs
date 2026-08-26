@@ -11,6 +11,9 @@ test("builds the Rental Tracker mobile capture shell", async () => {
   assert.match(layout, /title: "Rental Tracker Companion"/);
   assert.match(component, /Receipt in\. Paperwork done\./);
   assert.match(component, /Send to Mobile Inbox/);
+  assert.match(component, /prepareUploadFile/);
+  assert.match(component, /payload too large/i);
+  assert.match(component, /TARGET_UPLOAD_BYTES = 700 \* 1024/);
   assert.doesNotMatch(`${layout}\n${component}`, /Your site is taking shape|react-loading-skeleton/i);
 });
 

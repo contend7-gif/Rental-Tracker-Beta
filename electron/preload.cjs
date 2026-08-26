@@ -29,6 +29,7 @@ const SECRETS_SET_CHANNEL = "secrets:set";
 const SECRETS_DELETE_CHANNEL = "secrets:delete";
 const COMPANION_STATUS_CHANNEL = "companion:status";
 const COMPANION_CONFIGURE_CHANNEL = "companion:configure";
+const COMPANION_DISCONNECT_CHANNEL = "companion:disconnect";
 const COMPANION_LIST_CHANNEL = "companion:list";
 const COMPANION_CLAIM_CHANNEL = "companion:claim";
 const COMPANION_DOWNLOAD_CHANNEL = "companion:download";
@@ -108,6 +109,7 @@ contextBridge.exposeInMainWorld("desktopSecrets", {
 contextBridge.exposeInMainWorld("desktopCompanion", {
   getStatus: () => ipcRenderer.invoke(COMPANION_STATUS_CHANNEL),
   configure: (payload) => ipcRenderer.invoke(COMPANION_CONFIGURE_CHANNEL, payload),
+  disconnect: () => ipcRenderer.invoke(COMPANION_DISCONNECT_CHANNEL),
   list: () => ipcRenderer.invoke(COMPANION_LIST_CHANNEL),
   claim: (id) => ipcRenderer.invoke(COMPANION_CLAIM_CHANNEL, { id }),
   download: (id) => ipcRenderer.invoke(COMPANION_DOWNLOAD_CHANNEL, { id }),
