@@ -6,7 +6,7 @@ export const mobileSubmissions = sqliteTable("mobile_submissions", {
   status: text("status", { enum: ["pending", "claimed", "imported"] })
     .notNull()
     .default("pending"),
-  kind: text("kind", { enum: ["receipt"] }).notNull().default("receipt"),
+  kind: text("kind", { enum: ["receipt", "maintenance"] }).notNull().default("receipt"),
   propertyLabel: text("property_label"),
   unitLabel: text("unit_label"),
   note: text("note"),

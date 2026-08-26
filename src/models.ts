@@ -474,6 +474,7 @@ export type DocumentItem = {
   sourceRef?: {
     provider: "rental-tracker-companion";
     submissionId: string;
+    kind?: "receipt" | "maintenance";
     sha256?: string;
     capturedAt?: string;
     propertyLabel?: string;

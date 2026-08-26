@@ -32,6 +32,7 @@ import {
 } from "../features/transactions/transactionVendorMemory.js";
 import type { DocumentItem, Property, Transaction, Unit, Vendor } from "../models.ts";
 import type { CompanionSubmission, DesktopCompanionApi } from "../types/desktop.d.ts";
+import { buildMobileCompanionImportContext } from "./mobileCompanionImport.ts";
 import type { DocumentImportDraft } from "./documentImportDraft.ts";
 import type { ChangeEvent } from "react";
 
@@ -374,6 +375,7 @@ export function createDocumentWorkspaceController({
         throw new Error(downloaded?.message || downloaded?.error || "Could not download this mobile capture.");
       }
       const remote = downloaded.submission || submission;
+      const companionContext = buildMobileCompanionImportContext(remote);
       const propertyLabel = String(remote.propertyLabel || "").trim();
       const normalizedPropertyLabel = propertyLabel.toLowerCase();
       const matchedProperty = normalizedPropertyLabel
@@ -399,14 +401,18 @@ export function createDocumentWorkspaceController({
         ...draft,
         propertyId,
         unit,
+        type: companionContext.documentType,
+        extractedText: companionContext.extractedText,
+        ocrStatus: companionContext.ocrStatus,
         tags: formatDocumentTags([
           ...String(draft.tags || "").split(",").filter(Boolean).map((tag) => ({ tag: tag.trim(), sources: ["context"] })),
-          { tag: "Receipt", sources: ["context"] },
+          { tag: companionContext.contextTag, sources: ["context"] },
           { tag: "Mobile capture", sources: ["context"] },
         ]),
         sourceRef: {
           provider: "rental-tracker-companion",
           submissionId: remote.id,
+          kind: companionContext.kind,
           sha256: remote.sha256,
           capturedAt: remote.capturedAt,
           propertyLabel: propertyLabel || undefined,
@@ -416,8 +422,8 @@ export function createDocumentWorkspaceController({
       };
       setDocumentImportDraft(draft);
       setDocumentImportDialogOpen(true);
-      setDocumentImportOcrMessage(remote.note ? `Mobile note: ${remote.note}` : "Captured on mobile and ready to review.");
-      void applyAutomaticOcrToImportDraft(draft);
+      setDocumentImportOcrMessage(companionContext.message);
+      if (companionContext.shouldRunOcr) void applyAutomaticOcrToImportDraft(draft);
       return true;
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not import this mobile capture.");

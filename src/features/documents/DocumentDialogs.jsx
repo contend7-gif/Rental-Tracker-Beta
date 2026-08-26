@@ -120,7 +120,9 @@ export function DocumentImportDialog({
   const hasText = Boolean(normalizeExtractedDocumentText(documentImportDraft?.extractedText || ""));
   const hasExpenseDraft = Boolean(documentImportExpenseSuggestion);
   const hasWorkOrderDraft = Boolean(documentImportWorkOrderSuggestion);
-  const isPropertyDocumentImport = String(documentImportDraft?.tags || "").toLowerCase().split(",").map((tag) => tag.trim()).includes("property");
+  const importTags = String(documentImportDraft?.tags || "").toLowerCase().split(",").map((tag) => tag.trim());
+  const isPropertyDocumentImport = importTags.includes("property");
+  const isMaintenanceDocumentImport = importTags.includes("maintenance");
   const bestTransactionLinkSuggestion = documentImportLinkSuggestions.find((suggestion) => suggestion.kind === "transaction" && suggestion.confidence === "high") || null;
   const readyUtilitySectionCount = documentImportUtilitySections.filter((section) => (
     !section.external &&
@@ -147,16 +149,18 @@ export function DocumentImportDialog({
     <Dialog open={documentImportDialogOpen} onOpenChange={onOpenChange}>
       <DialogContent className={dialogContentXlClass}>
         <DialogHeader>
-          <DialogTitle>{isPropertyDocumentImport ? "Add property document" : "Add bill from document"}</DialogTitle>
+          <DialogTitle>{isPropertyDocumentImport ? "Add property document" : isMaintenanceDocumentImport ? "Review maintenance capture" : "Add bill from document"}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-slate-900">{isPropertyDocumentImport ? "Property document intake" : "Guided bill entry"}</div>
+                <div className="text-sm font-semibold text-slate-900">{isPropertyDocumentImport ? "Property document intake" : isMaintenanceDocumentImport ? "Guided maintenance intake" : "Guided bill entry"}</div>
                 <div className="mt-1 text-xs text-slate-600">
                   {isPropertyDocumentImport
                     ? "Upload closing, deed, appraisal, insurance, inspection, or refinance support directly into this property's vault."
+                    : isMaintenanceDocumentImport
+                      ? "Review the mobile photo and issue details, then create or link a work order before saving the document."
                     : "Upload, review the OCR draft, save the transaction, and attach the document in one path."}
                 </div>
               </div>
@@ -164,8 +168,8 @@ export function DocumentImportDialog({
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-4">
               <WizardStep number="1" title="Upload" state={hasFile ? "complete" : "active"} />
-              <WizardStep number="2" title="OCR draft" state={hasText ? "complete" : hasFile ? "active" : "pending"} />
-              <WizardStep number="3" title="Confirm transaction" state={hasExpenseDraft || hasWorkOrderDraft ? "complete" : hasText ? "active" : "pending"} />
+              <WizardStep number="2" title={isMaintenanceDocumentImport ? "Issue details" : "OCR draft"} state={hasText ? "complete" : hasFile ? "active" : "pending"} />
+              <WizardStep number="3" title={isMaintenanceDocumentImport ? "Confirm work order" : "Confirm transaction"} state={hasExpenseDraft || hasWorkOrderDraft ? "complete" : hasText ? "active" : "pending"} />
               <WizardStep number="4" title="Save + attach" state={readyToFinish ? "active" : "pending"} />
             </div>
           </div>

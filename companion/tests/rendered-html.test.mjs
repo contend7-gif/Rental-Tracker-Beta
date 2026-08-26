@@ -9,8 +9,10 @@ test("builds the Rental Tracker mobile capture shell", async () => {
     access(new URL("../dist/server/index.js", import.meta.url)),
   ]);
   assert.match(layout, /title: "Rental Tracker Companion"/);
-  assert.match(component, /Receipt in\. Paperwork done\./);
+  assert.match(component, /Capture it now\. Finish it at your desk\./);
   assert.match(component, /Send to Mobile Inbox/);
+  assert.match(component, /Send maintenance report/);
+  assert.match(component, /form\.set\("kind", captureKind\)/);
   assert.match(component, /prepareUploadFile/);
   assert.match(component, /payload too large/i);
   assert.match(component, /TARGET_UPLOAD_BYTES = 700 \* 1024/);
@@ -31,4 +33,19 @@ test("declares private-storage boundaries and a mobile manifest", async () => {
   assert.equal(JSON.parse(manifest).display, "standalone");
   assert.match(desktopRoute, /requireDesktopAuthorization/);
   assert.match(worker, /UPLOADS: R2Bucket/);
+});
+
+test("maintenance reports use the existing private capture queue", async () => {
+  const [route, submissions, schema] = await Promise.all([
+    readFile(new URL("../app/api/submissions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/submissions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(route, /requestedKind === "maintenance"/);
+  assert.match(route, /property for this maintenance issue/);
+  assert.match(route, /description of the maintenance issue/);
+  assert.match(submissions, /"receipt" \| "maintenance"/);
+  assert.match(submissions, /input\.kind === "maintenance" \? "maintenance" : "receipts"/);
+  assert.match(schema, /\["receipt", "maintenance"\]/);
 });

@@ -49,7 +49,7 @@ export type DesktopPersistenceApi = {
 export type CompanionSubmission = {
   id: string;
   status: "pending" | "claimed" | "imported";
-  kind: "receipt";
+  kind: "receipt" | "maintenance";
   propertyLabel?: string | null;
   unitLabel?: string | null;
   note?: string | null;

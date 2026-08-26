@@ -80,6 +80,7 @@ test("mobile companion provenance survives document import", () => {
   const sourceRef = {
     provider: "rental-tracker-companion" as const,
     submissionId: "861a8181-260b-41f3-b43a-cd3ee9ea26ad",
+    kind: "maintenance" as const,
     sha256: "abc123",
     capturedAt: "2026-07-19T20:00:00.000Z",
     note: "Hardware store receipt",

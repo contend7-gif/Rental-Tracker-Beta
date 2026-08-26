@@ -10,7 +10,7 @@ export const ALLOWED_CONTENT_TYPES = new Set([
 export type MobileSubmission = {
   id: string;
   status: "pending" | "claimed" | "imported";
-  kind: "receipt";
+  kind: "receipt" | "maintenance";
   propertyLabel: string | null;
   unitLabel: string | null;
   note: string | null;
@@ -78,6 +78,7 @@ export function validateUpload(file: File): string | null {
 
 export async function createSubmission(input: {
   ownerFingerprint: string;
+  kind: MobileSubmission["kind"];
   file: File;
   propertyLabel: string | null;
   unitLabel: string | null;
@@ -88,8 +89,11 @@ export async function createSubmission(input: {
   const { DB, UPLOADS } = bindings();
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const safeName = input.file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "receipt";
-  const storageKey = `receipts/${input.ownerFingerprint}/${id}/${safeName}`;
+  const originalFileName = input.kind === "maintenance" && !/^maintenance-/i.test(input.file.name)
+    ? `maintenance-${input.file.name}`
+    : input.file.name;
+  const safeName = originalFileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "capture";
+  const storageKey = `${input.kind === "maintenance" ? "maintenance" : "receipts"}/${input.ownerFingerprint}/${id}/${safeName}`;
   const bytes = await input.file.arrayBuffer();
   const sha256 = toHex(await crypto.subtle.digest("SHA-256", bytes));
 
@@ -104,10 +108,10 @@ export async function createSubmission(input: {
         id, owner_fingerprint, status, kind, property_label, unit_label, note,
         original_file_name, content_type, byte_size, sha256, storage_key,
         captured_at, created_at, updated_at
-      ) VALUES (?, ?, 'pending', 'receipt', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      id, input.ownerFingerprint, input.propertyLabel, input.unitLabel, input.note,
-      input.file.name, input.file.type, input.file.size, sha256, storageKey,
+      id, input.ownerFingerprint, input.kind, input.propertyLabel, input.unitLabel, input.note,
+      originalFileName, input.file.type, input.file.size, sha256, storageKey,
       input.capturedAt, now, now,
     ).run();
   } catch (error) {
@@ -216,7 +220,7 @@ function mapStoredSubmission(row: Record<string, unknown>): StoredSubmission {
     id: String(row.id),
     ownerFingerprint: String(row.owner_fingerprint),
     status: String(row.status) as StoredSubmission["status"],
-    kind: "receipt",
+    kind: String(row.kind) === "maintenance" ? "maintenance" : "receipt",
     propertyLabel: nullableString(row.property_label),
     unitLabel: nullableString(row.unit_label),
     note: nullableString(row.note),

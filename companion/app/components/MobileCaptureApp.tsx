@@ -9,6 +9,7 @@ type Props = {
 };
 
 type ApiError = { error?: string };
+type CaptureKind = "receipt" | "maintenance";
 
 const MAX_SELECTED_FILE_BYTES = 15 * 1024 * 1024;
 const TARGET_UPLOAD_BYTES = 700 * 1024;
@@ -16,6 +17,7 @@ const MAX_IMAGE_DIMENSION = 2400;
 
 export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [submissions, setSubmissions] = useState<MobileSubmission[]>([]);
+  const [captureKind, setCaptureKind] = useState<CaptureKind>("receipt");
   const [file, setFile] = useState<File | null>(null);
   const [propertyLabel, setPropertyLabel] = useState("");
   const [unitLabel, setUnitLabel] = useState("");
@@ -55,7 +57,15 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) {
-      setError("Take a receipt photo or choose a PDF first.");
+      setError(captureKind === "maintenance" ? "Take a photo of the issue first." : "Take a receipt photo or choose a PDF first.");
+      return;
+    }
+    if (captureKind === "maintenance" && !propertyLabel.trim()) {
+      setError("Choose or enter the property for this maintenance issue.");
+      return;
+    }
+    if (captureKind === "maintenance" && !note.trim()) {
+      setError("Add a short description of the maintenance issue.");
       return;
     }
     setSaving(true);
@@ -66,6 +76,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       const preparedFile = await prepareUploadFile(file);
       const form = new FormData();
       form.set("file", preparedFile);
+      form.set("kind", captureKind);
       form.set("propertyLabel", propertyLabel);
       form.set("unitLabel", unitLabel);
       form.set("note", note);
@@ -79,7 +90,9 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       setUnitLabel("");
       setNote("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setMessage("Saved to your Mobile Inbox. It is ready on the desktop app.");
+      setMessage(captureKind === "maintenance"
+        ? "Maintenance report saved. Review it on the desktop to create or link a work order."
+        : "Saved to your Mobile Inbox. It is ready on the desktop app.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Capture could not be saved.");
     } finally {
@@ -116,20 +129,41 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
 
       <section className="hero">
         <p className="eyebrow">FIELD CAPTURE</p>
-        <h1>Receipt in. Paperwork done.</h1>
-        <p>Snap it now. Finish the details from Rental Tracker when you are back at your desk.</p>
+        <h1>Capture it now. Finish it at your desk.</h1>
+        <p>Send receipts and maintenance photos to Rental Tracker while the details are still fresh.</p>
       </section>
 
       <section className="capture-card" aria-labelledby="capture-title">
         <div className="section-heading">
           <div>
             <p className="step-label">QUICK CAPTURE</p>
-            <h2 id="capture-title">Add a receipt</h2>
+            <h2 id="capture-title">{captureKind === "maintenance" ? "Report maintenance" : "Add a receipt"}</h2>
           </div>
           <span className="time-chip">About 15 sec</span>
         </div>
 
         <form onSubmit={submit}>
+          <div className="capture-kind" role="group" aria-label="Capture type">
+            <button
+              type="button"
+              className={captureKind === "receipt" ? "active" : ""}
+              aria-pressed={captureKind === "receipt"}
+              onClick={() => { setCaptureKind("receipt"); setError(null); setMessage(null); }}
+            >
+              <strong>Receipt</strong>
+              <span>Expense or bill</span>
+            </button>
+            <button
+              type="button"
+              className={captureKind === "maintenance" ? "active" : ""}
+              aria-pressed={captureKind === "maintenance"}
+              onClick={() => { setCaptureKind("maintenance"); setError(null); setMessage(null); }}
+            >
+              <strong>Maintenance</strong>
+              <span>Issue or repair photo</span>
+            </button>
+          </div>
+
           <label className={`file-drop ${file ? "has-file" : ""}`}>
             <input
               ref={fileInputRef}
@@ -139,13 +173,13 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
               onChange={chooseFile}
             />
             <span className="camera-glyph" aria-hidden="true">+</span>
-            <strong>{file ? file.name : "Take photo or choose file"}</strong>
-            <small>{file ? formatBytes(file.size) : "JPEG or PNG · large photos optimized · PDFs up to 700 KB"}</small>
+            <strong>{file ? file.name : captureKind === "maintenance" ? "Take issue photo" : "Take photo or choose file"}</strong>
+            <small>{file ? formatBytes(file.size) : captureKind === "maintenance" ? "JPEG or PNG · large photos optimized" : "JPEG or PNG · large photos optimized · PDFs up to 700 KB"}</small>
           </label>
 
           <div className="form-grid">
             <label>
-              <span>Property <em>optional</em></span>
+              <span>Property {captureKind === "receipt" ? <em>optional</em> : <em>required</em>}</span>
               <input
                 value={propertyLabel}
                 onChange={(event) => setPropertyLabel(event.target.value)}
@@ -165,11 +199,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           </div>
 
           <label className="note-field">
-            <span>Note <em>optional</em></span>
+            <span>{captureKind === "maintenance" ? "Issue details" : "Note"} {captureKind === "receipt" ? <em>optional</em> : <em>required</em>}</span>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="What was this for?"
+              placeholder={captureKind === "maintenance" ? "What is happening, where is it, and when did it start?" : "What was this for?"}
               rows={2}
               maxLength={500}
             />
@@ -179,7 +213,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           {message ? <p className="alert success" role="status">{message}</p> : null}
 
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? "Saving securely…" : "Send to Mobile Inbox"}
+            {saving ? "Saving securely…" : captureKind === "maintenance" ? "Send maintenance report" : "Send to Mobile Inbox"}
           </button>
         </form>
       </section>
@@ -204,10 +238,10 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           {submissions.map((submission) => (
             <article className="queue-item" key={submission.id}>
               <div className="file-kind" aria-hidden="true">
-                {submission.contentType === "application/pdf" ? "PDF" : "IMG"}
+                {submission.kind === "maintenance" ? "FIX" : submission.contentType === "application/pdf" ? "PDF" : "IMG"}
               </div>
               <div className="queue-copy">
-                <strong>{submission.originalFileName}</strong>
+                <strong>{submission.kind === "maintenance" ? "Maintenance report" : submission.originalFileName}</strong>
                 <span>{submission.propertyLabel || "Property not assigned"}{submission.unitLabel ? ` · ${submission.unitLabel}` : ""}</span>
                 <small>{relativeTime(submission.createdAt)} · {submission.status === "claimed" ? "Opened on desktop" : "Ready for desktop"}</small>
               </div>
@@ -226,8 +260,8 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       <section className="coming-section" aria-label="Coming next">
         <p className="step-label">NEXT</p>
         <div className="coming-grid">
-          <div><strong>Maintenance capture</strong><span>Photo + voice note to a work order</span></div>
           <div><strong>Mileage log</strong><span>Fast trip entry while it is fresh</span></div>
+          <div><strong>Smarter property list</strong><span>Choose from desktop properties after secure sync</span></div>
         </div>
       </section>
 

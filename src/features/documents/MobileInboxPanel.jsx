@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Cloud, Loader2, RefreshCw, Settings2, Smartphone } from "lucide-react";
+import { CheckCircle2, Cloud, Loader2, RefreshCw, Settings2, Smartphone, Wrench } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 
@@ -71,7 +71,7 @@ export function MobileInboxPanel({ desktopCompanionApi, onImport, onOpenSettings
             {status?.configured ? <Badge className="bg-teal-700">Connected</Badge> : <Badge variant="secondary">Setup needed</Badge>}
             {submissions.length > 0 ? <Badge variant="secondary">{submissions.length} waiting</Badge> : null}
           </div>
-          <p className="mt-0.5 text-xs text-slate-600">Receipt captures stay lightweight until you choose one to review.</p>
+          <p className="mt-0.5 text-xs text-slate-600">Receipt and maintenance captures wait here until you choose one to review.</p>
         </div>
         <Button size="sm" variant="secondary" onClick={() => void refresh()} disabled={busy}>
           {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
@@ -102,10 +102,13 @@ export function MobileInboxPanel({ desktopCompanionApi, onImport, onOpenSettings
           {submissions.map((submission) => (
             <article key={submission.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                <Cloud className="h-4 w-4" />
+                {submission.kind === "maintenance" ? <Wrench className="h-4 w-4" /> : <Cloud className="h-4 w-4" />}
               </span>
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-slate-950">{submission.originalFileName}</div>
+                <div className="flex items-center gap-2">
+                  <div className="truncate text-sm font-medium text-slate-950">{submission.kind === "maintenance" ? "Maintenance report" : submission.originalFileName}</div>
+                  <Badge variant="secondary">{submission.kind === "maintenance" ? "Maintenance" : "Receipt"}</Badge>
+                </div>
                 <div className="truncate text-xs text-slate-500">
                   {submission.propertyLabel || "Property not assigned"}{submission.unitLabel ? ` · ${submission.unitLabel}` : ""} · {formatCaptureTime(submission.createdAt)}
                 </div>

@@ -56,6 +56,16 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .time-chip, .count-badge { border-radius: 999px; background: var(--mint); color: var(--teal-dark); font-size: 11px; font-weight: 800; padding: 7px 10px; white-space: nowrap; }
 .count-badge { min-width: 28px; text-align: center; font-size: 13px; }
 
+.capture-kind { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 13px; }
+.capture-kind button {
+  min-height: 64px; border: 1px solid var(--line); border-radius: 13px; background: #fbfdfc; color: var(--ink);
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; padding: 10px 12px;
+  cursor: pointer; text-align: left;
+}
+.capture-kind button.active { border-color: var(--teal); background: var(--mint); box-shadow: inset 0 0 0 1px var(--teal); }
+.capture-kind strong { font-size: 13px; }
+.capture-kind span { color: var(--muted); font-size: 10px; }
+
 .file-drop {
   min-height: 148px; border: 1.5px dashed #8eb9b2; border-radius: 17px; background: #f7fbfa;
   display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
@@ -112,6 +122,7 @@ footer { padding: 22px 0 0; color: #82938f; text-align: center; font-size: 10px;
   .hero h1 { font-size: clamp(36px, 12vw, 49px); }
   .capture-card, .queue-section, .coming-section { padding: 16px; border-radius: 18px; }
   .form-grid { grid-template-columns: 1fr; gap: 11px; }
+  .capture-kind { grid-template-columns: 1fr 1fr; }
   .coming-grid { grid-template-columns: 1fr; }
   .account a { display: none; }
 }
