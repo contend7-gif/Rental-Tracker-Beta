@@ -27,3 +27,12 @@ export const mobileSubmissions = sqliteTable("mobile_submissions", {
     table.createdAt,
   ),
 ]);
+
+export const companionPropertyCatalog = sqliteTable("companion_property_catalog", {
+  propertyId: text("property_id").primaryKey(),
+  label: text("label").notNull(),
+  addressLabel: text("address_label").notNull().default(""),
+  unitsJson: text("units_json").notNull().default("[]"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+});

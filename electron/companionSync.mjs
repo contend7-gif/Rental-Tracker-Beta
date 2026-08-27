@@ -6,6 +6,7 @@ export const COMPANION_CHANNELS = {
   configure: "companion:configure",
   disconnect: "companion:disconnect",
   list: "companion:list",
+  syncPropertyCatalog: "companion:sync-property-catalog",
   claim: "companion:claim",
   download: "companion:download",
   complete: "companion:complete",
@@ -29,6 +30,7 @@ export function registerCompanionSyncIpc({ secretStore, recordDesktopHealthEvent
   handle(COMPANION_CHANNELS.configure, (payload) => service.configure(payload));
   handle(COMPANION_CHANNELS.disconnect, () => service.disconnect());
   handle(COMPANION_CHANNELS.list, () => service.list());
+  handle(COMPANION_CHANNELS.syncPropertyCatalog, (payload) => service.syncPropertyCatalog(payload));
   handle(COMPANION_CHANNELS.claim, (payload) => service.claim(payload?.id));
   handle(COMPANION_CHANNELS.download, (payload) => service.download(payload?.id));
   handle(COMPANION_CHANNELS.complete, (payload) => service.complete(payload?.id));

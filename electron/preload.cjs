@@ -31,6 +31,7 @@ const COMPANION_STATUS_CHANNEL = "companion:status";
 const COMPANION_CONFIGURE_CHANNEL = "companion:configure";
 const COMPANION_DISCONNECT_CHANNEL = "companion:disconnect";
 const COMPANION_LIST_CHANNEL = "companion:list";
+const COMPANION_SYNC_PROPERTY_CATALOG_CHANNEL = "companion:sync-property-catalog";
 const COMPANION_CLAIM_CHANNEL = "companion:claim";
 const COMPANION_DOWNLOAD_CHANNEL = "companion:download";
 const COMPANION_COMPLETE_CHANNEL = "companion:complete";
@@ -111,6 +112,7 @@ contextBridge.exposeInMainWorld("desktopCompanion", {
   configure: (payload) => ipcRenderer.invoke(COMPANION_CONFIGURE_CHANNEL, payload),
   disconnect: () => ipcRenderer.invoke(COMPANION_DISCONNECT_CHANNEL),
   list: () => ipcRenderer.invoke(COMPANION_LIST_CHANNEL),
+  syncPropertyCatalog: (catalog) => ipcRenderer.invoke(COMPANION_SYNC_PROPERTY_CATALOG_CHANNEL, catalog),
   claim: (id) => ipcRenderer.invoke(COMPANION_CLAIM_CHANNEL, { id }),
   download: (id) => ipcRenderer.invoke(COMPANION_DOWNLOAD_CHANNEL, { id }),
   complete: (id) => ipcRenderer.invoke(COMPANION_COMPLETE_CHANNEL, { id }),

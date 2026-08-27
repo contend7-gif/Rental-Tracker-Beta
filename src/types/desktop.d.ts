@@ -67,6 +67,15 @@ export type DesktopCompanionApi = {
   configure: (payload: { siteUrl: string; syncSecret: string; sitesBypassToken?: string }) => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
   disconnect: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
   list: () => Promise<DesktopResult & { submissions?: CompanionSubmission[] }>;
+  syncPropertyCatalog: (catalog: {
+    version: 1;
+    properties: Array<{
+      id: string;
+      label: string;
+      addressLabel: string;
+      units: Array<{ id: string; label: string }>;
+    }>;
+  }) => Promise<DesktopResult & { propertyCount?: number; unitCount?: number; updatedAt?: string }>;
   claim: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
   download: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission; dataUrl?: string }>;
   complete: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;

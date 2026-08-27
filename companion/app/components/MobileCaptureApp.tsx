@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import type { PropertyCatalogItem } from "@/lib/property-catalog";
 import type { MobileSubmission } from "@/lib/submissions";
 
 type Props = {
@@ -14,11 +15,15 @@ type CaptureKind = "receipt" | "maintenance";
 const MAX_SELECTED_FILE_BYTES = 15 * 1024 * 1024;
 const TARGET_UPLOAD_BYTES = 700 * 1024;
 const MAX_IMAGE_DIMENSION = 2400;
+const MANUAL_CHOICE = "__manual__";
 
 export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [submissions, setSubmissions] = useState<MobileSubmission[]>([]);
+  const [propertyCatalog, setPropertyCatalog] = useState<PropertyCatalogItem[]>([]);
   const [captureKind, setCaptureKind] = useState<CaptureKind>("receipt");
   const [file, setFile] = useState<File | null>(null);
+  const [selectedPropertyId, setSelectedPropertyId] = useState("");
+  const [selectedUnitId, setSelectedUnitId] = useState("");
   const [propertyLabel, setPropertyLabel] = useState("");
   const [unitLabel, setUnitLabel] = useState("");
   const [note, setNote] = useState("");
@@ -28,12 +33,22 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const loadSubmissions = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const response = await fetch("/api/submissions", { cache: "no-store" });
-      const body = (await response.json()) as { submissions?: MobileSubmission[] } & ApiError;
-      if (!response.ok) throw new Error(body.error || "Could not load your captures.");
-      setSubmissions(body.submissions ?? []);
+      const [submissionsResponse, catalogResponse] = await Promise.all([
+        fetch("/api/submissions", { cache: "no-store" }),
+        fetch("/api/property-catalog", { cache: "no-store" }),
+      ]);
+      const submissionsBody = (await submissionsResponse.json()) as { submissions?: MobileSubmission[] } & ApiError;
+      if (!submissionsResponse.ok) throw new Error(submissionsBody.error || "Could not load your captures.");
+      setSubmissions(submissionsBody.submissions ?? []);
+
+      if (catalogResponse.ok) {
+        const catalogBody = (await catalogResponse.json()) as { properties?: PropertyCatalogItem[] };
+        setPropertyCatalog(Array.isArray(catalogBody.properties) ? catalogBody.properties : []);
+      } else {
+        setPropertyCatalog([]);
+      }
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load your captures.");
@@ -43,15 +58,36 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => void loadSubmissions(), 0);
+    const timeoutId = window.setTimeout(() => void loadData(), 0);
     return () => window.clearTimeout(timeoutId);
-  }, [loadSubmissions]);
+  }, [loadData]);
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setFile(selected);
     setMessage(null);
     setError(null);
+  }
+
+  function chooseProperty(id: string) {
+    setSelectedPropertyId(id);
+    setSelectedUnitId("");
+    setUnitLabel("");
+    if (!id || id === MANUAL_CHOICE) {
+      setPropertyLabel("");
+      return;
+    }
+    setPropertyLabel(propertyCatalog.find((property) => property.id === id)?.label ?? "");
+  }
+
+  function chooseUnit(id: string) {
+    setSelectedUnitId(id);
+    if (!id || id === MANUAL_CHOICE) {
+      setUnitLabel("");
+      return;
+    }
+    const property = propertyCatalog.find((item) => item.id === selectedPropertyId);
+    setUnitLabel(property?.units.find((unit) => unit.id === id)?.label ?? "");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -86,6 +122,8 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       if (!response.ok || !body.submission) throw new Error(body.error || "Capture could not be saved.");
       setSubmissions((current) => [body.submission!, ...current]);
       setFile(null);
+      setSelectedPropertyId("");
+      setSelectedUnitId("");
       setPropertyLabel("");
       setUnitLabel("");
       setNote("");
@@ -112,6 +150,9 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   }
 
   const pendingCount = submissions.filter((item) => item.status !== "imported").length;
+  const selectedProperty = propertyCatalog.find((property) => property.id === selectedPropertyId) ?? null;
+  const usePropertyChoices = propertyCatalog.length > 0;
+  const useUnitChoices = Boolean(selectedProperty?.units.length);
 
   return (
     <main className="app-shell">
@@ -180,21 +221,61 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           <div className="form-grid">
             <label>
               <span>Property {captureKind === "receipt" ? <em>optional</em> : <em>required</em>}</span>
-              <input
-                value={propertyLabel}
-                onChange={(event) => setPropertyLabel(event.target.value)}
-                placeholder="e.g. Oak Street Duplex"
-                maxLength={120}
-              />
+              {usePropertyChoices ? (
+                <>
+                  <select value={selectedPropertyId} onChange={(event) => chooseProperty(event.target.value)}>
+                    <option value="">Choose a property</option>
+                    {propertyCatalog.map((property) => (
+                      <option key={property.id} value={property.id}>
+                        {property.label}{property.addressLabel ? ` — ${property.addressLabel}` : ""}
+                      </option>
+                    ))}
+                    <option value={MANUAL_CHOICE}>Enter manually</option>
+                  </select>
+                  {selectedPropertyId === MANUAL_CHOICE ? (
+                    <input
+                      value={propertyLabel}
+                      onChange={(event) => setPropertyLabel(event.target.value)}
+                      placeholder="Property name"
+                      maxLength={120}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <input
+                  value={propertyLabel}
+                  onChange={(event) => setPropertyLabel(event.target.value)}
+                  placeholder="e.g. Oak Street Duplex"
+                  maxLength={120}
+                />
+              )}
             </label>
             <label>
               <span>Unit <em>optional</em></span>
-              <input
-                value={unitLabel}
-                onChange={(event) => setUnitLabel(event.target.value)}
-                placeholder="e.g. Unit 2"
-                maxLength={80}
-              />
+              {useUnitChoices ? (
+                <>
+                  <select value={selectedUnitId} onChange={(event) => chooseUnit(event.target.value)}>
+                    <option value="">Shared / no unit</option>
+                    {selectedProperty?.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
+                    <option value={MANUAL_CHOICE}>Enter manually</option>
+                  </select>
+                  {selectedUnitId === MANUAL_CHOICE ? (
+                    <input
+                      value={unitLabel}
+                      onChange={(event) => setUnitLabel(event.target.value)}
+                      placeholder="Unit name"
+                      maxLength={80}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <input
+                  value={unitLabel}
+                  onChange={(event) => setUnitLabel(event.target.value)}
+                  placeholder="e.g. Unit 2"
+                  maxLength={80}
+                />
+              )}
             </label>
           </div>
 
@@ -257,11 +338,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
         </div>
       </section>
 
-      <section className="coming-section" aria-label="Coming next">
-        <p className="step-label">NEXT</p>
+      <section className="coming-section" aria-label="Companion capabilities">
+        <p className="step-label">NOW &amp; NEXT</p>
         <div className="coming-grid">
+          <div><strong>Property choices</strong><span>{usePropertyChoices ? "Synced securely from your desktop" : "Manual entry works until your desktop syncs"}</span></div>
           <div><strong>Mileage log</strong><span>Fast trip entry while it is fresh</span></div>
-          <div><strong>Smarter property list</strong><span>Choose from desktop properties after secure sync</span></div>
         </div>
       </section>
 

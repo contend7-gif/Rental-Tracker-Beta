@@ -8,6 +8,13 @@
       "when": 1784512462160,
       "tag": "0000_motionless_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787800078349,
+      "tag": "0001_loose_black_queen",
+      "breakpoints": true
     }
   ]
 }

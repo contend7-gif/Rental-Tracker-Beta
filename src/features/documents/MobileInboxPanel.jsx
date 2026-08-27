@@ -3,7 +3,7 @@ import { CheckCircle2, Cloud, Loader2, RefreshCw, Settings2, Smartphone, Wrench 
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 
-export function MobileInboxPanel({ desktopCompanionApi, onImport, onOpenSettings }) {
+export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImport, onOpenSettings }) {
   const [status, setStatus] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -21,15 +21,23 @@ export function MobileInboxPanel({ desktopCompanionApi, onImport, onOpenSettings
         setSubmissions([]);
         return;
       }
+      let catalogWarning = "";
+      if (desktopCompanionApi.syncPropertyCatalog && propertyCatalog) {
+        const syncResult = await desktopCompanionApi.syncPropertyCatalog(propertyCatalog);
+        if (syncResult?.ok === false) {
+          catalogWarning = syncResult.message || syncResult.error || "Property choices could not sync.";
+        }
+      }
       const result = await desktopCompanionApi.list();
       if (result?.ok === false) throw new Error(result.message || result.error || "Could not refresh Mobile Inbox.");
       setSubmissions(result?.submissions || []);
+      if (catalogWarning) setMessage(`Inbox refreshed, but ${catalogWarning}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not refresh Mobile Inbox.");
     } finally {
       setBusy(false);
     }
-  }, [desktopCompanionApi]);
+  }, [desktopCompanionApi, propertyCatalog]);
 
   useEffect(() => {
     void refresh();

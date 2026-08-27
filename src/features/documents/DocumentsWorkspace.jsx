@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/ta
 import { FileCheck2, FileWarning, Inbox, Link2, ReceiptText, Upload, Wrench } from "lucide-react";
 import { DocumentCard } from "./DocumentCard.jsx";
 import { MobileInboxPanel } from "./MobileInboxPanel.jsx";
+import { buildMobileCompanionCatalog } from "../../app/mobileCompanionCatalog.ts";
 import {
   buildDocumentDuplicateCandidates,
   buildDocumentQualityWarnings,
@@ -154,6 +155,7 @@ export function DocumentsWorkspace({
   pendingHighConfidenceWorkOrderReviewCount,
   pendingWorkOrderReviewCount,
   prefetchDocumentImportDialog,
+  properties = [],
   queueDocumentForOcr,
   reopenDocumentExpenseReview,
   reopenDocumentWorkOrderReview,
@@ -189,6 +191,10 @@ export function DocumentsWorkspace({
   const [documentSubview, setDocumentSubview] = useState("all");
   const [documentGroupMode, setDocumentGroupMode] = useState("none");
   const [reviewDocument, setReviewDocument] = useState(null);
+  const mobileCompanionCatalog = useMemo(
+    () => buildMobileCompanionCatalog({ properties, units }),
+    [properties, units],
+  );
 
   const showDocumentReview = async (document) => {
     const documentWithFile = await loadDocumentForReview?.(document);
@@ -575,6 +581,7 @@ export function DocumentsWorkspace({
         {mobileCompanionEnabled ? (
           <MobileInboxPanel
             desktopCompanionApi={desktopCompanionApi}
+            propertyCatalog={mobileCompanionCatalog}
             onImport={openMobileCompanionImport}
             onOpenSettings={openMobileCompanionSettings}
           />

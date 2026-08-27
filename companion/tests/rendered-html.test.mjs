@@ -16,6 +16,9 @@ test("builds the Rental Tracker mobile capture shell", async () => {
   assert.match(component, /prepareUploadFile/);
   assert.match(component, /payload too large/i);
   assert.match(component, /TARGET_UPLOAD_BYTES = 700 \* 1024/);
+  assert.match(component, /\/api\/property-catalog/);
+  assert.match(component, /Choose a property/);
+  assert.match(component, /Enter manually/);
   assert.doesNotMatch(`${layout}\n${component}`, /Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -48,4 +51,20 @@ test("maintenance reports use the existing private capture queue", async () => {
   assert.match(submissions, /"receipt" \| "maintenance"/);
   assert.match(submissions, /input\.kind === "maintenance" \? "maintenance" : "receipts"/);
   assert.match(schema, /\["receipt", "maintenance"\]/);
+});
+
+test("property choices use authenticated browser access and desktop-only replacement", async () => {
+  const [browserRoute, desktopRoute, catalog, schema] = await Promise.all([
+    readFile(new URL("../app/api/property-catalog/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/desktop/property-catalog/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/property-catalog.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(browserRoute, /getRequestUser/);
+  assert.match(desktopRoute, /requireDesktopAuthorization/);
+  assert.match(desktopRoute, /replacePropertyCatalog/);
+  assert.match(catalog, /property_id, label, address_label, units_json/);
+  assert.match(schema, /companion_property_catalog/);
+  assert.doesNotMatch(catalog, /tenant|lease|rent|finance|document/i);
 });

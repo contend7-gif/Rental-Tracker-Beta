@@ -25,3 +25,11 @@ test("maintenance captures receive a work-order-oriented desktop review", () => 
   assert.match(dialogs, /Review maintenance capture/);
   assert.match(dialogs, /Confirm work order/);
 });
+
+test("Mobile Inbox syncs only the desktop-built property catalog", () => {
+  const workspace = readFileSync(new URL("./DocumentsWorkspace.jsx", import.meta.url), "utf8");
+  const inbox = readFileSync(new URL("./MobileInboxPanel.jsx", import.meta.url), "utf8");
+
+  assert.match(workspace, /buildMobileCompanionCatalog\(\{ properties, units \}\)/);
+  assert.match(inbox, /syncPropertyCatalog\(propertyCatalog\)/);
+});

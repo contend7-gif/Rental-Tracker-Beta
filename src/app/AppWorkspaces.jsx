@@ -183,6 +183,7 @@ const DOCUMENTS_WORKSPACE_PROP_KEYS = [
   "pendingHighConfidenceExpenseReviewCount",
   "pendingHighConfidenceWorkOrderReviewCount",
   "pendingWorkOrderReviewCount",
+  "properties",
   "propertyNameById",
   "queueDocumentForOcr",
   "removeDocumentRecordLink",

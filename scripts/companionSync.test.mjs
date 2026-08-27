@@ -67,3 +67,37 @@ test("disconnect removes every locally saved companion value", async () => {
   assert.deepEqual([...secretStore.values.keys()], []);
   assert.equal((await service.getStatus()).configured, false);
 });
+
+test("desktop sends the privacy-limited property catalog as authenticated JSON", async () => {
+  const secretStore = createMemorySecretStore({
+    "companion.siteUrl": "https://companion.example.test",
+    "companion.syncSecret": "desktop-key-example",
+  });
+  let request = null;
+  const service = createCompanionSyncService({
+    secretStore,
+    fetchImpl: async (url, options) => {
+      request = { url: String(url), options };
+      return Response.json({ ok: true, propertyCount: 1, unitCount: 1, updatedAt: "2026-08-26T00:00:00.000Z" });
+    },
+  });
+  const catalog = {
+    version: 1,
+    properties: [{
+      id: "property-1",
+      label: "Oak Street Duplex",
+      addressLabel: "123 Oak St",
+      units: [{ id: "unit-1", label: "Unit 1" }],
+    }],
+  };
+
+  const result = await service.syncPropertyCatalog(catalog);
+
+  assert.equal(request.url, "https://companion.example.test/api/desktop/property-catalog");
+  assert.equal(request.options.method, "PUT");
+  assert.equal(request.options.headers.get("authorization"), "Bearer desktop-key-example");
+  assert.equal(request.options.headers.get("content-type"), "application/json");
+  assert.deepEqual(JSON.parse(request.options.body), catalog);
+  assert.equal(result.propertyCount, 1);
+  assert.equal(result.unitCount, 1);
+});
