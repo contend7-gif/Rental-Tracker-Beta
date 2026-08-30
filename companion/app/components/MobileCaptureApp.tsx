@@ -15,6 +15,7 @@ type CaptureKind = "receipt" | "maintenance" | "mileage";
 
 const MAX_SELECTED_FILE_BYTES = 15 * 1024 * 1024;
 const TARGET_UPLOAD_BYTES = 700 * 1024;
+const PDF_CHUNK_BYTES = 512 * 1024;
 const MAX_IMAGE_DIMENSION = 2400;
 const MANUAL_CHOICE = "__manual__";
 
@@ -36,6 +37,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [endLocation, setEndLocation] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,18 +126,10 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     setMessage(null);
 
     try {
-      const preparedFile = await prepareUploadFile(file);
-      const form = new FormData();
-      form.set("file", preparedFile);
-      form.set("kind", captureKind);
-      form.set("propertyLabel", propertyLabel);
-      form.set("unitLabel", unitLabel);
-      form.set("note", note);
-      form.set("capturedAt", new Date().toISOString());
-      const response = await fetch("/api/submissions", { method: "POST", body: form });
-      const body = await readApiResponse<{ submission?: MobileSubmission } & ApiError>(response);
-      if (!response.ok || !body.submission) throw new Error(body.error || "Capture could not be saved.");
-      setSubmissions((current) => [body.submission!, ...current]);
+      const submission = isPdfFile(file) && file.size > TARGET_UPLOAD_BYTES
+        ? await uploadChunkedPdf(file)
+        : await uploadStandardCapture(file);
+      setSubmissions((current) => [submission, ...current]);
       setFile(null);
       setSelectedPropertyId("");
       setSelectedUnitId("");
@@ -149,7 +143,69 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Capture could not be saved.");
     } finally {
+      setUploadProgress(null);
       setSaving(false);
+    }
+  }
+
+  async function uploadStandardCapture(selectedFile: File): Promise<MobileSubmission> {
+    const preparedFile = await prepareUploadFile(selectedFile);
+    const form = new FormData();
+    form.set("file", preparedFile);
+    form.set("kind", captureKind);
+    form.set("propertyLabel", propertyLabel);
+    form.set("unitLabel", unitLabel);
+    form.set("note", note);
+    form.set("capturedAt", new Date().toISOString());
+    const response = await fetch("/api/submissions", { method: "POST", body: form });
+    const body = await readApiResponse<{ submission?: MobileSubmission } & ApiError>(response);
+    if (!response.ok || !body.submission) throw new Error(body.error || "Capture could not be saved.");
+    return body.submission;
+  }
+
+  async function uploadChunkedPdf(selectedFile: File): Promise<MobileSubmission> {
+    if (captureKind !== "receipt") throw new Error("Large PDF upload is available for receipts and bills.");
+    if (selectedFile.size > MAX_SELECTED_FILE_BYTES) throw new Error("Choose a PDF no larger than 15 MB.");
+    setUploadProgress("Preparing PDF…");
+    const sha256 = await sha256Hex(selectedFile);
+    const chunkCount = Math.ceil(selectedFile.size / PDF_CHUNK_BYTES);
+    const startResponse = await fetch("/api/submissions/chunked", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        originalFileName: selectedFile.name,
+        byteSize: selectedFile.size,
+        chunkCount,
+        sha256,
+        propertyLabel,
+        unitLabel,
+        note,
+        capturedAt: new Date().toISOString(),
+      }),
+    });
+    const startBody = await readApiResponse<{ uploadId?: string; chunkBytes?: number } & ApiError>(startResponse);
+    if (!startResponse.ok || !startBody.uploadId) throw new Error(startBody.error || "The PDF upload could not start.");
+    const uploadId = startBody.uploadId;
+    try {
+      for (let partNumber = 0; partNumber < chunkCount; partNumber += 1) {
+        setUploadProgress(`Uploading PDF ${partNumber + 1} of ${chunkCount}…`);
+        const start = partNumber * PDF_CHUNK_BYTES;
+        const response = await fetch(`/api/submissions/chunked/${encodeURIComponent(uploadId)}/${partNumber}`, {
+          method: "PUT",
+          headers: { "content-type": "application/octet-stream" },
+          body: selectedFile.slice(start, Math.min(start + PDF_CHUNK_BYTES, selectedFile.size)),
+        });
+        const body = await readApiResponse<ApiError>(response);
+        if (!response.ok) throw new Error(body.error || `PDF piece ${partNumber + 1} could not be saved.`);
+      }
+      setUploadProgress("Finishing PDF…");
+      const completeResponse = await fetch(`/api/submissions/chunked/${encodeURIComponent(uploadId)}/complete`, { method: "POST" });
+      const completeBody = await readApiResponse<{ submission?: MobileSubmission } & ApiError>(completeResponse);
+      if (!completeResponse.ok || !completeBody.submission) throw new Error(completeBody.error || "The PDF could not be completed.");
+      return completeBody.submission;
+    } catch (error) {
+      await fetch(`/api/submissions/chunked/${encodeURIComponent(uploadId)}`, { method: "DELETE" }).catch(() => undefined);
+      throw error;
     }
   }
 
@@ -318,7 +374,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
             />
             <span className="camera-glyph" aria-hidden="true">+</span>
             <strong>{file ? file.name : captureKind === "maintenance" ? "Take issue photo" : "Take photo or choose file"}</strong>
-            <small>{file ? formatBytes(file.size) : captureKind === "maintenance" ? "JPEG or PNG · large photos optimized" : "JPEG or PNG · large photos optimized · PDFs up to 700 KB"}</small>
+            <small>{file ? formatBytes(file.size) : captureKind === "maintenance" ? "JPEG or PNG · large photos optimized" : "JPEG or PNG · large photos optimized · PDFs up to 15 MB"}</small>
           </label> : (
             <div className="mileage-fields">
               <div className="form-grid">
@@ -424,7 +480,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           {message ? <p className="alert success" role="status">{message}</p> : null}
 
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? "Saving securely…" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
+            {saving ? uploadProgress || "Saving securely…" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
           </button>
         </form>
       </section>
@@ -502,10 +558,14 @@ async function readApiResponse<T extends ApiError>(response: Response): Promise<
 
 async function prepareUploadFile(file: File): Promise<File> {
   if (file.size > MAX_SELECTED_FILE_BYTES) {
-    throw new Error("Choose a photo or PDF smaller than 15 MB.");
+    throw new Error("Choose a photo or PDF no larger than 15 MB.");
   }
-  if (file.size <= TARGET_UPLOAD_BYTES) return file;
-  if (file.type === "application/pdf") {
+  if (file.size <= TARGET_UPLOAD_BYTES) {
+    return isPdfFile(file) && file.type !== "application/pdf"
+      ? new File([file], file.name, { type: "application/pdf", lastModified: file.lastModified })
+      : file;
+  }
+  if (isPdfFile(file)) {
     throw new Error("This PDF is too large for mobile capture. Add it from Documents on the desktop instead.");
   }
   if (file.type !== "image/jpeg" && file.type !== "image/png") {
@@ -554,6 +614,15 @@ async function prepareUploadFile(file: File): Promise<File> {
   }
 
   throw new Error("This photo could not be reduced enough. Try a screenshot or add it from Documents on the desktop.");
+}
+
+function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+}
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob> {

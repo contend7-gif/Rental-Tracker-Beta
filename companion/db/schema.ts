@@ -28,6 +28,27 @@ export const mobileSubmissions = sqliteTable("mobile_submissions", {
   ),
 ]);
 
+export const mobileUploadSessions = sqliteTable("mobile_upload_sessions", {
+  id: text("id").primaryKey(),
+  ownerFingerprint: text("owner_fingerprint").notNull(),
+  kind: text("kind", { enum: ["receipt", "maintenance"] }).notNull().default("receipt"),
+  propertyLabel: text("property_label"),
+  unitLabel: text("unit_label"),
+  note: text("note"),
+  originalFileName: text("original_file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  byteSize: integer("byte_size").notNull(),
+  chunkCount: integer("chunk_count").notNull(),
+  sha256: text("sha256").notNull(),
+  capturedAt: text("captured_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("mobile_upload_sessions_owner_created_idx").on(
+    table.ownerFingerprint,
+    table.createdAt,
+  ),
+]);
+
 export const companionPropertyCatalog = sqliteTable("companion_property_catalog", {
   propertyId: text("property_id").primaryKey(),
   label: text("label").notNull(),

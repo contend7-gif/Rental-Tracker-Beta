@@ -16,10 +16,34 @@ test("builds the Rental Tracker mobile capture shell", async () => {
   assert.match(component, /prepareUploadFile/);
   assert.match(component, /payload too large/i);
   assert.match(component, /TARGET_UPLOAD_BYTES = 700 \* 1024/);
+  assert.match(component, /PDF_CHUNK_BYTES = 512 \* 1024/);
+  assert.match(component, /PDFs up to 15 MB/);
+  assert.match(component, /\/api\/submissions\/chunked/);
   assert.match(component, /\/api\/property-catalog/);
   assert.match(component, /Choose a property/);
   assert.match(component, /Enter manually/);
   assert.doesNotMatch(`${layout}\n${component}`, /Your site is taking shape|react-loading-skeleton/i);
+});
+
+test("large PDFs use private chunk storage and integrity verification", async () => {
+  const [component, startRoute, partRoute, completeRoute, submissions, schema] = await Promise.all([
+    readFile(new URL("../app/components/MobileCaptureApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/submissions/chunked/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/submissions/chunked/[id]/[part]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/submissions/chunked/[id]/complete/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/submissions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(component, /sha256Hex\(selectedFile\)/);
+  assert.match(component, /Uploading PDF \$\{partNumber \+ 1\} of \$\{chunkCount\}/);
+  assert.match(startRoute, /getRequestUser/);
+  assert.match(partRoute, /ownerFingerprint/);
+  assert.match(completeRoute, /completeChunkedUpload/);
+  assert.match(submissions, /MAX_CHUNKED_PDF_BYTES = 15 \* 1024 \* 1024/);
+  assert.match(submissions, /The completed PDF did not pass its integrity check/);
+  assert.match(submissions, /UPLOADS\.delete\(keys\)/);
+  assert.match(schema, /mobile_upload_sessions/);
 });
 
 test("declares private-storage boundaries and a mobile manifest", async () => {
