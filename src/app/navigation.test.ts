@@ -16,15 +16,20 @@ test("Work Queue is a primary navigation destination", () => {
   assert.equal(viewDetails.review.title, "Work Queue");
 });
 
+test("Operations Calendar is a primary navigation destination", () => {
+  assert.equal(navItems.some(([key]) => key === "operations"), true);
+  assert.equal(viewDetails.operations.title, "Operations Calendar");
+});
+
 test("workspace headers expose icons through view details", () => {
-  for (const key of ["dashboard", "ledger", "documents", "maintenance", "review", "properties", "loans", "settings"]) {
+  for (const key of ["dashboard", "ledger", "documents", "maintenance", "review", "operations", "properties", "loans", "settings"]) {
     assert.ok(viewDetails[key].icon, `${key} should provide a header icon`);
   }
 });
 
-test("Home and Work Queue lead the primary navigation", () => {
+test("Home, Work Queue, and Calendar lead the primary navigation", () => {
   const navKeys = navItems.map(([key]) => key);
-  assert.deepEqual(navKeys.slice(0, 2), ["dashboard", "review"]);
+  assert.deepEqual(navKeys.slice(0, 3), ["dashboard", "review", "operations"]);
 });
 
 test("creation is global instead of a sidebar destination", () => {

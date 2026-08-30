@@ -2,6 +2,7 @@ export const WORKSPACE_FILTER_VISIBILITY = {
   dashboard: { year: true, property: true, unit: true },
   ledger: { year: true, property: true, unit: true },
   review: { year: true, property: true, unit: true },
+  operations: { property: true, unit: true },
   leaseHistory: { year: true, property: true, unit: true },
   tax: { year: true, property: true, unit: true },
   activity: { year: true, property: true, unit: true },

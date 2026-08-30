@@ -2392,6 +2392,7 @@ export default function App() {
     setPlanningTurnoverInput,
     setPlanningUnitOverride,
     setPropertyFilter,
+    setUnitFilter,
     setPropertyOwnerDrafts,
     setPropertyQuickAddOpen,
     setRentAmountTouched,

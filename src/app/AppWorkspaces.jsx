@@ -43,6 +43,7 @@ import {
   LedgerWorkspace,
   LoansWorkspace,
   MaintenanceWorkspace,
+  OperationsCalendarWorkspace,
   PlanningWorkspace,
   PropertiesWorkspace,
   QuickAddWorkspace,
@@ -682,6 +683,7 @@ export function AppWorkspaces(props) {
           {...reviewWorkspaceProps}
         />
       )}
+      {view === "operations" && <OperationsCalendarWorkspace {...commonProps} />}
       {view === "activity" && <ActivityWorkspace {...commonProps} />}
       {view === "properties" && (
         <PropertiesWorkspace

@@ -18,6 +18,7 @@ import {
 export const primaryNavItems = [
   ["dashboard", "Home", Home],
   ["review", "Work Queue", ClipboardCheck],
+  ["operations", "Calendar", CalendarDays],
 ];
 
 export const propertyAccountingNavItems = [
@@ -65,6 +66,7 @@ export const viewDetails = {
   quickAdd: { title: "New Transaction", description: "Record income, expenses, and payments.", icon: PlusCircle, tone: "border-emerald-100 bg-emerald-50 text-emerald-700" },
   ledger: { title: "Transactions", description: "Inspect posted activity, recurring schedules, and bank imports.", icon: Table2, tone: "border-blue-100 bg-blue-50 text-blue-700" },
   review: { title: "Work Queue", description: "Resolve records needing attention across the portfolio.", icon: ClipboardCheck, tone: "border-amber-100 bg-amber-50 text-amber-700" },
+  operations: { title: "Operations Calendar", description: "See upcoming and overdue dates across authoritative records.", icon: CalendarDays, tone: "border-cyan-100 bg-cyan-50 text-cyan-700" },
   recurring: { title: "Recurring", description: "Recurring transaction rules.", icon: CalendarDays, tone: "border-violet-100 bg-violet-50 text-violet-700" },
   properties: { title: "Properties", description: "Property health, units, occupancy, records, and photos.", icon: Building2, tone: "border-cyan-100 bg-cyan-50 text-cyan-700" },
   leaseHistory: { title: "Leases", description: "Lease and occupancy records.", icon: CalendarDays, tone: "border-violet-100 bg-violet-50 text-violet-700" },

@@ -12,6 +12,7 @@ const navIconColors = {
   leaseHistory: "text-violet-600 group-hover:text-violet-700",
   tax: "text-orange-600 group-hover:text-orange-700",
   review: "text-cyan-600 group-hover:text-cyan-700",
+  operations: "text-teal-600 group-hover:text-teal-700",
   properties: "text-slate-600 group-hover:text-slate-700",
   assets: "text-amber-600 group-hover:text-amber-700",
   loans: "text-blue-700 group-hover:text-blue-800",

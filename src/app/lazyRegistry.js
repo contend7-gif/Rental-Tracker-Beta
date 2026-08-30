@@ -7,6 +7,7 @@ const loadDashboardWorkspace = () => import("../features/dashboard/DashboardWork
 const loadQuickAddWorkspace = () => import("../features/transactions/QuickAddWorkspace.jsx");
 const loadLedgerWorkspace = () => import("../features/transactions/LedgerWorkspace.jsx");
 const loadReviewCenterWorkspace = () => import("../features/review/ReviewCenterWorkspace.jsx");
+const loadOperationsCalendarWorkspace = () => import("../features/operations/OperationsCalendarWorkspace.jsx");
 const loadActivityWorkspace = () => import("../features/activity/ActivityWorkspace.jsx");
 const loadPropertiesWorkspace = () => import("../features/properties/PropertiesWorkspace.jsx");
 const loadLeaseHistoryWorkspace = () => import("../features/properties/LeaseHistoryWorkspace.jsx");
@@ -22,6 +23,7 @@ export const DashboardWorkspace = lazyNamed(loadDashboardWorkspace, "DashboardWo
 export const QuickAddWorkspace = lazyNamed(loadQuickAddWorkspace, "QuickAddWorkspace");
 export const LedgerWorkspace = lazyNamed(loadLedgerWorkspace, "LedgerWorkspace");
 export const ReviewCenterWorkspace = lazyNamed(loadReviewCenterWorkspace, "ReviewCenterWorkspace");
+export const OperationsCalendarWorkspace = lazyNamed(loadOperationsCalendarWorkspace, "OperationsCalendarWorkspace");
 export const ActivityWorkspace = lazyNamed(loadActivityWorkspace, "ActivityWorkspace");
 export const PropertiesWorkspace = lazyNamed(loadPropertiesWorkspace, "PropertiesWorkspace");
 export const LeaseHistoryWorkspace = lazyNamed(loadLeaseHistoryWorkspace, "LeaseHistoryWorkspace");
@@ -62,6 +64,7 @@ const workspacePrefetchLoaders = {
   quickAdd: loadQuickAddWorkspace,
   ledger: loadLedgerWorkspace,
   review: loadReviewCenterWorkspace,
+  operations: loadOperationsCalendarWorkspace,
   activity: loadActivityWorkspace,
   properties: loadPropertiesWorkspace,
   leaseHistory: loadLeaseHistoryWorkspace,
@@ -92,7 +95,7 @@ const dialogPrefetchLoaders = {
 };
 
 export const likelyNextViewsByView = {
-  dashboard: ["quickAdd", "ledger", "planning", "properties"],
+  dashboard: ["quickAdd", "ledger", "operations", "planning", "properties"],
   quickAdd: ["ledger", "documents", "dashboard"],
   ledger: ["quickAdd", "documents", "tax"],
   activity: ["dashboard", "properties"],
@@ -105,6 +108,7 @@ export const likelyNextViewsByView = {
   tax: ["planning", "ledger", "documents"],
   documents: ["review", "quickAdd", "maintenance", "ledger"],
   review: ["ledger", "documents", "tax"],
+  operations: ["leaseHistory", "maintenance", "documents", "planning"],
   settings: ["dashboard", "planning"],
 };
 
