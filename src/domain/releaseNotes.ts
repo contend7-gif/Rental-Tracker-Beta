@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.5.0",
+    releaseDate: "2026-08-29",
+    title: "More field capture and better inbox control",
+    summary: "Expands the optional Mobile Companion with maintenance and mileage intake, property-aware capture, larger PDFs, and safe removal from the desktop inbox.",
+    changes: [
+      "Mobile Companion can now send maintenance reports and business mileage entries to the desktop for review before they become app records.",
+      "Active property and unit choices sync from the desktop using a privacy-limited catalog, while manual property entry remains available when the catalog has not synced.",
+      "Receipt and bill PDFs up to 15 MB upload in verified private pieces with visible progress instead of being limited to small single-request uploads.",
+      "Authorized desktop users can permanently remove an unimported mobile capture from Mobile Inbox after confirmation, including its private companion file and metadata.",
+    ],
+  },
+  {
     version: "1.4.0",
     releaseDate: "2026-08-26",
     title: "Optional mobile capture and safer pairing",
