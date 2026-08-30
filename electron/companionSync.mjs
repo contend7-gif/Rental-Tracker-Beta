@@ -12,6 +12,7 @@ export const COMPANION_CHANNELS = {
   completeMileage: "companion:mileage-complete",
   claim: "companion:claim",
   download: "companion:download",
+  remove: "companion:remove",
   complete: "companion:complete",
 };
 
@@ -39,6 +40,7 @@ export function registerCompanionSyncIpc({ secretStore, recordDesktopHealthEvent
   handle(COMPANION_CHANNELS.completeMileage, (payload) => service.completeMileage(payload?.id));
   handle(COMPANION_CHANNELS.claim, (payload) => service.claim(payload?.id));
   handle(COMPANION_CHANNELS.download, (payload) => service.download(payload?.id));
+  handle(COMPANION_CHANNELS.remove, (payload) => service.remove(payload?.id));
   handle(COMPANION_CHANNELS.complete, (payload) => service.complete(payload?.id));
   return service;
 }

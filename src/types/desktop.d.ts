@@ -97,6 +97,7 @@ export type DesktopCompanionApi = {
   completeMileage: (id: string) => Promise<DesktopResult & { mileageEntry?: CompanionMileageEntry }>;
   claim: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
   download: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission; dataUrl?: string }>;
+  remove: (id: string) => Promise<DesktopResult>;
   complete: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
 };
 

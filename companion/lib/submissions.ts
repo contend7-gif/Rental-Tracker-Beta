@@ -312,6 +312,17 @@ export async function deleteOwnerSubmission(id: string, owner: string): Promise<
   return true;
 }
 
+export async function deleteDesktopSubmission(id: string): Promise<boolean> {
+  await ensureSchema();
+  const stored = await findStoredSubmission(id);
+  if (!stored || stored.status === "imported") return false;
+  const { DB, UPLOADS } = bindings();
+  await UPLOADS.delete(stored.storageKey);
+  await DB.prepare("DELETE FROM mobile_submissions WHERE id = ? AND status IN ('pending', 'claimed')")
+    .bind(id).run();
+  return true;
+}
+
 export async function listDesktopSubmissions(): Promise<MobileSubmission[]> {
   await ensureSchema();
   const { DB } = bindings();

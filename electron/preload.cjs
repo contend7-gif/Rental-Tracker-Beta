@@ -37,6 +37,7 @@ const COMPANION_MILEAGE_CLAIM_CHANNEL = "companion:mileage-claim";
 const COMPANION_MILEAGE_COMPLETE_CHANNEL = "companion:mileage-complete";
 const COMPANION_CLAIM_CHANNEL = "companion:claim";
 const COMPANION_DOWNLOAD_CHANNEL = "companion:download";
+const COMPANION_REMOVE_CHANNEL = "companion:remove";
 const COMPANION_COMPLETE_CHANNEL = "companion:complete";
 
 contextBridge.exposeInMainWorld("desktopUpdater", {
@@ -121,5 +122,6 @@ contextBridge.exposeInMainWorld("desktopCompanion", {
   completeMileage: (id) => ipcRenderer.invoke(COMPANION_MILEAGE_COMPLETE_CHANNEL, { id }),
   claim: (id) => ipcRenderer.invoke(COMPANION_CLAIM_CHANNEL, { id }),
   download: (id) => ipcRenderer.invoke(COMPANION_DOWNLOAD_CHANNEL, { id }),
+  remove: (id) => ipcRenderer.invoke(COMPANION_REMOVE_CHANNEL, { id }),
   complete: (id) => ipcRenderer.invoke(COMPANION_COMPLETE_CHANNEL, { id }),
 });

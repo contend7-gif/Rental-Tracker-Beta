@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Cloud, Loader2, MapPinned, RefreshCw, Settings2, Smartphone, Wrench } from "lucide-react";
+import { CheckCircle2, Cloud, Loader2, MapPinned, RefreshCw, Settings2, Smartphone, Trash2, Wrench } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 
-export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImport, onMileageReview, onOpenSettings }) {
+export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDeleteRecords, onImport, onMileageReview, onOpenSettings, openConfirmDialog }) {
   const [status, setStatus] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [mileageEntries, setMileageEntries] = useState([]);
   const [busy, setBusy] = useState(false);
   const [importingId, setImportingId] = useState("");
+  const [removingId, setRemovingId] = useState("");
   const [message, setMessage] = useState("");
 
   const refresh = useCallback(async () => {
@@ -81,6 +82,33 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
     }
   }
 
+  async function removeSubmission(submission) {
+    setRemovingId(submission.id);
+    setMessage("");
+    try {
+      const removed = await desktopCompanionApi?.remove?.(submission.id);
+      if (!removed || removed.ok === false) {
+        throw new Error(removed?.message || removed?.error || "This capture could not be removed.");
+      }
+      setSubmissions((current) => current.filter((item) => item.id !== submission.id));
+      setMessage(`${submission.originalFileName || "Capture"} was permanently removed from Mobile Inbox.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "This capture could not be removed.");
+    } finally {
+      setRemovingId("");
+    }
+  }
+
+  function confirmRemoveSubmission(submission) {
+    const label = submission.kind === "maintenance" ? "maintenance capture" : submission.originalFileName || "capture";
+    openConfirmDialog?.({
+      title: "Remove mobile capture?",
+      message: `Permanently remove ${label} from the private Mobile Inbox without importing it? This cannot be undone.`,
+      confirmLabel: "Remove capture",
+      onConfirm: () => void removeSubmission(submission),
+    });
+  }
+
   if (!desktopCompanionApi) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
@@ -145,7 +173,13 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
                 {submission.note ? <div className="mt-1 truncate text-xs text-slate-600">“{submission.note}”</div> : null}
               </div>
               {submission.status === "claimed" ? <Badge variant="secondary">In review</Badge> : null}
-              <Button size="sm" onClick={() => void importSubmission(submission)} disabled={Boolean(importingId)}>
+              {canDeleteRecords && desktopCompanionApi?.remove ? (
+                <Button size="sm" variant="ghost" className="text-rose-700 hover:bg-rose-50 hover:text-rose-800" onClick={() => confirmRemoveSubmission(submission)} disabled={Boolean(importingId || removingId)}>
+                  {removingId === submission.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Trash2 className="mr-1.5 h-3.5 w-3.5" />}
+                  Remove
+                </Button>
+              ) : null}
+              <Button size="sm" onClick={() => void importSubmission(submission)} disabled={Boolean(importingId || removingId)}>
                 {importingId === submission.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
                 Review & import
               </Button>

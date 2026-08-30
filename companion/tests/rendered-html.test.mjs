@@ -47,10 +47,12 @@ test("large PDFs use private chunk storage and integrity verification", async ()
 });
 
 test("declares private-storage boundaries and a mobile manifest", async () => {
-  const [hosting, manifest, desktopRoute, worker] = await Promise.all([
+  const [hosting, manifest, desktopRoute, desktopDeleteRoute, submissions, worker] = await Promise.all([
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../public/manifest.webmanifest", import.meta.url), "utf8"),
     readFile(new URL("../app/api/desktop/submissions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/desktop/submissions/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/submissions.ts", import.meta.url), "utf8"),
     readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
   ]);
   const hostingConfig = JSON.parse(hosting);
@@ -59,6 +61,10 @@ test("declares private-storage boundaries and a mobile manifest", async () => {
   assert.match(hostingConfig.project_id, /^appgprj_/);
   assert.equal(JSON.parse(manifest).display, "standalone");
   assert.match(desktopRoute, /requireDesktopAuthorization/);
+  assert.match(desktopDeleteRoute, /requireDesktopAuthorization/);
+  assert.match(desktopDeleteRoute, /deleteDesktopSubmission/);
+  assert.match(submissions, /status IN \('pending', 'claimed'\)/);
+  assert.match(submissions, /UPLOADS\.delete\(stored\.storageKey\)/);
   assert.match(worker, /UPLOADS: R2Bucket/);
 });
 

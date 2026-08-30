@@ -17,6 +17,17 @@ test("Mobile Inbox routes pairing management to Settings", () => {
   assert.doesNotMatch(source, /Desktop sync secret/);
 });
 
+test("desktop Mobile Inbox confirms permanent capture removal", () => {
+  const inbox = readFileSync(new URL("./MobileInboxPanel.jsx", import.meta.url), "utf8");
+  const service = readFileSync(new URL("../../../electron/companionSyncService.mjs", import.meta.url), "utf8");
+
+  assert.match(inbox, /Remove mobile capture\?/);
+  assert.match(inbox, /Remove capture/);
+  assert.match(inbox, /desktopCompanionApi\?\.remove/);
+  assert.match(inbox, /current\.filter\(\(item\) => item\.id !== submission\.id\)/);
+  assert.match(service, /method: "DELETE"/);
+});
+
 test("maintenance captures receive a work-order-oriented desktop review", () => {
   const inbox = readFileSync(new URL("./MobileInboxPanel.jsx", import.meta.url), "utf8");
   const dialogs = readFileSync(new URL("./DocumentDialogs.jsx", import.meta.url), "utf8");

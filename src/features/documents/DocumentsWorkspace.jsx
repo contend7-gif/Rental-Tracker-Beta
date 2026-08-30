@@ -96,6 +96,7 @@ export function DocumentsWorkspace({
   automaticDocumentOcrAvailable,
   canAutoCreateExpenseFromSuggestion,
   canAutoCreateWorkOrderFromSuggestion,
+  canDeleteRecords,
   canReviewDocuments,
   confirmAndDeleteDocument,
   createExpenseTransactionsFromUtilitySections,
@@ -145,6 +146,7 @@ export function DocumentsWorkspace({
   openMobileCompanionImport,
   openMobileCompanionMileageReview,
   openMobileCompanionSettings,
+  openConfirmDialog,
   openDocumentImportPicker,
   openDocumentLinkedRecord,
   openDocumentPreview,
@@ -583,9 +585,11 @@ export function DocumentsWorkspace({
           <MobileInboxPanel
             desktopCompanionApi={desktopCompanionApi}
             propertyCatalog={mobileCompanionCatalog}
+            canDeleteRecords={canDeleteRecords}
             onImport={openMobileCompanionImport}
             onMileageReview={openMobileCompanionMileageReview}
             onOpenSettings={openMobileCompanionSettings}
+            openConfirmDialog={openConfirmDialog}
           />
         ) : null}
 

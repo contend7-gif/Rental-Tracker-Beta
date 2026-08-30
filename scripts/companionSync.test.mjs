@@ -130,3 +130,25 @@ test("desktop mileage requests use the existing authenticated companion connecti
   ]);
   assert.ok(requests.every((request) => request.authorization === "Bearer desktop-key-example"));
 });
+
+test("desktop can permanently remove an unimported mobile capture", async () => {
+  const secretStore = createMemorySecretStore({
+    "companion.siteUrl": "https://companion.example.test",
+    "companion.syncSecret": "desktop-key-example",
+  });
+  let request = null;
+  const service = createCompanionSyncService({
+    secretStore,
+    fetchImpl: async (url, options) => {
+      request = { url: String(url), options };
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  const result = await service.remove("a1b2c3d4-e5f6-7890-abcd-123456789012");
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(request.url, "https://companion.example.test/api/desktop/submissions/a1b2c3d4-e5f6-7890-abcd-123456789012");
+  assert.equal(request.options.method, "DELETE");
+  assert.equal(request.options.headers.get("authorization"), "Bearer desktop-key-example");
+});

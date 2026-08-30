@@ -140,6 +140,12 @@ export function createCompanionSyncService({ secretStore, fetchImpl = fetch } = 
       };
     },
 
+    async remove(id) {
+      const safeId = requireSubmissionId(id);
+      await request(`api/desktop/submissions/${safeId}`, { method: "DELETE" });
+      return { ok: true };
+    },
+
     async complete(id) {
       const safeId = requireSubmissionId(id);
       const response = await request(`api/desktop/submissions/${safeId}/complete`, { method: "POST" });

@@ -1940,6 +1940,7 @@ export default function App() {
   const appWorkspaceProps = {
     acceptVisibleSafeSuggestions,
     actions,
+    openConfirmDialog,
     activeProperties,
     activeAccessRoleOption,
     activeTx,
