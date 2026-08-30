@@ -19,6 +19,7 @@ export function useTransactionEntryController({
   currency,
   deMinimisThreshold,
   documents,
+  desktopCompanionApi,
   editReturnView,
   editingTxnId,
   form,
@@ -47,6 +48,7 @@ export function useTransactionEntryController({
   setEditReturnView,
   setView,
   transactionVendorMemories,
+  transactions,
   txnAttachmentInputRef,
   units,
   usePeriods,
@@ -248,6 +250,7 @@ export function useTransactionEntryController({
       invoiceAmount,
       mileageMiles: form.type === "Expense" && form.category === "Auto and travel" && mileageMiles > 0 ? mileageMiles : undefined,
       mileageRate: form.type === "Expense" && form.category === "Auto and travel" && mileageRate > 0 ? mileageRate : undefined,
+      mobileCompanionMileageId: String(form.mobileCompanionMileageId || "").trim() || undefined,
       servicePeriodStart: form.servicePeriodStart || undefined,
       servicePeriodEnd: form.servicePeriodEnd || undefined,
       rentPeriod: form.type === "Income" && /\brents?\b/i.test(form.category) ? (form.rentPeriod || form.date.slice(0, 7)) : undefined,
@@ -319,6 +322,18 @@ export function useTransactionEntryController({
       recurringMessage = ` Recurring monthly enabled (${template.description}); ${generated} entries auto-added.`;
     }
 
+    let mobileMileageMessage = "";
+    if (txn.mobileCompanionMileageId && desktopCompanionApi?.completeMileage) {
+      try {
+        const completed = await desktopCompanionApi.completeMileage(txn.mobileCompanionMileageId);
+        mobileMileageMessage = completed?.ok === false
+          ? " The mobile trip remains in Mobile Inbox so it can be reconciled."
+          : " Mobile mileage marked imported.";
+      } catch {
+        mobileMileageMessage = " The mobile trip remains in Mobile Inbox so it can be reconciled.";
+      }
+    }
+
     const nextQueueName = String(pendingDocumentExpenseSource?.nextDocumentName || "").trim();
     if (pendingDocumentExpenseSource?.nextDocumentId) {
       setExpenseQueueFocusDocumentId(pendingDocumentExpenseSource.nextDocumentId);
@@ -329,6 +344,7 @@ export function useTransactionEntryController({
       (editingTxnId ? "Transaction updated." : "Transaction created.") +
         attachmentMessage +
         recurringMessage +
+        mobileMileageMessage +
         (nextQueueName ? ` Next up: ${nextQueueName}.` : ""),
     );
     setEditingTxnId("");
@@ -399,6 +415,61 @@ export function useTransactionEntryController({
     setDashboardQuickAddOpen(true);
   };
 
+  const openMobileCompanionMileageReview = async (entry) => {
+    if (!requirePermission("create_edit_records", "This access profile cannot review mobile mileage.")) return false;
+    if (!desktopCompanionApi?.claimMileage || !entry?.id) {
+      setNotice("Mobile mileage review is available in the installed desktop app.");
+      return false;
+    }
+    const existing = transactions.find((transaction) => transaction.mobileCompanionMileageId === entry.id);
+    if (existing) {
+      void desktopCompanionApi.completeMileage?.(entry.id);
+      setNotice("This mobile mileage entry is already recorded as a transaction.");
+      return true;
+    }
+    if (properties.length === 0) {
+      setNotice("Add your first property before reviewing mobile mileage.");
+      setPropertyQuickAddOpen(true);
+      return false;
+    }
+    try {
+      const claimed = await desktopCompanionApi.claimMileage(entry.id);
+      if (claimed?.ok === false) throw new Error(claimed.message || claimed.error || "Could not claim this mileage entry.");
+      const remote = claimed.mileageEntry || entry;
+      const normalizedPropertyLabel = String(remote.propertyLabel || "").trim().toLowerCase();
+      const matchedProperty = properties.find((property) =>
+        [property.name, property.address].some((value) => String(value || "").trim().toLowerCase() === normalizedPropertyLabel),
+      );
+      const propertyId = matchedProperty?.id || properties[0].id;
+      const requestedUnit = String(remote.unitLabel || "").trim();
+      const unit = units.some((candidate) => candidate.propertyId === propertyId && candidate.name === requestedUnit)
+        ? requestedUnit
+        : "Shared";
+      const route = [remote.startLocation, remote.endLocation].map((value) => String(value || "").trim()).filter(Boolean).join(" → ");
+      const blankForm = createBlankForm(propertyId, unit);
+      setEditingTxnId("");
+      setEditReturnView("documents");
+      setRentAmountTouched(false);
+      setPendingDocumentExpenseSource(null);
+      setPendingTxnAttachment(null);
+      setForm({
+        ...blankForm,
+        date: /^\d{4}-\d{2}-\d{2}$/.test(String(remote.tripDate || "")) ? remote.tripDate : blankForm.date,
+        category: "Auto and travel",
+        description: String(remote.purpose || "Business mileage").trim(),
+        notes: [route ? `Route: ${route}` : "", String(remote.note || "").trim()].filter(Boolean).join("\n"),
+        mileageMiles: String(remote.businessMiles || ""),
+        mobileCompanionMileageId: remote.id,
+      });
+      setView("quickAdd");
+      setNotice(matchedProperty ? "Mobile trip loaded. Confirm the mileage rate before saving." : "Mobile trip loaded. Confirm the property and mileage rate before saving.");
+      return true;
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not review this mobile mileage entry.");
+      return false;
+    }
+  };
+
   return {
     autoOwnerUsePct,
     applyVendorMemoryToForm,
@@ -408,6 +479,7 @@ export function useTransactionEntryController({
     onTransactionAttachmentInputChange,
     openDashboardQuickAdd,
     openDashboardQuickAddForScope,
+    openMobileCompanionMileageReview,
     openTransactionAttachmentPicker,
     preview,
     saveTransaction,

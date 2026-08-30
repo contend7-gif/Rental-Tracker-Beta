@@ -62,6 +62,22 @@ export type CompanionSubmission = {
   updatedAt: string;
 };
 
+export type CompanionMileageEntry = {
+  id: string;
+  status: "pending" | "claimed" | "imported";
+  propertyLabel: string;
+  unitLabel?: string | null;
+  tripDate: string;
+  businessMiles: number;
+  purpose: string;
+  startLocation?: string | null;
+  endLocation?: string | null;
+  note?: string | null;
+  capturedAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type DesktopCompanionApi = {
   getStatus: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string; hasSyncSecret?: boolean; hasSitesBypassToken?: boolean }>;
   configure: (payload: { siteUrl: string; syncSecret: string; sitesBypassToken?: string }) => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
@@ -76,6 +92,9 @@ export type DesktopCompanionApi = {
       units: Array<{ id: string; label: string }>;
     }>;
   }) => Promise<DesktopResult & { propertyCount?: number; unitCount?: number; updatedAt?: string }>;
+  listMileage: () => Promise<DesktopResult & { mileageEntries?: CompanionMileageEntry[] }>;
+  claimMileage: (id: string) => Promise<DesktopResult & { mileageEntry?: CompanionMileageEntry }>;
+  completeMileage: (id: string) => Promise<DesktopResult & { mileageEntry?: CompanionMileageEntry }>;
   claim: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;
   download: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission; dataUrl?: string }>;
   complete: (id: string) => Promise<DesktopResult & { submission?: CompanionSubmission }>;

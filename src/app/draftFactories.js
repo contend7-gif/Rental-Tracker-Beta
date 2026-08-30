@@ -23,6 +23,7 @@ export function createBlankForm(propertyId = "", unit = "Shared") {
     invoiceAmount: "",
     mileageMiles: "",
     mileageRate: "",
+    mobileCompanionMileageId: "",
     servicePeriodStart: "",
     servicePeriodEnd: "",
     rentPeriod: "",

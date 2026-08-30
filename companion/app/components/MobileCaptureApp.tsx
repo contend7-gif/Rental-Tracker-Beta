@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import type { MobileMileageEntry } from "@/lib/mileage";
 import type { PropertyCatalogItem } from "@/lib/property-catalog";
 import type { MobileSubmission } from "@/lib/submissions";
 
@@ -10,7 +11,7 @@ type Props = {
 };
 
 type ApiError = { error?: string };
-type CaptureKind = "receipt" | "maintenance";
+type CaptureKind = "receipt" | "maintenance" | "mileage";
 
 const MAX_SELECTED_FILE_BYTES = 15 * 1024 * 1024;
 const TARGET_UPLOAD_BYTES = 700 * 1024;
@@ -19,6 +20,7 @@ const MANUAL_CHOICE = "__manual__";
 
 export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [submissions, setSubmissions] = useState<MobileSubmission[]>([]);
+  const [mileageEntries, setMileageEntries] = useState<MobileMileageEntry[]>([]);
   const [propertyCatalog, setPropertyCatalog] = useState<PropertyCatalogItem[]>([]);
   const [captureKind, setCaptureKind] = useState<CaptureKind>("receipt");
   const [file, setFile] = useState<File | null>(null);
@@ -27,6 +29,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [propertyLabel, setPropertyLabel] = useState("");
   const [unitLabel, setUnitLabel] = useState("");
   const [note, setNote] = useState("");
+  const [tripDate, setTripDate] = useState(() => localIsoDate());
+  const [businessMiles, setBusinessMiles] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [startLocation, setStartLocation] = useState("");
+  const [endLocation, setEndLocation] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -35,13 +42,17 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
 
   const loadData = useCallback(async () => {
     try {
-      const [submissionsResponse, catalogResponse] = await Promise.all([
+      const [submissionsResponse, mileageResponse, catalogResponse] = await Promise.all([
         fetch("/api/submissions", { cache: "no-store" }),
+        fetch("/api/mileage", { cache: "no-store" }),
         fetch("/api/property-catalog", { cache: "no-store" }),
       ]);
       const submissionsBody = (await submissionsResponse.json()) as { submissions?: MobileSubmission[] } & ApiError;
       if (!submissionsResponse.ok) throw new Error(submissionsBody.error || "Could not load your captures.");
       setSubmissions(submissionsBody.submissions ?? []);
+      const mileageBody = (await mileageResponse.json()) as { mileageEntries?: MobileMileageEntry[] } & ApiError;
+      if (!mileageResponse.ok) throw new Error(mileageBody.error || "Could not load your mileage entries.");
+      setMileageEntries(mileageBody.mileageEntries ?? []);
 
       if (catalogResponse.ok) {
         const catalogBody = (await catalogResponse.json()) as { properties?: PropertyCatalogItem[] };
@@ -92,6 +103,10 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (captureKind === "mileage") {
+      await submitMileage();
+      return;
+    }
     if (!file) {
       setError(captureKind === "maintenance" ? "Take a photo of the issue first." : "Take a receipt photo or choose a PDF first.");
       return;
@@ -138,6 +153,68 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     }
   }
 
+  async function submitMileage() {
+    const miles = Number(businessMiles);
+    if (!propertyLabel.trim()) {
+      setError("Choose the property for this trip.");
+      return;
+    }
+    if (!tripDate) {
+      setError("Enter the trip date.");
+      return;
+    }
+    if (!Number.isFinite(miles) || miles <= 0 || miles > 1000) {
+      setError("Enter business miles between 0.1 and 1,000.");
+      return;
+    }
+    if (!purpose.trim()) {
+      setError("Add a short business purpose for this trip.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/mileage", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          propertyLabel,
+          unitLabel,
+          tripDate,
+          businessMiles: miles,
+          purpose,
+          startLocation,
+          endLocation,
+          note,
+          capturedAt: new Date().toISOString(),
+        }),
+      });
+      const body = (await response.json()) as { mileageEntry?: MobileMileageEntry } & ApiError;
+      if (!response.ok || !body.mileageEntry) throw new Error(body.error || "Mileage entry could not be saved.");
+      setMileageEntries((current) => [body.mileageEntry!, ...current]);
+      resetScopeFields();
+      setTripDate(localIsoDate());
+      setBusinessMiles("");
+      setPurpose("");
+      setStartLocation("");
+      setEndLocation("");
+      setNote("");
+      setMessage("Mileage entry saved. Review it on the desktop before it becomes an expense.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Mileage entry could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function resetScopeFields() {
+    setSelectedPropertyId("");
+    setSelectedUnitId("");
+    setPropertyLabel("");
+    setUnitLabel("");
+  }
+
   async function removeSubmission(id: string) {
     setError(null);
     const response = await fetch(`/api/submissions/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -149,10 +226,25 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     setSubmissions((current) => current.filter((item) => item.id !== id));
   }
 
-  const pendingCount = submissions.filter((item) => item.status !== "imported").length;
+  async function removeMileageEntry(id: string) {
+    setError(null);
+    const response = await fetch(`/api/mileage/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      const body = (await response.json().catch(() => ({}))) as ApiError;
+      setError(body.error || "Mileage entry could not be removed.");
+      return;
+    }
+    setMileageEntries((current) => current.filter((item) => item.id !== id));
+  }
+
+  const pendingCount = submissions.filter((item) => item.status !== "imported").length + mileageEntries.filter((item) => item.status !== "imported").length;
   const selectedProperty = propertyCatalog.find((property) => property.id === selectedPropertyId) ?? null;
   const usePropertyChoices = propertyCatalog.length > 0;
   const useUnitChoices = Boolean(selectedProperty?.units.length);
+  const queueItems = [
+    ...submissions.map((submission) => ({ recordType: "capture" as const, createdAt: submission.createdAt, submission })),
+    ...mileageEntries.map((mileageEntry) => ({ recordType: "mileage" as const, createdAt: mileageEntry.createdAt, mileageEntry })),
+  ].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
   return (
     <main className="app-shell">
@@ -171,14 +263,14 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       <section className="hero">
         <p className="eyebrow">FIELD CAPTURE</p>
         <h1>Capture it now. Finish it at your desk.</h1>
-        <p>Send receipts and maintenance photos to Rental Tracker while the details are still fresh.</p>
+        <p>Send receipts, maintenance photos, and business mileage to Rental Tracker while the details are still fresh.</p>
       </section>
 
       <section className="capture-card" aria-labelledby="capture-title">
         <div className="section-heading">
           <div>
             <p className="step-label">QUICK CAPTURE</p>
-            <h2 id="capture-title">{captureKind === "maintenance" ? "Report maintenance" : "Add a receipt"}</h2>
+            <h2 id="capture-title">{captureKind === "maintenance" ? "Report maintenance" : captureKind === "mileage" ? "Log business mileage" : "Add a receipt"}</h2>
           </div>
           <span className="time-chip">About 15 sec</span>
         </div>
@@ -203,9 +295,20 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
               <strong>Maintenance</strong>
               <span>Issue or repair photo</span>
             </button>
+            <button
+              type="button"
+              className={captureKind === "mileage" ? "active" : ""}
+              aria-pressed={captureKind === "mileage"}
+              disabled={!usePropertyChoices}
+              title={usePropertyChoices ? "Log business mileage" : "Open Mobile Inbox once in the updated desktop app to enable mileage capture."}
+              onClick={() => { setCaptureKind("mileage"); setError(null); setMessage(null); }}
+            >
+              <strong>Mileage</strong>
+              <span>{usePropertyChoices ? "Business trip" : "Desktop sync needed"}</span>
+            </button>
           </div>
 
-          <label className={`file-drop ${file ? "has-file" : ""}`}>
+          {captureKind !== "mileage" ? <label className={`file-drop ${file ? "has-file" : ""}`}>
             <input
               ref={fileInputRef}
               type="file"
@@ -216,7 +319,34 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
             <span className="camera-glyph" aria-hidden="true">+</span>
             <strong>{file ? file.name : captureKind === "maintenance" ? "Take issue photo" : "Take photo or choose file"}</strong>
             <small>{file ? formatBytes(file.size) : captureKind === "maintenance" ? "JPEG or PNG · large photos optimized" : "JPEG or PNG · large photos optimized · PDFs up to 700 KB"}</small>
-          </label>
+          </label> : (
+            <div className="mileage-fields">
+              <div className="form-grid">
+                <label>
+                  <span>Trip date</span>
+                  <input type="date" value={tripDate} onChange={(event) => setTripDate(event.target.value)} />
+                </label>
+                <label>
+                  <span>Business miles</span>
+                  <input type="number" min="0.1" max="1000" step="0.1" inputMode="decimal" value={businessMiles} onChange={(event) => setBusinessMiles(event.target.value)} placeholder="e.g. 18.4" />
+                </label>
+              </div>
+              <label className="note-field">
+                <span>Business purpose <em>required</em></span>
+                <input value={purpose} onChange={(event) => setPurpose(event.target.value)} placeholder="e.g. Property inspection and hardware pickup" maxLength={200} />
+              </label>
+              <div className="form-grid route-grid">
+                <label>
+                  <span>From <em>optional</em></span>
+                  <input value={startLocation} onChange={(event) => setStartLocation(event.target.value)} placeholder="Starting place" maxLength={160} />
+                </label>
+                <label>
+                  <span>To <em>optional</em></span>
+                  <input value={endLocation} onChange={(event) => setEndLocation(event.target.value)} placeholder="Destination" maxLength={160} />
+                </label>
+              </div>
+            </div>
+          )}
 
           <div className="form-grid">
             <label>
@@ -280,11 +410,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           </div>
 
           <label className="note-field">
-            <span>{captureKind === "maintenance" ? "Issue details" : "Note"} {captureKind === "receipt" ? <em>optional</em> : <em>required</em>}</span>
+            <span>{captureKind === "maintenance" ? "Issue details" : captureKind === "mileage" ? "Trip note" : "Note"} {captureKind === "maintenance" ? <em>required</em> : <em>optional</em>}</span>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder={captureKind === "maintenance" ? "What is happening, where is it, and when did it start?" : "What was this for?"}
+              placeholder={captureKind === "maintenance" ? "What is happening, where is it, and when did it start?" : captureKind === "mileage" ? "Parking, toll, or other detail to remember" : "What was this for?"}
               rows={2}
               maxLength={500}
             />
@@ -294,7 +424,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           {message ? <p className="alert success" role="status">{message}</p> : null}
 
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? "Saving securely…" : captureKind === "maintenance" ? "Send maintenance report" : "Send to Mobile Inbox"}
+            {saving ? "Saving securely…" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
           </button>
         </form>
       </section>
@@ -309,32 +439,40 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
         </div>
 
         {loading ? <p className="empty-state">Checking your inbox…</p> : null}
-        {!loading && submissions.length === 0 ? (
+        {!loading && queueItems.length === 0 ? (
           <div className="empty-state">
             <strong>Nothing waiting</strong>
             <span>Your next capture will appear here and in the desktop app.</span>
           </div>
         ) : null}
         <div className="queue-list">
-          {submissions.map((submission) => (
-            <article className="queue-item" key={submission.id}>
-              <div className="file-kind" aria-hidden="true">
-                {submission.kind === "maintenance" ? "FIX" : submission.contentType === "application/pdf" ? "PDF" : "IMG"}
-              </div>
-              <div className="queue-copy">
-                <strong>{submission.kind === "maintenance" ? "Maintenance report" : submission.originalFileName}</strong>
-                <span>{submission.propertyLabel || "Property not assigned"}{submission.unitLabel ? ` · ${submission.unitLabel}` : ""}</span>
-                <small>{relativeTime(submission.createdAt)} · {submission.status === "claimed" ? "Opened on desktop" : "Ready for desktop"}</small>
-              </div>
-              {submission.status === "pending" ? (
-                <button className="text-button" type="button" onClick={() => void removeSubmission(submission.id)}>
-                  Remove
-                </button>
-              ) : (
-                <span className="claimed-dot" title="Opened on desktop" />
-              )}
-            </article>
-          ))}
+          {queueItems.map((item) => item.recordType === "capture" ? (
+              <article className="queue-item" key={item.submission.id}>
+                <div className="file-kind" aria-hidden="true">
+                  {item.submission.kind === "maintenance" ? "FIX" : item.submission.contentType === "application/pdf" ? "PDF" : "IMG"}
+                </div>
+                <div className="queue-copy">
+                  <strong>{item.submission.kind === "maintenance" ? "Maintenance report" : item.submission.originalFileName}</strong>
+                  <span>{item.submission.propertyLabel || "Property not assigned"}{item.submission.unitLabel ? ` · ${item.submission.unitLabel}` : ""}</span>
+                  <small>{relativeTime(item.submission.createdAt)} · {item.submission.status === "claimed" ? "Opened on desktop" : "Ready for desktop"}</small>
+                </div>
+                {item.submission.status === "pending" ? (
+                  <button className="text-button" type="button" onClick={() => void removeSubmission(item.submission.id)}>Remove</button>
+                ) : <span className="claimed-dot" title="Opened on desktop" />}
+              </article>
+            ) : (
+              <article className="queue-item" key={item.mileageEntry.id}>
+                <div className="file-kind" aria-hidden="true">MI</div>
+                <div className="queue-copy">
+                  <strong>{item.mileageEntry.purpose}</strong>
+                  <span>{item.mileageEntry.propertyLabel}{item.mileageEntry.unitLabel ? ` · ${item.mileageEntry.unitLabel}` : ""}</span>
+                  <small>{item.mileageEntry.businessMiles} mi · {formatTripDate(item.mileageEntry.tripDate)} · {item.mileageEntry.status === "claimed" ? "Opened on desktop" : "Ready for desktop"}</small>
+                </div>
+                {item.mileageEntry.status === "pending" ? (
+                  <button className="text-button" type="button" onClick={() => void removeMileageEntry(item.mileageEntry.id)}>Remove</button>
+                ) : <span className="claimed-dot" title="Opened on desktop" />}
+              </article>
+            ))}
         </div>
       </section>
 
@@ -342,7 +480,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
         <p className="step-label">NOW &amp; NEXT</p>
         <div className="coming-grid">
           <div><strong>Property choices</strong><span>{usePropertyChoices ? "Synced securely from your desktop" : "Manual entry works until your desktop syncs"}</span></div>
-          <div><strong>Mileage log</strong><span>Fast trip entry while it is fresh</span></div>
+          <div><strong>Mileage log</strong><span>{usePropertyChoices ? "Ready for desktop-reviewed trip entries" : "Available after the updated desktop syncs"}</span></div>
         </div>
       </section>
 
@@ -450,4 +588,17 @@ function relativeTime(iso: string): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
+}
+
+function localIsoDate(): string {
+  const now = new Date();
+  const offset = now.getTimezoneOffset() * 60000;
+  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function formatTripDate(value: string): string {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isFinite(parsed.getTime())
+    ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(parsed)
+    : value;
 }

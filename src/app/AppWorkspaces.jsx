@@ -173,6 +173,7 @@ const DOCUMENTS_WORKSPACE_PROP_KEYS = [
   "updateLinkedTransactionFromDocumentOcr",
   "onDocumentImportInputChange",
   "openMobileCompanionImport",
+  "openMobileCompanionMileageReview",
   "openDocumentImportPicker",
   "openDocumentLinkedRecord",
   "openDocumentPreview",

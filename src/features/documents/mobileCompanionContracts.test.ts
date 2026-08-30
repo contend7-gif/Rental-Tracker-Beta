@@ -33,3 +33,14 @@ test("Mobile Inbox syncs only the desktop-built property catalog", () => {
   assert.match(workspace, /buildMobileCompanionCatalog\(\{ properties, units \}\)/);
   assert.match(inbox, /syncPropertyCatalog\(propertyCatalog\)/);
 });
+
+test("mobile mileage opens the existing desktop transaction review workflow", () => {
+  const inbox = readFileSync(new URL("./MobileInboxPanel.jsx", import.meta.url), "utf8");
+  const controller = readFileSync(new URL("../../app/useTransactionEntryController.js", import.meta.url), "utf8");
+
+  assert.match(inbox, /Review trip/);
+  assert.match(inbox, /onMileageReview/);
+  assert.match(controller, /category: "Auto and travel"/);
+  assert.match(controller, /mobileCompanionMileageId/);
+  assert.match(controller, /completeMileage/);
+});

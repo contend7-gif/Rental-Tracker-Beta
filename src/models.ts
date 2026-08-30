@@ -152,6 +152,7 @@ export type Transaction = {
   invoiceAmount?: number;
   mileageMiles?: number;
   mileageRate?: number;
+  mobileCompanionMileageId?: string;
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
   rentPeriod?: string;

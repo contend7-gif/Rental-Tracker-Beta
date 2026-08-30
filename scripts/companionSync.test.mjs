@@ -101,3 +101,32 @@ test("desktop sends the privacy-limited property catalog as authenticated JSON",
   assert.equal(result.propertyCount, 1);
   assert.equal(result.unitCount, 1);
 });
+
+test("desktop mileage requests use the existing authenticated companion connection", async () => {
+  const secretStore = createMemorySecretStore({
+    "companion.siteUrl": "https://companion.example.test",
+    "companion.syncSecret": "desktop-key-example",
+  });
+  const requests = [];
+  const service = createCompanionSyncService({
+    secretStore,
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), method: options?.method || "GET", authorization: options?.headers?.get("authorization") });
+      return Response.json(String(url).endsWith("/api/desktop/mileage")
+        ? { mileageEntries: [{ id: "a1b2c3d4-e5f6-7890-abcd-123456789012" }] }
+        : { mileageEntry: { id: "a1b2c3d4-e5f6-7890-abcd-123456789012" } });
+    },
+  });
+
+  const listed = await service.listMileage();
+  await service.claimMileage("a1b2c3d4-e5f6-7890-abcd-123456789012");
+  await service.completeMileage("a1b2c3d4-e5f6-7890-abcd-123456789012");
+
+  assert.equal(listed.mileageEntries.length, 1);
+  assert.deepEqual(requests.map(({ url, method }) => ({ url, method })), [
+    { url: "https://companion.example.test/api/desktop/mileage", method: "GET" },
+    { url: "https://companion.example.test/api/desktop/mileage/a1b2c3d4-e5f6-7890-abcd-123456789012/claim", method: "POST" },
+    { url: "https://companion.example.test/api/desktop/mileage/a1b2c3d4-e5f6-7890-abcd-123456789012/complete", method: "POST" },
+  ]);
+  assert.ok(requests.every((request) => request.authorization === "Bearer desktop-key-example"));
+});

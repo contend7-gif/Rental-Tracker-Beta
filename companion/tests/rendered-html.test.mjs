@@ -68,3 +68,22 @@ test("property choices use authenticated browser access and desktop-only replace
   assert.match(schema, /companion_property_catalog/);
   assert.doesNotMatch(catalog, /tenant|lease|rent|finance|document/i);
 });
+
+test("mileage entries are private, structured, and require desktop review", async () => {
+  const [component, browserRoute, desktopRoute, mileage, schema] = await Promise.all([
+    readFile(new URL("../app/components/MobileCaptureApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/mileage/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/desktop/mileage/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/mileage.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(component, /Log business mileage/);
+  assert.match(component, /Review it on the desktop before it becomes an expense/);
+  assert.match(browserRoute, /getRequestUser/);
+  assert.match(desktopRoute, /requireDesktopAuthorization/);
+  assert.match(mileage, /business_miles_tenths/);
+  assert.match(mileage, /status IN \('pending', 'claimed'\)/);
+  assert.match(schema, /mobile_mileage_entries/);
+  assert.doesNotMatch(mileage, /gps|latitude|longitude/i);
+});

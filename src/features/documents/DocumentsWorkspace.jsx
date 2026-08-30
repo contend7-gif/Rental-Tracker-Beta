@@ -143,6 +143,7 @@ export function DocumentsWorkspace({
   markVisibleDocumentsPendingOcr,
   onDocumentImportInputChange,
   openMobileCompanionImport,
+  openMobileCompanionMileageReview,
   openMobileCompanionSettings,
   openDocumentImportPicker,
   openDocumentLinkedRecord,
@@ -583,6 +584,7 @@ export function DocumentsWorkspace({
             desktopCompanionApi={desktopCompanionApi}
             propertyCatalog={mobileCompanionCatalog}
             onImport={openMobileCompanionImport}
+            onMileageReview={openMobileCompanionMileageReview}
             onOpenSettings={openMobileCompanionSettings}
           />
         ) : null}

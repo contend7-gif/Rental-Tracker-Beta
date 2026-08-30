@@ -36,3 +36,30 @@ export const companionPropertyCatalog = sqliteTable("companion_property_catalog"
   sortOrder: integer("sort_order").notNull().default(0),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const mobileMileageEntries = sqliteTable("mobile_mileage_entries", {
+  id: text("id").primaryKey(),
+  ownerFingerprint: text("owner_fingerprint").notNull(),
+  status: text("status", { enum: ["pending", "claimed", "imported"] })
+    .notNull()
+    .default("pending"),
+  propertyLabel: text("property_label").notNull(),
+  unitLabel: text("unit_label"),
+  tripDate: text("trip_date").notNull(),
+  businessMiles: integer("business_miles_tenths").notNull(),
+  purpose: text("purpose").notNull(),
+  startLocation: text("start_location"),
+  endLocation: text("end_location"),
+  note: text("note"),
+  capturedAt: text("captured_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  claimedAt: text("claimed_at"),
+  importedAt: text("imported_at"),
+}, (table) => [
+  index("mobile_mileage_owner_status_created_idx").on(
+    table.ownerFingerprint,
+    table.status,
+    table.createdAt,
+  ),
+]);

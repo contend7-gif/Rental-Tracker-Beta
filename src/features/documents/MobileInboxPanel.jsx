@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Cloud, Loader2, RefreshCw, Settings2, Smartphone, Wrench } from "lucide-react";
+import { CheckCircle2, Cloud, Loader2, MapPinned, RefreshCw, Settings2, Smartphone, Wrench } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 
-export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImport, onOpenSettings }) {
+export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImport, onMileageReview, onOpenSettings }) {
   const [status, setStatus] = useState(null);
   const [submissions, setSubmissions] = useState([]);
+  const [mileageEntries, setMileageEntries] = useState([]);
   const [busy, setBusy] = useState(false);
   const [importingId, setImportingId] = useState("");
   const [message, setMessage] = useState("");
@@ -19,6 +20,7 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
       setStatus(nextStatus);
       if (!nextStatus?.configured) {
         setSubmissions([]);
+        setMileageEntries([]);
         return;
       }
       let catalogWarning = "";
@@ -28,9 +30,14 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
           catalogWarning = syncResult.message || syncResult.error || "Property choices could not sync.";
         }
       }
-      const result = await desktopCompanionApi.list();
+      const [result, mileageResult] = await Promise.all([
+        desktopCompanionApi.list(),
+        desktopCompanionApi.listMileage ? desktopCompanionApi.listMileage() : Promise.resolve({ ok: true, mileageEntries: [] }),
+      ]);
       if (result?.ok === false) throw new Error(result.message || result.error || "Could not refresh Mobile Inbox.");
+      if (mileageResult?.ok === false) throw new Error(mileageResult.message || mileageResult.error || "Could not refresh mobile mileage.");
       setSubmissions(result?.submissions || []);
+      setMileageEntries(mileageResult?.mileageEntries || []);
       if (catalogWarning) setMessage(`Inbox refreshed, but ${catalogWarning}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not refresh Mobile Inbox.");
@@ -59,6 +66,21 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
     }
   }
 
+  async function reviewMileage(entry) {
+    setImportingId(entry.id);
+    setMessage("");
+    try {
+      const opened = await onMileageReview?.(entry);
+      if (opened) {
+        setMileageEntries((current) => current.map((item) =>
+          item.id === entry.id ? { ...item, status: "claimed" } : item,
+        ));
+      }
+    } finally {
+      setImportingId("");
+    }
+  }
+
   if (!desktopCompanionApi) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
@@ -77,7 +99,7 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-950">Mobile Inbox</h2>
             {status?.configured ? <Badge className="bg-teal-700">Connected</Badge> : <Badge variant="secondary">Setup needed</Badge>}
-            {submissions.length > 0 ? <Badge variant="secondary">{submissions.length} waiting</Badge> : null}
+            {submissions.length + mileageEntries.length > 0 ? <Badge variant="secondary">{submissions.length + mileageEntries.length} waiting</Badge> : null}
           </div>
           <p className="mt-0.5 text-xs text-slate-600">Receipt and maintenance captures wait here until you choose one to review.</p>
         </div>
@@ -99,7 +121,7 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
         </div>
       ) : null}
 
-      {status?.configured && !busy && submissions.length === 0 ? (
+      {status?.configured && !busy && submissions.length + mileageEntries.length === 0 ? (
         <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-teal-200 bg-white/70 px-3 py-3 text-xs text-slate-600">
           <CheckCircle2 className="h-4 w-4 text-teal-700" /> Nothing is waiting. New phone captures will appear here.
         </div>
@@ -131,6 +153,33 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, onImpor
           ))}
         </div>
       ) : null}
+
+      {mileageEntries.length > 0 ? (
+        <div className="mt-3 grid gap-2">
+          {mileageEntries.map((entry) => (
+            <article key={entry.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                <MapPinned className="h-4 w-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="truncate text-sm font-medium text-slate-950">{entry.purpose}</div>
+                  <Badge variant="secondary">Mileage</Badge>
+                </div>
+                <div className="truncate text-xs text-slate-500">
+                  {entry.propertyLabel}{entry.unitLabel ? ` · ${entry.unitLabel}` : ""} · {entry.businessMiles} mi · {formatTripDate(entry.tripDate)}
+                </div>
+                {entry.startLocation || entry.endLocation ? <div className="mt-1 truncate text-xs text-slate-600">{entry.startLocation || "Start"} → {entry.endLocation || "Destination"}</div> : null}
+              </div>
+              {entry.status === "claimed" ? <Badge variant="secondary">In review</Badge> : null}
+              <Button size="sm" onClick={() => void reviewMileage(entry)} disabled={Boolean(importingId)}>
+                {importingId === entry.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                Review trip
+              </Button>
+            </article>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -139,4 +188,10 @@ function formatCaptureTime(value) {
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) return "Recently";
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(parsed);
+}
+
+function formatTripDate(value) {
+  const parsed = Date.parse(`${String(value || "").slice(0, 10)}T00:00:00`);
+  if (!Number.isFinite(parsed)) return "Trip date unavailable";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(parsed);
 }

@@ -73,6 +73,7 @@ export function useTransactionWorkflowController({
       invoiceAmount: String(txn.invoiceAmount ?? txn.amount ?? ""),
       mileageMiles: String(txn.mileageMiles ?? ""),
       mileageRate: String(txn.mileageRate ?? ""),
+      mobileCompanionMileageId: String(txn.mobileCompanionMileageId || ""),
       invoiceRef: txn.invoiceRef || "",
       servicePeriodStart: txn.servicePeriodStart || "",
       servicePeriodEnd: txn.servicePeriodEnd || "",

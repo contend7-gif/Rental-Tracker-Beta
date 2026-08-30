@@ -97,6 +97,24 @@ export function createCompanionSyncService({ secretStore, fetchImpl = fetch } = 
       return { ok: true, ...(await response.json()) };
     },
 
+    async listMileage() {
+      const response = await request("api/desktop/mileage");
+      const body = await response.json();
+      return { ok: true, mileageEntries: Array.isArray(body?.mileageEntries) ? body.mileageEntries : [] };
+    },
+
+    async claimMileage(id) {
+      const safeId = requireSubmissionId(id);
+      const response = await request(`api/desktop/mileage/${safeId}/claim`, { method: "POST" });
+      return { ok: true, ...(await response.json()) };
+    },
+
+    async completeMileage(id) {
+      const safeId = requireSubmissionId(id);
+      const response = await request(`api/desktop/mileage/${safeId}/complete`, { method: "POST" });
+      return { ok: true, ...(await response.json()) };
+    },
+
     async claim(id) {
       const safeId = requireSubmissionId(id);
       const response = await request(`api/desktop/submissions/${safeId}/claim`, { method: "POST" });
