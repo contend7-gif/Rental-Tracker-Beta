@@ -50,6 +50,6 @@ Companion-powered improvements must follow these boundaries:
 5. **Secrets never enter app settings or backups.** Store them only through OS-backed desktop secret storage and protected Site runtime secrets.
 6. **Every deployment is isolated.** Do not place multiple unrelated Rental Tracker users into one shared inbox or storage namespace.
 7. **Imported records retain provenance.** Preserve the companion submission ID, capture time, and file hash for duplicate prevention and auditability.
-8. **Cloud retention is explicit.** A future retention policy should delete file bytes after successful import or after a user-selected period.
+8. **Cloud retention is explicit.** Imported file bytes are deleted immediately by default. A user may select a 7- or 30-day recovery window or manually clear imported cloud files; pending and in-review captures are never removed by retention cleanup.
 
 These rules allow the desktop app and companion to improve independently without turning the companion into a requirement.

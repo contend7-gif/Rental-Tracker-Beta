@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import type { MobileMileageEntry } from "@/lib/mileage";
 import type { PropertyCatalogItem } from "@/lib/property-catalog";
 import type { MobileSubmission } from "@/lib/submissions";
+import type { RetentionOverview } from "@/lib/retention";
 
 type Props = {
   displayName: string;
@@ -38,6 +39,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const [uploadNeedsAttention, setUploadNeedsAttention] = useState(false);
+  const [retentionOverview, setRetentionOverview] = useState<RetentionOverview | null>(null);
+  const [retentionChoice, setRetentionChoice] = useState<0 | 7 | 30>(0);
+  const [retentionBusy, setRetentionBusy] = useState(false);
+  const [storageMessage, setStorageMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +68,13 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       } else {
         setPropertyCatalog([]);
       }
+      const retentionResponse = await fetch("/api/retention", { cache: "no-store" });
+      const retentionBody = await readApiResponse<{ overview?: RetentionOverview } & ApiError>(retentionResponse);
+      if (!retentionResponse.ok || !retentionBody.overview) {
+        throw new Error(retentionBody.error || "Could not load cloud retention settings.");
+      }
+      setRetentionOverview(retentionBody.overview);
+      setRetentionChoice(retentionBody.overview.retentionDays);
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load your captures.");
@@ -78,6 +91,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     setFile(selected);
+    setUploadNeedsAttention(false);
     setMessage(null);
     setError(null);
   }
@@ -124,9 +138,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     setSaving(true);
     setError(null);
     setMessage(null);
+    const chunkedPdf = isChunkedPdf(file);
+    setUploadNeedsAttention(false);
 
     try {
-      const submission = isPdfFile(file) && file.size > TARGET_UPLOAD_BYTES
+      const submission = chunkedPdf
         ? await uploadChunkedPdf(file)
         : await uploadStandardCapture(file);
       setSubmissions((current) => [submission, ...current]);
@@ -136,11 +152,13 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       setPropertyLabel("");
       setUnitLabel("");
       setNote("");
+      setUploadNeedsAttention(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
       setMessage(captureKind === "maintenance"
         ? "Maintenance report saved. Review it on the desktop to create or link a work order."
         : "Saved to your Mobile Inbox. It is ready on the desktop app.");
     } catch (caught) {
+      if (chunkedPdf) setUploadNeedsAttention(true);
       setError(caught instanceof Error ? caught.message : "Capture could not be saved.");
     } finally {
       setUploadProgress(null);
@@ -169,7 +187,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     setUploadProgress("Preparing PDF…");
     const sha256 = await sha256Hex(selectedFile);
     const chunkCount = Math.ceil(selectedFile.size / PDF_CHUNK_BYTES);
-    const startResponse = await fetch("/api/submissions/chunked", {
+    const startResponse = await fetchWithRetries("/api/submissions/chunked", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -182,30 +200,55 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
         note,
         capturedAt: new Date().toISOString(),
       }),
-    });
-    const startBody = await readApiResponse<{ uploadId?: string; chunkBytes?: number } & ApiError>(startResponse);
+    }, { attempts: 3, onRetry: () => setUploadProgress("Reconnecting to resume PDF…") });
+    const startBody = await readApiResponse<{
+      uploadId?: string;
+      chunkBytes?: number;
+      receivedParts?: number[];
+      resumed?: boolean;
+    } & ApiError>(startResponse);
     if (!startResponse.ok || !startBody.uploadId) throw new Error(startBody.error || "The PDF upload could not start.");
     const uploadId = startBody.uploadId;
+    const receivedParts = new Set(
+      (startBody.receivedParts ?? []).filter((part) => Number.isInteger(part) && part >= 0 && part < chunkCount),
+    );
+    if (startBody.resumed && receivedParts.size > 0) {
+      setUploadProgress(`Resuming PDF · ${receivedParts.size} of ${chunkCount} pieces already saved…`);
+    }
     try {
+      let completedParts = receivedParts.size;
       for (let partNumber = 0; partNumber < chunkCount; partNumber += 1) {
-        setUploadProgress(`Uploading PDF ${partNumber + 1} of ${chunkCount}…`);
+        if (receivedParts.has(partNumber)) continue;
+        setUploadProgress(`Uploading PDF ${completedParts + 1} of ${chunkCount}…`);
         const start = partNumber * PDF_CHUNK_BYTES;
-        const response = await fetch(`/api/submissions/chunked/${encodeURIComponent(uploadId)}/${partNumber}`, {
-          method: "PUT",
-          headers: { "content-type": "application/octet-stream" },
-          body: selectedFile.slice(start, Math.min(start + PDF_CHUNK_BYTES, selectedFile.size)),
-        });
+        const response = await fetchWithRetries(
+          `/api/submissions/chunked/${encodeURIComponent(uploadId)}/${partNumber}`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/octet-stream" },
+            body: selectedFile.slice(start, Math.min(start + PDF_CHUNK_BYTES, selectedFile.size)),
+          },
+          {
+            attempts: 3,
+            onRetry: (attempt) => setUploadProgress(`Retrying PDF piece ${completedParts + 1} of ${chunkCount} · attempt ${attempt}…`),
+          },
+        );
         const body = await readApiResponse<ApiError>(response);
         if (!response.ok) throw new Error(body.error || `PDF piece ${partNumber + 1} could not be saved.`);
+        completedParts += 1;
       }
       setUploadProgress("Finishing PDF…");
-      const completeResponse = await fetch(`/api/submissions/chunked/${encodeURIComponent(uploadId)}/complete`, { method: "POST" });
+      const completeResponse = await fetchWithRetries(
+        `/api/submissions/chunked/${encodeURIComponent(uploadId)}/complete`,
+        { method: "POST" },
+        { attempts: 3, onRetry: () => setUploadProgress("Reconnecting to finish PDF…") },
+      );
       const completeBody = await readApiResponse<{ submission?: MobileSubmission } & ApiError>(completeResponse);
       if (!completeResponse.ok || !completeBody.submission) throw new Error(completeBody.error || "The PDF could not be completed.");
       return completeBody.submission;
-    } catch (error) {
-      await fetch(`/api/submissions/chunked/${encodeURIComponent(uploadId)}`, { method: "DELETE" }).catch(() => undefined);
-      throw error;
+    } catch (caught) {
+      const detail = caught instanceof Error ? caught.message : "The connection was interrupted.";
+      throw new Error(`Upload paused. Keep this page open and tap Resume PDF upload. ${detail}`);
     }
   }
 
@@ -291,6 +334,59 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       return;
     }
     setMileageEntries((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveRetentionPreference() {
+    if (retentionChoice === 0 && (retentionOverview?.retainedImportedCount ?? 0) > 0) {
+      const confirmed = window.confirm("Switch to immediate cleanup and remove the currently retained imported cloud files? Desktop copies are not affected.");
+      if (!confirmed) return;
+    }
+    setRetentionBusy(true);
+    setStorageMessage(null);
+    try {
+      const response = await fetch("/api/retention", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ retentionDays: retentionChoice }),
+      });
+      const body = await readApiResponse<{
+        overview?: RetentionOverview;
+        removedFiles?: number;
+        removedBytes?: number;
+      } & ApiError>(response);
+      if (!response.ok || !body.overview) throw new Error(body.error || "Cloud retention could not be updated.");
+      setRetentionOverview(body.overview);
+      setStorageMessage(body.removedFiles
+        ? `Retention updated. ${body.removedFiles} imported cloud ${body.removedFiles === 1 ? "file was" : "files were"} removed.`
+        : "Cloud retention preference saved.");
+    } catch (caught) {
+      setStorageMessage(caught instanceof Error ? caught.message : "Cloud retention could not be updated.");
+    } finally {
+      setRetentionBusy(false);
+    }
+  }
+
+  async function clearImportedFiles() {
+    if (!retentionOverview?.retainedImportedCount) return;
+    const confirmed = window.confirm("Remove all imported companion files from cloud storage now? Desktop copies and minimal audit receipts remain.");
+    if (!confirmed) return;
+    setRetentionBusy(true);
+    setStorageMessage(null);
+    try {
+      const response = await fetch("/api/retention", { method: "DELETE" });
+      const body = await readApiResponse<{
+        overview?: RetentionOverview;
+        removedFiles?: number;
+        removedBytes?: number;
+      } & ApiError>(response);
+      if (!response.ok || !body.overview) throw new Error(body.error || "Imported cloud files could not be cleared.");
+      setRetentionOverview(body.overview);
+      setStorageMessage(`${body.removedFiles ?? 0} imported cloud ${body.removedFiles === 1 ? "file was" : "files were"} removed. Desktop copies were not changed.`);
+    } catch (caught) {
+      setStorageMessage(caught instanceof Error ? caught.message : "Imported cloud files could not be cleared.");
+    } finally {
+      setRetentionBusy(false);
+    }
   }
 
   const pendingCount = submissions.filter((item) => item.status !== "imported").length + mileageEntries.filter((item) => item.status !== "imported").length;
@@ -404,6 +500,13 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
             </div>
           )}
 
+          {file && isChunkedPdf(file) ? (
+            <div className={`upload-state ${uploadNeedsAttention ? "needs-attention" : saving ? "uploading" : "waiting"}`} role="status">
+              <strong>{uploadNeedsAttention ? "Needs attention" : saving ? "Uploading" : "Waiting to upload"}</strong>
+              <span>{uploadNeedsAttention ? "Tap Resume PDF upload. Saved pieces will not be sent again." : saving ? uploadProgress || "Preparing secure upload…" : "Large PDFs upload in resumable private pieces."}</span>
+            </div>
+          ) : null}
+
           <div className="form-grid">
             <label>
               <span>Property {captureKind === "receipt" ? <em>optional</em> : <em>required</em>}</span>
@@ -480,7 +583,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           {message ? <p className="alert success" role="status">{message}</p> : null}
 
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? uploadProgress || "Saving securely…" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
+            {saving ? uploadProgress || "Saving securely…" : uploadNeedsAttention && file && isChunkedPdf(file) ? "Resume PDF upload" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
           </button>
         </form>
       </section>
@@ -532,6 +635,42 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
         </div>
       </section>
 
+      <section className="storage-section" aria-labelledby="storage-title">
+        <div className="section-heading">
+          <div>
+            <p className="step-label">PRIVACY &amp; STORAGE</p>
+            <h2 id="storage-title">Cloud cleanup</h2>
+          </div>
+          <span className="time-chip">Automatic</span>
+        </div>
+        <p className="storage-intro">Desktop imports are the durable copy. Choose how long an imported companion file remains in private cloud storage.</p>
+        <div className="retention-controls">
+          <label>
+            <span>Keep imported cloud files</span>
+            <select value={retentionChoice} onChange={(event) => setRetentionChoice(Number(event.target.value) as 0 | 7 | 30)} disabled={retentionBusy}>
+              <option value={0}>Remove immediately after import</option>
+              <option value={7}>Keep for 7 days</option>
+              <option value={30}>Keep for 30 days</option>
+            </select>
+          </label>
+          <button className="secondary-button" type="button" onClick={() => void saveRetentionPreference()} disabled={retentionBusy || !retentionOverview}>
+            {retentionBusy ? "Updating…" : "Save retention"}
+          </button>
+        </div>
+        <p className="retention-copy">{retentionPolicyCopy(retentionOverview?.retentionDays ?? retentionChoice)}</p>
+        <div className="storage-grid">
+          <div><strong>{retentionOverview?.waitingCount ?? 0}</strong><span>Waiting · {formatBytes(retentionOverview?.waitingBytes ?? 0)}</span></div>
+          <div><strong>{retentionOverview?.retainedImportedCount ?? 0}</strong><span>Imported retained · {formatBytes(retentionOverview?.retainedImportedBytes ?? 0)}</span></div>
+          <div><strong>{retentionOverview?.stagedUploadCount ?? 0}</strong><span>Unfinished uploads · {formatBytes(retentionOverview?.stagedUploadBytes ?? 0)}</span></div>
+        </div>
+        <div className="storage-actions">
+          <span>{retentionOverview?.auditReceiptCount ?? 0} minimal audit receipts retained. Unfinished upload pieces expire after 48 hours.</span>
+          <button className="text-button" type="button" onClick={() => void clearImportedFiles()} disabled={retentionBusy || !retentionOverview?.retainedImportedCount}>Clear imported cloud files</button>
+        </div>
+        {storageMessage ? <p className="storage-message" role="status">{storageMessage}</p> : null}
+        <p className="phone-storage-note">Selected files stay only in this page&apos;s memory while uploading; the companion does not create a permanent offline document cache on your phone.</p>
+      </section>
+
       <section className="coming-section" aria-label="Companion capabilities">
         <p className="step-label">NOW &amp; NEXT</p>
         <div className="coming-grid">
@@ -554,6 +693,28 @@ async function readApiResponse<T extends ApiError>(response: Response): Promise<
     throw new Error("This file is still too large to send. Try a smaller photo or use Documents on the desktop.");
   }
   throw new Error(message || `The companion could not complete the upload (${response.status}).`);
+}
+
+async function fetchWithRetries(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  options: { attempts: number; onRetry?: (nextAttempt: number) => void },
+): Promise<Response> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+    try {
+      const response = await fetch(input, init);
+      const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
+      if (response.ok || !retryable || attempt === options.attempts) return response;
+      lastError = new Error(`The companion returned ${response.status}.`);
+    } catch (caught) {
+      lastError = caught;
+      if (attempt === options.attempts) break;
+    }
+    options.onRetry?.(attempt + 1);
+    await new Promise((resolve) => window.setTimeout(resolve, 450 * attempt));
+  }
+  throw lastError instanceof Error ? lastError : new Error("The connection was interrupted.");
 }
 
 async function prepareUploadFile(file: File): Promise<File> {
@@ -620,6 +781,10 @@ function isPdfFile(file: File): boolean {
   return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
 }
 
+function isChunkedPdf(file: File): boolean {
+  return isPdfFile(file) && file.size > TARGET_UPLOAD_BYTES;
+}
+
 async function sha256Hex(file: File): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -646,7 +811,13 @@ function initials(value: string): string {
 }
 
 function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function retentionPolicyCopy(retentionDays: 0 | 7 | 30): string {
+  if (retentionDays === 0) return "Imported file bytes are removed as soon as the desktop confirms import.";
+  return `Imported file bytes are removed on the first companion or desktop check after ${retentionDays} days.`;
 }
 
 function relativeTime(iso: string): string {

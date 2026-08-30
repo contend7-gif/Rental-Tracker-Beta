@@ -36,14 +36,46 @@ test("large PDFs use private chunk storage and integrity verification", async ()
   ]);
 
   assert.match(component, /sha256Hex\(selectedFile\)/);
-  assert.match(component, /Uploading PDF \$\{partNumber \+ 1\} of \$\{chunkCount\}/);
+  assert.match(component, /Uploading PDF \$\{completedParts \+ 1\} of \$\{chunkCount\}/);
+  assert.match(component, /Resume PDF upload/);
+  assert.match(component, /receivedParts/);
+  assert.match(component, /fetchWithRetries/);
+  assert.doesNotMatch(component, /fetch\(`\/api\/submissions\/chunked\/\$\{encodeURIComponent\(uploadId\)\}`, \{ method: "DELETE" \}\)/);
   assert.match(startRoute, /getRequestUser/);
   assert.match(partRoute, /ownerFingerprint/);
   assert.match(completeRoute, /completeChunkedUpload/);
   assert.match(submissions, /MAX_CHUNKED_PDF_BYTES = 15 \* 1024 \* 1024/);
   assert.match(submissions, /The completed PDF did not pass its integrity check/);
   assert.match(submissions, /UPLOADS\.delete\(keys\)/);
+  assert.match(submissions, /listReceivedChunkParts/);
+  assert.match(submissions, /UPLOADS\.head/);
+  assert.match(submissions, /STAGED_UPLOAD_TTL_HOURS = 48/);
   assert.match(schema, /mobile_upload_sessions/);
+});
+
+test("cloud retention removes imported bytes and keeps only a minimal audit receipt", async () => {
+  const [component, route, retention, submissions, schema] = await Promise.all([
+    readFile(new URL("../app/components/MobileCaptureApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/retention/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/retention.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/submissions.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(component, /Remove immediately after import/);
+  assert.match(component, /Keep for 7 days/);
+  assert.match(component, /Keep for 30 days/);
+  assert.match(component, /Clear imported cloud files/);
+  assert.match(component, /does not create a permanent offline document cache/);
+  assert.match(route, /getRequestUser/);
+  assert.match(route, /updateRetentionDays/);
+  assert.match(route, /clearImportedCloudFiles/);
+  assert.match(retention, /UPLOADS\.delete\(submission\.storageKey\)/);
+  assert.match(retention, /mobile_submission_receipts/);
+  assert.doesNotMatch(retention, /property_label|unit_label|original_file_name|note/);
+  assert.match(submissions, /applyRetentionAfterImport/);
+  assert.match(schema, /companion_retention_preferences/);
+  assert.match(schema, /mobile_submission_receipts/);
 });
 
 test("declares private-storage boundaries and a mobile manifest", async () => {

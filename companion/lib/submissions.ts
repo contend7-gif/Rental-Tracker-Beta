@@ -1,8 +1,14 @@
 import { env } from "cloudflare:workers";
+import {
+  applyRetentionAfterImport,
+  cleanupExpiredImportedSubmissions,
+  hasImportReceipt,
+} from "@/lib/retention";
 
 export const MAX_UPLOAD_BYTES = 768 * 1024;
 export const PDF_CHUNK_BYTES = 512 * 1024;
 export const MAX_CHUNKED_PDF_BYTES = 15 * 1024 * 1024;
+export const STAGED_UPLOAD_TTL_HOURS = 48;
 export const ALLOWED_CONTENT_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -126,7 +132,7 @@ export async function createChunkedUploadSession(input: {
   chunkCount: number;
   sha256: string;
   capturedAt: string;
-}): Promise<{ uploadId: string; chunkBytes: number }> {
+}): Promise<{ uploadId: string; chunkBytes: number; receivedParts: number[]; resumed: boolean }> {
   await ensureSchema();
   if (input.kind !== "receipt") throw new Error("Large PDF upload is available for receipts and bills.");
   if (!/\.pdf$/i.test(input.originalFileName)) throw new Error("Choose a PDF file.");
@@ -138,6 +144,43 @@ export async function createChunkedUploadSession(input: {
   if (!/^[a-f0-9]{64}$/i.test(input.sha256)) throw new Error("The PDF fingerprint is invalid.");
 
   await cleanupStaleUploadSessions(input.ownerFingerprint);
+  const normalizedSha256 = input.sha256.toLowerCase();
+  const existingRow = await bindings().DB.prepare(`
+    SELECT * FROM mobile_upload_sessions
+    WHERE owner_fingerprint = ? AND sha256 = ? AND byte_size = ? AND chunk_count = ?
+    ORDER BY created_at DESC LIMIT 1
+  `).bind(
+    input.ownerFingerprint,
+    normalizedSha256,
+    input.byteSize,
+    input.chunkCount,
+  ).first<Record<string, unknown>>();
+  if (existingRow) {
+    const existing = mapChunkedUploadSession(existingRow);
+    const now = new Date().toISOString();
+    await bindings().DB.prepare(`
+      UPDATE mobile_upload_sessions SET
+        property_label = ?, unit_label = ?, note = ?, original_file_name = ?,
+        captured_at = ?, created_at = ?
+      WHERE id = ? AND owner_fingerprint = ?
+    `).bind(
+      input.propertyLabel,
+      input.unitLabel,
+      input.note,
+      input.originalFileName.slice(-120),
+      input.capturedAt,
+      now,
+      existing.id,
+      input.ownerFingerprint,
+    ).run();
+    const resumed = { ...existing, createdAt: now };
+    return {
+      uploadId: existing.id,
+      chunkBytes: PDF_CHUNK_BYTES,
+      receivedParts: await listReceivedChunkParts(resumed),
+      resumed: true,
+    };
+  }
   const id = crypto.randomUUID();
   await bindings().DB.prepare(`
     INSERT INTO mobile_upload_sessions (
@@ -147,10 +190,10 @@ export async function createChunkedUploadSession(input: {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, 'application/pdf', ?, ?, ?, ?, ?)
   `).bind(
     id, input.ownerFingerprint, input.kind, input.propertyLabel, input.unitLabel, input.note,
-    input.originalFileName.slice(-120), input.byteSize, input.chunkCount, input.sha256.toLowerCase(),
+    input.originalFileName.slice(-120), input.byteSize, input.chunkCount, normalizedSha256,
     input.capturedAt, new Date().toISOString(),
   ).run();
-  return { uploadId: id, chunkBytes: PDF_CHUNK_BYTES };
+  return { uploadId: id, chunkBytes: PDF_CHUNK_BYTES, receivedParts: [], resumed: false };
 }
 
 export async function storeChunkedUploadPart(
@@ -165,7 +208,10 @@ export async function storeChunkedUploadPart(
   if (!Number.isInteger(partNumber) || partNumber < 0 || partNumber >= session.chunkCount) return false;
   const expectedBytes = Math.min(PDF_CHUNK_BYTES, session.byteSize - partNumber * PDF_CHUNK_BYTES);
   if (bytes.byteLength !== expectedBytes) throw new Error("This PDF piece has the wrong size. Try the upload again.");
-  await bindings().UPLOADS.put(chunkStorageKey(session, partNumber), bytes, {
+  const key = chunkStorageKey(session, partNumber);
+  const existing = await bindings().UPLOADS.head(key);
+  if (existing?.size === expectedBytes) return true;
+  await bindings().UPLOADS.put(key, bytes, {
     httpMetadata: { contentType: "application/octet-stream" },
     customMetadata: { uploadId: session.id, partNumber: String(partNumber) },
   });
@@ -292,6 +338,8 @@ export async function createSubmission(input: {
 
 export async function listOwnerSubmissions(owner: string): Promise<MobileSubmission[]> {
   await ensureSchema();
+  await cleanupStaleUploadSessions(owner);
+  await cleanupExpiredImportedSubmissions(owner);
   const { DB } = bindings();
   const result = await DB.prepare(`
     SELECT * FROM mobile_submissions
@@ -344,15 +392,29 @@ export async function claimSubmission(id: string): Promise<MobileSubmission | nu
   return findSubmission(id);
 }
 
-export async function completeSubmission(id: string): Promise<MobileSubmission | null> {
+export async function completeSubmission(id: string): Promise<{ id: string; status: "imported" } | null> {
   await ensureSchema();
   const { DB } = bindings();
+  const existing = await findStoredSubmission(id);
+  if (!existing) return await hasImportReceipt(id) ? { id, status: "imported" } : null;
   const now = new Date().toISOString();
   await DB.prepare(`
     UPDATE mobile_submissions SET status = 'imported', imported_at = COALESCE(imported_at, ?), updated_at = ?
     WHERE id = ? AND status IN ('pending', 'claimed', 'imported')
   `).bind(now, now, id).run();
-  return findSubmission(id);
+  const imported = await findStoredSubmission(id);
+  if (!imported || !imported.importedAt) return null;
+  await applyRetentionAfterImport({
+    id: imported.id,
+    ownerFingerprint: imported.ownerFingerprint,
+    kind: imported.kind,
+    sha256: imported.sha256,
+    storageKey: imported.storageKey,
+    byteSize: imported.byteSize,
+    capturedAt: imported.capturedAt,
+    importedAt: imported.importedAt,
+  });
+  return { id, status: "imported" };
 }
 
 export async function getSubmissionFile(id: string): Promise<{ submission: MobileSubmission; object: R2ObjectBody } | null> {
@@ -384,6 +446,45 @@ async function findChunkedUploadSession(id: string): Promise<ChunkedUploadSessio
   const row = await bindings().DB.prepare("SELECT * FROM mobile_upload_sessions WHERE id = ?")
     .bind(id).first<Record<string, unknown>>();
   if (!row) return null;
+  return mapChunkedUploadSession(row);
+}
+
+function chunkStorageKey(session: ChunkedUploadSession, partNumber: number): string {
+  return `upload-sessions/${session.ownerFingerprint}/${session.id}/${String(partNumber).padStart(3, "0")}`;
+}
+
+async function deleteChunkObjects(session: ChunkedUploadSession): Promise<void> {
+  const keys = Array.from({ length: session.chunkCount }, (_, partNumber) => chunkStorageKey(session, partNumber));
+  if (keys.length > 0) await bindings().UPLOADS.delete(keys);
+}
+
+async function listReceivedChunkParts(session: ChunkedUploadSession): Promise<number[]> {
+  const results = await Promise.all(
+    Array.from({ length: session.chunkCount }, async (_, partNumber) => {
+      const expectedBytes = Math.min(PDF_CHUNK_BYTES, session.byteSize - partNumber * PDF_CHUNK_BYTES);
+      const object = await bindings().UPLOADS.head(chunkStorageKey(session, partNumber));
+      return object?.size === expectedBytes ? partNumber : null;
+    }),
+  );
+  return results.filter((partNumber): partNumber is number => partNumber !== null);
+}
+
+async function cleanupStaleUploadSessions(owner: string): Promise<void> {
+  const cutoff = new Date(Date.now() - STAGED_UPLOAD_TTL_HOURS * 60 * 60 * 1000).toISOString();
+  const { DB } = bindings();
+  const result = await DB.prepare(`
+    SELECT * FROM mobile_upload_sessions
+    WHERE owner_fingerprint = ? AND created_at < ?
+    ORDER BY created_at ASC LIMIT 10
+  `).bind(owner, cutoff).all<Record<string, unknown>>();
+  for (const row of result.results) {
+    const session = mapChunkedUploadSession(row);
+    await deleteChunkObjects(session);
+    await DB.prepare("DELETE FROM mobile_upload_sessions WHERE id = ?").bind(session.id).run();
+  }
+}
+
+function mapChunkedUploadSession(row: Record<string, unknown>): ChunkedUploadSession {
   return {
     id: String(row.id),
     ownerFingerprint: String(row.owner_fingerprint),
@@ -399,44 +500,6 @@ async function findChunkedUploadSession(id: string): Promise<ChunkedUploadSessio
     capturedAt: String(row.captured_at),
     createdAt: String(row.created_at),
   };
-}
-
-function chunkStorageKey(session: ChunkedUploadSession, partNumber: number): string {
-  return `upload-sessions/${session.ownerFingerprint}/${session.id}/${String(partNumber).padStart(3, "0")}`;
-}
-
-async function deleteChunkObjects(session: ChunkedUploadSession): Promise<void> {
-  const keys = Array.from({ length: session.chunkCount }, (_, partNumber) => chunkStorageKey(session, partNumber));
-  if (keys.length > 0) await bindings().UPLOADS.delete(keys);
-}
-
-async function cleanupStaleUploadSessions(owner: string): Promise<void> {
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { DB } = bindings();
-  const result = await DB.prepare(`
-    SELECT * FROM mobile_upload_sessions
-    WHERE owner_fingerprint = ? AND created_at < ?
-    ORDER BY created_at ASC LIMIT 10
-  `).bind(owner, cutoff).all<Record<string, unknown>>();
-  for (const row of result.results) {
-    const session = {
-      id: String(row.id),
-      ownerFingerprint: String(row.owner_fingerprint),
-      kind: String(row.kind) === "maintenance" ? "maintenance" as const : "receipt" as const,
-      propertyLabel: nullableString(row.property_label),
-      unitLabel: nullableString(row.unit_label),
-      note: nullableString(row.note),
-      originalFileName: String(row.original_file_name),
-      contentType: String(row.content_type),
-      byteSize: Number(row.byte_size),
-      chunkCount: Number(row.chunk_count),
-      sha256: String(row.sha256),
-      capturedAt: String(row.captured_at),
-      createdAt: String(row.created_at),
-    } satisfies ChunkedUploadSession;
-    await deleteChunkObjects(session);
-    await DB.prepare("DELETE FROM mobile_upload_sessions WHERE id = ?").bind(session.id).run();
-  }
 }
 
 async function findSubmission(id: string): Promise<MobileSubmission | null> {

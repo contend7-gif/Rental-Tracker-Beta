@@ -49,6 +49,27 @@ export const mobileUploadSessions = sqliteTable("mobile_upload_sessions", {
   ),
 ]);
 
+export const companionRetentionPreferences = sqliteTable("companion_retention_preferences", {
+  ownerFingerprint: text("owner_fingerprint").primaryKey(),
+  retentionDays: integer("retention_days").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const mobileSubmissionReceipts = sqliteTable("mobile_submission_receipts", {
+  id: text("id").primaryKey(),
+  ownerFingerprint: text("owner_fingerprint").notNull(),
+  kind: text("kind", { enum: ["receipt", "maintenance"] }).notNull(),
+  sha256: text("sha256").notNull(),
+  capturedAt: text("captured_at").notNull(),
+  importedAt: text("imported_at").notNull(),
+  cloudDeletedAt: text("cloud_deleted_at").notNull(),
+}, (table) => [
+  index("mobile_submission_receipts_owner_deleted_idx").on(
+    table.ownerFingerprint,
+    table.cloudDeletedAt,
+  ),
+]);
+
 export const companionPropertyCatalog = sqliteTable("companion_property_catalog", {
   propertyId: text("property_id").primaryKey(),
   label: text("label").notNull(),
