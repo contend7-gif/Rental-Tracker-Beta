@@ -39,14 +39,24 @@ export async function POST(request: Request) {
     return Response.json({ error: "The PDF fingerprint is invalid." }, { status: 400 });
   }
 
+  const requestedKind = payload.kind === "maintenance" ? "maintenance" : "receipt";
+  const propertyLabel = cleanOptionalText(typeof payload.propertyLabel === "string" ? payload.propertyLabel : null, 120);
+  const unitLabel = cleanOptionalText(typeof payload.unitLabel === "string" ? payload.unitLabel : null, 80);
+  const note = cleanOptionalText(typeof payload.note === "string" ? payload.note : null, 500);
+  if (requestedKind === "maintenance" && !propertyLabel) {
+    return Response.json({ error: "Choose or enter the property for this maintenance issue." }, { status: 400 });
+  }
+  if (requestedKind === "maintenance" && !note) {
+    return Response.json({ error: "Add a short description of the maintenance issue." }, { status: 400 });
+  }
   const requestedCaptureTime = cleanOptionalText(typeof payload.capturedAt === "string" ? payload.capturedAt : null, 40);
   const parsedCaptureTime = requestedCaptureTime ? Date.parse(requestedCaptureTime) : Number.NaN;
   const result = await createChunkedUploadSession({
     ownerFingerprint: await ownerFingerprint(user.email),
-    kind: "receipt",
-    propertyLabel: cleanOptionalText(typeof payload.propertyLabel === "string" ? payload.propertyLabel : null, 120),
-    unitLabel: cleanOptionalText(typeof payload.unitLabel === "string" ? payload.unitLabel : null, 80),
-    note: cleanOptionalText(typeof payload.note === "string" ? payload.note : null, 500),
+    kind: requestedKind,
+    propertyLabel,
+    unitLabel,
+    note,
     originalFileName,
     byteSize,
     chunkCount,

@@ -18,6 +18,10 @@ test("builds the Rental Tracker mobile capture shell", async () => {
   assert.match(component, /TARGET_UPLOAD_BYTES = 700 \* 1024/);
   assert.match(component, /PDF_CHUNK_BYTES = 512 \* 1024/);
   assert.match(component, /PDFs up to 15 MB/);
+  assert.match(component, /MAX_CAPTURE_PAGES = 8/);
+  assert.match(component, /Add another page/);
+  assert.match(component, /buildJpegPagesPdf/);
+  assert.match(component, /Photos are combined on this phone into one PDF/);
   assert.match(component, /\/api\/submissions\/chunked/);
   assert.match(component, /\/api\/property-catalog/);
   assert.match(component, /Choose a property/);
@@ -42,6 +46,8 @@ test("large PDFs use private chunk storage and integrity verification", async ()
   assert.match(component, /fetchWithRetries/);
   assert.doesNotMatch(component, /fetch\(`\/api\/submissions\/chunked\/\$\{encodeURIComponent\(uploadId\)\}`, \{ method: "DELETE" \}\)/);
   assert.match(startRoute, /getRequestUser/);
+  assert.match(startRoute, /requestedKind/);
+  assert.match(startRoute, /maintenance issue/);
   assert.match(partRoute, /ownerFingerprint/);
   assert.match(completeRoute, /completeChunkedUpload/);
   assert.match(submissions, /MAX_CHUNKED_PDF_BYTES = 15 \* 1024 \* 1024/);

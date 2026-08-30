@@ -21,6 +21,7 @@ const navIconColors = {
 
 export function AppSidebar({
   currentView,
+  mobileCompanionWaitingCount,
   navGroups,
   prefetchWorkspace,
   properties,
@@ -130,6 +131,14 @@ export function AppSidebar({
             <span className={`absolute left-0 top-1.5 hidden h-5 w-0.5 rounded-full bg-teal-700 lg:block ${isActive ? "opacity-100" : "opacity-0"}`} />
             <Icon className={`h-4 w-4 ${isActive ? "text-teal-700" : iconColor}`} />
             <span className={sidebarCollapsed ? "inline lg:hidden" : "inline"}>{label}</span>
+            {key === "documents" && mobileCompanionWaitingCount > 0 ? (
+              <span
+                className={`inline-flex min-w-5 items-center justify-center rounded-full bg-teal-700 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white ${sidebarCollapsed ? "ml-auto lg:absolute lg:-right-1 lg:-top-1" : "ml-auto"}`}
+                aria-label={`${mobileCompanionWaitingCount} mobile inbox ${mobileCompanionWaitingCount === 1 ? "item" : "items"} waiting`}
+              >
+                {mobileCompanionWaitingCount > 99 ? "99+" : mobileCompanionWaitingCount}
+              </span>
+            ) : null}
           </Button>
           );
             })}

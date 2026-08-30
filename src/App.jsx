@@ -97,6 +97,7 @@ import { createDocumentWorkspaceController } from "./app/documentWorkspaceContro
 import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkflow.ts";
 import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.ts";
 import { useDesktopBridgeController } from "./app/useDesktopBridgeController.ts";
+import { useMobileCompanionInboxPolling } from "./app/useMobileCompanionInboxPolling.ts";
 import { useDesktopRuntimeStatus } from "./app/useDesktopRuntimeStatus.ts";
 import { useDocumentWorkspaceUiState } from "./app/useDocumentWorkspaceUiState.ts";
 import { useDocumentReviewModel } from "./app/useDocumentReviewModel.js";
@@ -275,6 +276,10 @@ export default function App() {
     desktopUpdaterAvailable,
     runDesktopDiagnostics,
   } = useDesktopBridgeController({ setNotice });
+  const mobileCompanionWaitingCount = useMobileCompanionInboxPolling({
+    enabled: appSettings.mobileCompanionEnabled === true,
+    desktopCompanionApi,
+  });
 
   const {
     documentAiBusyById,
@@ -2674,6 +2679,7 @@ export default function App() {
       <div className={`mx-auto grid max-w-[1720px] grid-cols-[minmax(0,1fr)] gap-4 lg:items-start ${sidebarCollapsed ? "lg:grid-cols-[72px_1fr]" : "lg:grid-cols-[200px_1fr]"}`}>
         <AppSidebar
           currentView={currentView}
+          mobileCompanionWaitingCount={mobileCompanionWaitingCount}
           navGroups={navGroups}
           prefetchWorkspace={prefetchWorkspace}
           properties={activeProperties}

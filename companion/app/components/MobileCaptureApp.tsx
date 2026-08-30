@@ -2,6 +2,7 @@
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { MobileMileageEntry } from "@/lib/mileage";
+import { buildJpegPagesPdf, type PreparedPdfPage } from "@/lib/photo-pdf";
 import type { PropertyCatalogItem } from "@/lib/property-catalog";
 import type { MobileSubmission } from "@/lib/submissions";
 import type { RetentionOverview } from "@/lib/retention";
@@ -18,6 +19,8 @@ const MAX_SELECTED_FILE_BYTES = 15 * 1024 * 1024;
 const TARGET_UPLOAD_BYTES = 700 * 1024;
 const PDF_CHUNK_BYTES = 512 * 1024;
 const MAX_IMAGE_DIMENSION = 2400;
+const MAX_CAPTURE_PAGES = 8;
+const MAX_MULTI_PHOTO_SOURCE_BYTES = 60 * 1024 * 1024;
 const MANUAL_CHOICE = "__manual__";
 
 export function MobileCaptureApp({ displayName, signOutPath }: Props) {
@@ -25,7 +28,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [mileageEntries, setMileageEntries] = useState<MobileMileageEntry[]>([]);
   const [propertyCatalog, setPropertyCatalog] = useState<PropertyCatalogItem[]>([]);
   const [captureKind, setCaptureKind] = useState<CaptureKind>("receipt");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState("");
   const [selectedUnitId, setSelectedUnitId] = useState("");
   const [propertyLabel, setPropertyLabel] = useState("");
@@ -47,6 +50,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const preparedBundleRef = useRef<{ signature: string; file: File } | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -89,11 +93,40 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   }, [loadData]);
 
   function chooseFile(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
-    setFile(selected);
+    const selected = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (selected.length === 0) return;
+    const nextFiles = [...files, ...selected];
+    const validationError = validateCaptureFiles(nextFiles);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setFiles(nextFiles);
+    preparedBundleRef.current = null;
     setUploadNeedsAttention(false);
     setMessage(null);
     setError(null);
+  }
+
+  function removeSelectedFile(index: number) {
+    setFiles((current) => current.filter((_, currentIndex) => currentIndex !== index));
+    preparedBundleRef.current = null;
+    setUploadNeedsAttention(false);
+    setUploadProgress(null);
+  }
+
+  function moveSelectedFile(index: number, direction: -1 | 1) {
+    setFiles((current) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+      return next;
+    });
+    preparedBundleRef.current = null;
+    setUploadNeedsAttention(false);
+    setUploadProgress(null);
   }
 
   function chooseProperty(id: string) {
@@ -123,7 +156,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       await submitMileage();
       return;
     }
-    if (!file) {
+    if (files.length === 0) {
       setError(captureKind === "maintenance" ? "Take a photo of the issue first." : "Take a receipt photo or choose a PDF first.");
       return;
     }
@@ -138,22 +171,24 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
     setSaving(true);
     setError(null);
     setMessage(null);
-    const chunkedPdf = isChunkedPdf(file);
+    let chunkedPdf = false;
     setUploadNeedsAttention(false);
 
     try {
+      const selectedFile = await prepareSelectedCapture(files, captureKind, preparedBundleRef, setUploadProgress);
+      chunkedPdf = isChunkedPdf(selectedFile);
       const submission = chunkedPdf
-        ? await uploadChunkedPdf(file)
-        : await uploadStandardCapture(file);
+        ? await uploadChunkedPdf(selectedFile)
+        : await uploadStandardCapture(selectedFile);
       setSubmissions((current) => [submission, ...current]);
-      setFile(null);
+      setFiles([]);
+      preparedBundleRef.current = null;
       setSelectedPropertyId("");
       setSelectedUnitId("");
       setPropertyLabel("");
       setUnitLabel("");
       setNote("");
       setUploadNeedsAttention(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
       setMessage(captureKind === "maintenance"
         ? "Maintenance report saved. Review it on the desktop to create or link a work order."
         : "Saved to your Mobile Inbox. It is ready on the desktop app.");
@@ -182,7 +217,6 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   }
 
   async function uploadChunkedPdf(selectedFile: File): Promise<MobileSubmission> {
-    if (captureKind !== "receipt") throw new Error("Large PDF upload is available for receipts and bills.");
     if (selectedFile.size > MAX_SELECTED_FILE_BYTES) throw new Error("Choose a PDF no larger than 15 MB.");
     setUploadProgress("Preparing PDF…");
     const sha256 = await sha256Hex(selectedFile);
@@ -192,6 +226,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         originalFileName: selectedFile.name,
+        kind: captureKind,
         byteSize: selectedFile.size,
         chunkCount,
         sha256,
@@ -390,6 +425,11 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
   }
 
   const pendingCount = submissions.filter((item) => item.status !== "imported").length + mileageEntries.filter((item) => item.status !== "imported").length;
+  const selectedBytes = files.reduce((total, selectedFile) => total + selectedFile.size, 0);
+  const hasSelectedPdf = files.length === 1 && isPdfFile(files[0]);
+  const showsResumableUpload = files.length > 1 || hasSelectedPdf && isChunkedPdf(files[0]);
+  const canAddPage = !hasSelectedPdf && files.length < MAX_CAPTURE_PAGES;
+  const canResumePreparedUpload = uploadNeedsAttention && showsResumableUpload;
   const selectedProperty = propertyCatalog.find((property) => property.id === selectedPropertyId) ?? null;
   const usePropertyChoices = propertyCatalog.length > 0;
   const useUnitChoices = Boolean(selectedProperty?.units.length);
@@ -460,18 +500,40 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
             </button>
           </div>
 
-          {captureKind !== "mileage" ? <label className={`file-drop ${file ? "has-file" : ""}`}>
+          {captureKind !== "mileage" ? <>
+          <label className={`file-drop ${files.length > 0 ? "has-file" : ""}`}>
             <input
               ref={fileInputRef}
               type="file"
               accept="image/jpeg,image/png,application/pdf"
               capture="environment"
+              multiple
+              disabled={!canAddPage && files.length > 0}
               onChange={chooseFile}
             />
             <span className="camera-glyph" aria-hidden="true">+</span>
-            <strong>{file ? file.name : captureKind === "maintenance" ? "Take issue photo" : "Take photo or choose file"}</strong>
-            <small>{file ? formatBytes(file.size) : captureKind === "maintenance" ? "JPEG or PNG · large photos optimized" : "JPEG or PNG · large photos optimized · PDFs up to 15 MB"}</small>
-          </label> : (
+            <strong>{files.length > 0 && canAddPage ? "Add another page" : files.length > 1 ? `${files.length} photos selected` : files[0]?.name || (captureKind === "maintenance" ? "Take issue photo" : "Take photo or choose file")}</strong>
+            <small>{files.length > 0 ? `${files.length} ${files.length === 1 ? "file" : "pages"} · ${formatBytes(selectedBytes)} selected` : captureKind === "maintenance" ? "Add up to 8 JPEG or PNG photos" : "Add up to 8 photos as one PDF · single PDFs up to 15 MB"}</small>
+          </label>
+          {files.length > 0 ? (
+            <div className="selected-pages" aria-label="Selected document pages">
+              {files.map((selectedFile, index) => (
+                <div className="selected-page" key={`${selectedFile.name}-${selectedFile.lastModified}-${index}`}>
+                  <span className="selected-page-number">{isPdfFile(selectedFile) ? "PDF" : index + 1}</span>
+                  <span className="selected-page-copy">
+                    <strong>{selectedFile.name}</strong>
+                    <small>{formatBytes(selectedFile.size)}{files.length > 1 ? ` · Page ${index + 1}` : ""}</small>
+                  </span>
+                  {files.length > 1 ? <span className="page-order-actions">
+                    <button type="button" onClick={() => moveSelectedFile(index, -1)} disabled={index === 0} aria-label={`Move ${selectedFile.name} earlier`}>↑</button>
+                    <button type="button" onClick={() => moveSelectedFile(index, 1)} disabled={index === files.length - 1} aria-label={`Move ${selectedFile.name} later`}>↓</button>
+                  </span> : null}
+                  <button className="remove-page" type="button" onClick={() => removeSelectedFile(index)}>Remove</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          </> : (
             <div className="mileage-fields">
               <div className="form-grid">
                 <label>
@@ -500,10 +562,10 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
             </div>
           )}
 
-          {file && isChunkedPdf(file) ? (
+          {showsResumableUpload ? (
             <div className={`upload-state ${uploadNeedsAttention ? "needs-attention" : saving ? "uploading" : "waiting"}`} role="status">
               <strong>{uploadNeedsAttention ? "Needs attention" : saving ? "Uploading" : "Waiting to upload"}</strong>
-              <span>{uploadNeedsAttention ? "Tap Resume PDF upload. Saved pieces will not be sent again." : saving ? uploadProgress || "Preparing secure upload…" : "Large PDFs upload in resumable private pieces."}</span>
+              <span>{uploadNeedsAttention ? "Tap Resume document upload. Saved pieces will not be sent again." : saving ? uploadProgress || "Preparing secure upload…" : files.length > 1 ? "Photos are combined on this phone into one PDF. Larger bundles resume automatically." : "Large PDFs upload in resumable private pieces."}</span>
             </div>
           ) : null}
 
@@ -583,7 +645,7 @@ export function MobileCaptureApp({ displayName, signOutPath }: Props) {
           {message ? <p className="alert success" role="status">{message}</p> : null}
 
           <button className="primary-button" type="submit" disabled={saving}>
-            {saving ? uploadProgress || "Saving securely…" : uploadNeedsAttention && file && isChunkedPdf(file) ? "Resume PDF upload" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
+            {saving ? uploadProgress || "Saving securely…" : canResumePreparedUpload ? "Resume document upload" : captureKind === "maintenance" ? "Send maintenance report" : captureKind === "mileage" ? "Send mileage to desktop" : "Send to Mobile Inbox"}
           </button>
         </form>
       </section>
@@ -715,6 +777,94 @@ async function fetchWithRetries(
     await new Promise((resolve) => window.setTimeout(resolve, 450 * attempt));
   }
   throw lastError instanceof Error ? lastError : new Error("The connection was interrupted.");
+}
+
+function validateCaptureFiles(files: File[]): string | null {
+  if (files.length > MAX_CAPTURE_PAGES) return `Choose no more than ${MAX_CAPTURE_PAGES} photos for one document.`;
+  const pdfCount = files.filter(isPdfFile).length;
+  if (pdfCount > 0 && files.length > 1) return "Send a PDF by itself, or choose photos to combine into a new PDF.";
+  let totalBytes = 0;
+  for (const selectedFile of files) {
+    if (!isPdfFile(selectedFile) && selectedFile.type !== "image/jpeg" && selectedFile.type !== "image/png") {
+      return "Use JPEG or PNG photos, or one PDF file.";
+    }
+    if (selectedFile.size <= 0) return `${selectedFile.name || "A selected file"} is empty.`;
+    if (selectedFile.size > MAX_SELECTED_FILE_BYTES) return `${selectedFile.name} is larger than 15 MB.`;
+    totalBytes += selectedFile.size;
+  }
+  if (files.length > 1 && totalBytes > MAX_MULTI_PHOTO_SOURCE_BYTES) {
+    return "These photos use more than 60 MB before preparation. Choose fewer pages or smaller photos.";
+  }
+  return null;
+}
+
+async function prepareSelectedCapture(
+  files: File[],
+  captureKind: Exclude<CaptureKind, "mileage">,
+  preparedBundleRef: { current: { signature: string; file: File } | null },
+  setProgress: (message: string | null) => void,
+): Promise<File> {
+  const validationError = validateCaptureFiles(files);
+  if (validationError) throw new Error(validationError);
+  if (files.length === 1) return files[0];
+
+  const signature = `${captureKind}|${files.map((selectedFile) => `${selectedFile.name}:${selectedFile.size}:${selectedFile.lastModified}`).join("|")}`;
+  if (preparedBundleRef.current?.signature === signature) return preparedBundleRef.current.file;
+
+  const pages: PreparedPdfPage[] = [];
+  for (let index = 0; index < files.length; index += 1) {
+    setProgress(`Preparing page ${index + 1} of ${files.length}…`);
+    pages.push(await preparePdfPage(files[index]));
+  }
+  const pdfBytes = buildJpegPagesPdf(pages);
+  const bundle = new File(
+    [pdfBytes],
+    `${captureKind === "maintenance" ? "maintenance" : "receipt"}-pages-${localIsoDate()}.pdf`,
+    { type: "application/pdf", lastModified: Date.now() },
+  );
+  if (bundle.size > MAX_SELECTED_FILE_BYTES) {
+    throw new Error("The combined PDF is larger than 15 MB. Remove a page or send it from Documents on the desktop.");
+  }
+  preparedBundleRef.current = { signature, file: bundle };
+  return bundle;
+}
+
+async function preparePdfPage(file: File): Promise<PreparedPdfPage> {
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error(`${file.name} could not be opened. Choose it from your gallery or use a screenshot instead.`);
+  }
+  try {
+    let width = bitmap.width;
+    let height = bitmap.height;
+    const initialScale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
+    width = Math.max(1, Math.round(width * initialScale));
+    height = Math.max(1, Math.round(height * initialScale));
+
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("A document page could not be prepared.");
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(bitmap, 0, 0, width, height);
+      const quality = Math.max(0.54, 0.84 - attempt * 0.05);
+      const blob = await canvasToBlob(canvas, quality);
+      if (blob.size <= TARGET_UPLOAD_BYTES || Math.max(width, height) <= 900) {
+        return { bytes: new Uint8Array(await blob.arrayBuffer()), width, height };
+      }
+      const reduction = Math.min(0.88, Math.sqrt(TARGET_UPLOAD_BYTES / blob.size) * 0.94);
+      width = Math.max(1, Math.round(width * reduction));
+      height = Math.max(1, Math.round(height * reduction));
+    }
+  } finally {
+    bitmap.close();
+  }
+  throw new Error(`${file.name} could not be prepared. Try a screenshot or remove that page.`);
 }
 
 async function prepareUploadFile(file: File): Promise<File> {

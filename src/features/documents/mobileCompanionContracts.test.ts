@@ -55,3 +55,17 @@ test("mobile mileage opens the existing desktop transaction review workflow", ()
   assert.match(controller, /mobileCompanionMileageId/);
   assert.match(controller, /completeMileage/);
 });
+
+test("desktop Mobile Inbox refreshes automatically and shows a navigation count", () => {
+  const inbox = readFileSync(new URL("./MobileInboxPanel.jsx", import.meta.url), "utf8");
+  const app = readFileSync(new URL("../../App.jsx", import.meta.url), "utf8");
+  const sidebar = readFileSync(new URL("../../app/AppSidebar.jsx", import.meta.url), "utf8");
+  const polling = readFileSync(new URL("../../app/useMobileCompanionInboxPolling.ts", import.meta.url), "utf8");
+
+  assert.match(inbox, /window\.setInterval/);
+  assert.match(inbox, /Updates automatically/);
+  assert.match(app, /useMobileCompanionInboxPolling/);
+  assert.match(sidebar, /mobileCompanionWaitingCount/);
+  assert.match(sidebar, /key === "documents"/);
+  assert.match(polling, /document\.visibilityState === "visible"/);
+});

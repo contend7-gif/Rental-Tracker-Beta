@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Cloud, Loader2, MapPinned, RefreshCw, Settings2, Smartphone, Trash2, Wrench } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -11,11 +11,15 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
   const [importingId, setImportingId] = useState("");
   const [removingId, setRemovingId] = useState("");
   const [message, setMessage] = useState("");
+  const refreshInFlightRef = useRef(false);
 
-  const refresh = useCallback(async () => {
-    if (!desktopCompanionApi?.getStatus) return;
-    setBusy(true);
-    setMessage("");
+  const refresh = useCallback(async ({ background = false } = {}) => {
+    if (!desktopCompanionApi?.getStatus || refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    if (!background) {
+      setBusy(true);
+      setMessage("");
+    }
     try {
       const nextStatus = await desktopCompanionApi.getStatus();
       setStatus(nextStatus);
@@ -25,7 +29,7 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
         return;
       }
       let catalogWarning = "";
-      if (desktopCompanionApi.syncPropertyCatalog && propertyCatalog) {
+      if (!background && desktopCompanionApi.syncPropertyCatalog && propertyCatalog) {
         const syncResult = await desktopCompanionApi.syncPropertyCatalog(propertyCatalog);
         if (syncResult?.ok === false) {
           catalogWarning = syncResult.message || syncResult.error || "Property choices could not sync.";
@@ -39,16 +43,30 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
       if (mileageResult?.ok === false) throw new Error(mileageResult.message || mileageResult.error || "Could not refresh mobile mileage.");
       setSubmissions(result?.submissions || []);
       setMileageEntries(mileageResult?.mileageEntries || []);
-      if (catalogWarning) setMessage(`Inbox refreshed, but ${catalogWarning}`);
+      if (!background && catalogWarning) setMessage(`Inbox refreshed, but ${catalogWarning}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not refresh Mobile Inbox.");
+      if (!background) setMessage(error instanceof Error ? error.message : "Could not refresh Mobile Inbox.");
     } finally {
-      setBusy(false);
+      refreshInFlightRef.current = false;
+      if (!background) setBusy(false);
     }
   }, [desktopCompanionApi, propertyCatalog]);
 
   useEffect(() => {
     void refresh();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh({ background: true });
+    }, 30_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh({ background: true });
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [refresh]);
 
   async function importSubmission(submission) {
@@ -129,7 +147,7 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
             {status?.configured ? <Badge className="bg-teal-700">Connected</Badge> : <Badge variant="secondary">Setup needed</Badge>}
             {submissions.length + mileageEntries.length > 0 ? <Badge variant="secondary">{submissions.length + mileageEntries.length} waiting</Badge> : null}
           </div>
-          <p className="mt-0.5 text-xs text-slate-600">Receipt and maintenance captures wait here until you choose one to review.</p>
+          <p className="mt-0.5 text-xs text-slate-600">Receipt and maintenance captures wait here until you choose one to review. Updates automatically.</p>
         </div>
         <Button size="sm" variant="secondary" onClick={() => void refresh()} disabled={busy}>
           {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}

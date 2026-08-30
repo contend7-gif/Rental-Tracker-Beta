@@ -12,7 +12,8 @@ and file bytes in R2, and exposes a separately authenticated desktop inbox. The
 desktop application remains the system of record: a mobile capture is not a
 Rental Tracker document until it has been reviewed and imported there.
 
-Large PDFs upload in resumable private pieces. Imported file bytes are removed
+Up to eight receipt or maintenance photos can be ordered and combined locally
+on the phone into one PDF before upload. Large PDFs upload in resumable private pieces. Imported file bytes are removed
 immediately by default, or after an optional 7- or 30-day recovery window. The
 companion keeps only a minimal audit receipt after cloud file cleanup and never
 creates a permanent offline document cache on the phone.

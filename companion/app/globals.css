@@ -78,6 +78,18 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .camera-glyph { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 9px; background: var(--teal); color: white; font-size: 27px; font-weight: 300; line-height: 1; }
 .file-drop strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
 .file-drop small { margin-top: 5px; color: var(--muted); }
+.selected-pages { margin-top: 10px; border: 1px solid var(--line); border-radius: 13px; overflow: hidden; background: #fbfdfc; }
+.selected-page { min-width: 0; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-top: 1px solid #e8eeec; }
+.selected-page:first-child { border-top: 0; }
+.selected-page-number { flex: 0 0 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--mint); color: var(--teal-dark); font-size: 10px; font-weight: 850; }
+.selected-page-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.selected-page-copy strong, .selected-page-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selected-page-copy strong { font-size: 11px; }
+.selected-page-copy small { color: var(--muted); font-size: 9px; }
+.page-order-actions { display: flex; gap: 3px; }
+.page-order-actions button { width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: white; color: var(--teal-dark); cursor: pointer; }
+.page-order-actions button:disabled { opacity: .3; cursor: default; }
+.remove-page { border: 0; background: transparent; color: #9d453a; font-size: 10px; font-weight: 750; padding: 7px 2px; cursor: pointer; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 15px; }
 form label:not(.file-drop) { display: flex; flex-direction: column; gap: 7px; }
@@ -151,6 +163,8 @@ footer { padding: 22px 0 0; color: #82938f; text-align: center; font-size: 10px;
   .capture-card, .queue-section, .storage-section, .coming-section { padding: 16px; border-radius: 18px; }
   .form-grid { grid-template-columns: 1fr; gap: 11px; }
   .capture-kind { grid-template-columns: 1fr 1fr; }
+  .selected-page { gap: 7px; padding: 9px 8px; }
+  .page-order-actions button { width: 26px; height: 26px; }
   .retention-controls { grid-template-columns: 1fr; }
   .storage-grid { grid-template-columns: 1fr; }
   .storage-grid > div { flex-direction: row; align-items: baseline; justify-content: space-between; }

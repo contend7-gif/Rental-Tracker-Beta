@@ -134,7 +134,6 @@ export async function createChunkedUploadSession(input: {
   capturedAt: string;
 }): Promise<{ uploadId: string; chunkBytes: number; receivedParts: number[]; resumed: boolean }> {
   await ensureSchema();
-  if (input.kind !== "receipt") throw new Error("Large PDF upload is available for receipts and bills.");
   if (!/\.pdf$/i.test(input.originalFileName)) throw new Error("Choose a PDF file.");
   if (!Number.isInteger(input.byteSize) || input.byteSize <= MAX_UPLOAD_BYTES || input.byteSize > MAX_CHUNKED_PDF_BYTES) {
     throw new Error("Choose a PDF between 769 KB and 15 MB.");
@@ -147,10 +146,11 @@ export async function createChunkedUploadSession(input: {
   const normalizedSha256 = input.sha256.toLowerCase();
   const existingRow = await bindings().DB.prepare(`
     SELECT * FROM mobile_upload_sessions
-    WHERE owner_fingerprint = ? AND sha256 = ? AND byte_size = ? AND chunk_count = ?
+    WHERE owner_fingerprint = ? AND kind = ? AND sha256 = ? AND byte_size = ? AND chunk_count = ?
     ORDER BY created_at DESC LIMIT 1
   `).bind(
     input.ownerFingerprint,
+    input.kind,
     normalizedSha256,
     input.byteSize,
     input.chunkCount,
@@ -248,7 +248,7 @@ export async function completeChunkedUpload(id: string, owner: string): Promise<
   if (sha256 !== session.sha256) throw new Error("The completed PDF did not pass its integrity check. Try sending it again.");
 
   const safeName = session.originalFileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120) || "capture.pdf";
-  const storageKey = `receipts/${session.ownerFingerprint}/${session.id}/${safeName}`;
+  const storageKey = `${session.kind === "maintenance" ? "maintenance" : "receipts"}/${session.ownerFingerprint}/${session.id}/${safeName}`;
   await UPLOADS.put(storageKey, merged, {
     httpMetadata: { contentType: "application/pdf" },
     customMetadata: { submissionId: session.id, sha256 },
