@@ -21,6 +21,15 @@ test("Operations Calendar targets exact maintenance, document, and recurring rec
   }
 });
 
+test("Operations Calendar smart checks review the ledger and can be marked intentional", () => {
+  assert.match(appSource, /setSearch,/);
+  assert.match(calendarSource, /buildRecurringExpenseChecks/);
+  assert.match(calendarSource, /setSearch\(item\.searchText \|\| ""\)/);
+  assert.match(calendarSource, /recurringExpenseCheckAcknowledgements/);
+  assert.match(calendarSource, /Intentional for now/);
+  assert.match(calendarSource, /No transaction was created/);
+});
+
 test("destination workspaces consume their exact focus request", () => {
   assert.match(maintenanceSource, /workspaceFocus\.recordId/);
   assert.match(maintenanceSource, /scrollIntoView/);
@@ -28,4 +37,3 @@ test("destination workspaces consume their exact focus request", () => {
   assert.match(ledgerSource, /setWorkspaceMode\(\"recurring\"\)/);
   assert.match(ledgerSource, /focusedRecurringTemplateId === template\.id/);
 });
-

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   AlertTriangle,
+  BellRing,
   CalendarClock,
   CalendarDays,
   FileClock,
@@ -18,6 +19,7 @@ import {
   buildOperationsCalendarItems,
   selectOperationsCalendarItems,
 } from "../../domain/operationsCalendar.ts";
+import { buildRecurringExpenseChecks } from "../../domain/recurringExpenseChecks.ts";
 import { daysUntil, formatDaysLeft } from "../../app/dateHelpers.js";
 
 const SOURCE_META = {
@@ -26,6 +28,7 @@ const SOURCE_META = {
   maintenance: { label: "Maintenance", icon: Hammer, tone: "border-orange-200 bg-orange-50 text-orange-700" },
   document: { label: "Document", icon: FileClock, tone: "border-blue-200 bg-blue-50 text-blue-700" },
   recurring: { label: "Recurring", icon: Repeat2, tone: "border-cyan-200 bg-cyan-50 text-cyan-700" },
+  smart_check: { label: "Smart check", icon: BellRing, tone: "border-amber-200 bg-amber-50 text-amber-700" },
   planning: { label: "Planning", icon: ListTodo, tone: "border-purple-200 bg-purple-50 text-purple-700" },
   loan: { label: "Loan", icon: Landmark, tone: "border-sky-200 bg-sky-50 text-sky-700" },
 };
@@ -48,11 +51,12 @@ function actionLabelForSource(source) {
   if (source === "maintenance") return "Open maintenance";
   if (source === "document") return "Open documents";
   if (source === "recurring") return "Open transactions";
+  if (source === "smart_check") return "Review transactions";
   if (source === "planning") return "Open action plan";
   return "Open loans";
 }
 
-function OperationsRow({ item, propertyNameById, todayIso, onOpen }) {
+function OperationsRow({ item, propertyNameById, todayIso, onOpen, onAcknowledge }) {
   const meta = SOURCE_META[item.source] || SOURCE_META.planning;
   const Icon = meta.icon;
   const propertyLabel = propertyNameById[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide");
@@ -84,15 +88,20 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen }) {
             </div>
           </div>
         </div>
-        <Button size="sm" variant="secondary" className="shrink-0" onClick={() => onOpen(item)}>
-          {actionLabelForSource(item.source)}
-        </Button>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {item.source === "smart_check" ? (
+            <Button size="sm" variant="outline" onClick={() => onAcknowledge(item)}>Intentional for now</Button>
+          ) : null}
+          <Button size="sm" variant="secondary" onClick={() => onOpen(item)}>
+            {actionLabelForSource(item.source)}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
-function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen }) {
+function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen, onAcknowledge }) {
   const meta = BUCKET_META[bucketKey];
   const Icon = meta.icon;
   return (
@@ -110,7 +119,7 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
         </div>
         <div className="mt-3 space-y-2">
           {items.length > 0 ? items.map((item) => (
-            <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} />
+            <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} onAcknowledge={onAcknowledge} />
           )) : (
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Nothing due in this window.</div>
           )}
@@ -121,6 +130,7 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
 }
 
 export function OperationsCalendarWorkspace({
+  appSettings,
   documents,
   leaseAutomationReminders,
   leases,
@@ -134,15 +144,24 @@ export function OperationsCalendarWorkspace({
   setNotice,
   setPlanningSubtab,
   setPropertyFilter,
+  setSearch,
+  setSetting,
   setUnitFilter,
   setView,
   todayIso,
+  transactions,
   unitFilter,
   workOrders,
   openLease,
 }) {
   const [horizonDays, setHorizonDays] = useState(90);
   const [sourceFilter, setSourceFilter] = useState("all");
+  const recurringExpenseChecks = useMemo(() => buildRecurringExpenseChecks({
+    acknowledgements: appSettings.recurringExpenseCheckAcknowledgements,
+    recurringTemplates,
+    todayIso,
+    transactions,
+  }), [appSettings.recurringExpenseCheckAcknowledgements, recurringTemplates, todayIso, transactions]);
   const allItems = useMemo(() => buildOperationsCalendarItems({
     documents,
     leaseAutomationReminders,
@@ -150,8 +169,9 @@ export function OperationsCalendarWorkspace({
     loans,
     planningActionItems,
     recurringTemplates,
+    recurringExpenseChecks,
     workOrders,
-  }), [documents, leaseAutomationReminders, leases, loans, planningActionItems, recurringTemplates, workOrders]);
+  }), [documents, leaseAutomationReminders, leases, loans, planningActionItems, recurringExpenseChecks, recurringTemplates, workOrders]);
   const horizonItems = useMemo(() => selectOperationsCalendarItems(allItems, {
     horizonDays,
     propertyFilter,
@@ -200,6 +220,12 @@ export function OperationsCalendarWorkspace({
       setNotice(`Focused recurring rule ${item.title}.`);
       return;
     }
+    if (item.source === "smart_check") {
+      setSearch(item.searchText || "");
+      setView("ledger");
+      setNotice(`Reviewing transactions for ${item.searchText || item.title}. No transaction was created.`);
+      return;
+    }
     if (item.source === "planning") {
       setPlanningSubtab("actions");
       setView("planning");
@@ -209,6 +235,16 @@ export function OperationsCalendarWorkspace({
     setView("loans");
     setNotice(`Showing loans for ${item.title}.`);
   };
+
+  const acknowledgeSmartCheck = (item) => {
+    setSetting("recurringExpenseCheckAcknowledgements", {
+      ...appSettings.recurringExpenseCheckAcknowledgements,
+      [item.sourceRecordId]: todayIso,
+    });
+    setNotice(`${item.searchText || item.title} marked intentional through today. The check will resume for the next expected cycle.`);
+  };
+
+  const acknowledgedCheckCount = Object.keys(appSettings.recurringExpenseCheckAcknowledgements || {}).length;
 
   return (
     <div className="space-y-4">
@@ -221,7 +257,7 @@ export function OperationsCalendarWorkspace({
                 One schedule, authoritative records
               </div>
               <p className="mt-1 text-xs leading-5 text-slate-600">
-                Dates stay attached to their lease, work order, document, recurring rule, loan, or Planning action. Open an item to update its source record.
+                Dates stay attached to their source records. Smart checks notice stable monthly expenses that appear to be missing, but never create transactions or assume the gap was a mistake.
               </p>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -249,6 +285,18 @@ export function OperationsCalendarWorkspace({
               ))}
             </div>
             <div className="flex items-center gap-1.5">
+              {acknowledgedCheckCount > 0 ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setSetting("recurringExpenseCheckAcknowledgements", {});
+                    setNotice("Intentional smart-check choices reset.");
+                  }}
+                >
+                  Reset intentional checks ({acknowledgedCheckCount})
+                </Button>
+              ) : null}
               <span className="mr-1 text-xs font-medium text-slate-500">Horizon</span>
               {[30, 60, 90].map((days) => (
                 <Button key={days} size="sm" variant={horizonDays === days ? "default" : "outline"} onClick={() => setHorizonDays(days)}>{days} days</Button>
@@ -271,7 +319,7 @@ export function OperationsCalendarWorkspace({
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {Object.keys(BUCKET_META).map((bucketKey) => (
-            <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} />
+            <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onAcknowledge={acknowledgeSmartCheck} />
           ))}
         </div>
       )}

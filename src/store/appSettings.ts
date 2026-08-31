@@ -101,6 +101,7 @@ export type AppSettings = {
   setupChecklistShowCompleted: boolean;
   setupChecklistShowDismissed: boolean;
   setupChecklistOverrides: Record<string, { status?: "not_applicable" | "dismissed"; note?: string; updatedAt?: string }>;
+  recurringExpenseCheckAcknowledgements: Record<string, string>;
   realDataModeEnabled: boolean;
 };
 
@@ -152,6 +153,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   setupChecklistShowCompleted: false,
   setupChecklistShowDismissed: false,
   setupChecklistOverrides: {},
+  recurringExpenseCheckAcknowledgements: {},
   realDataModeEnabled: false,
 };
 
@@ -203,6 +205,17 @@ function sanitizeSetupChecklistOverrides(value: unknown): AppSettings["setupChec
     };
   }
   return overrides;
+}
+
+function sanitizeRecurringExpenseCheckAcknowledgements(value: unknown): AppSettings["recurringExpenseCheckAcknowledgements"] {
+  if (!isRecord(value)) return {};
+  const acknowledgements: AppSettings["recurringExpenseCheckAcknowledgements"] = {};
+  for (const [key, rawDate] of Object.entries(value).slice(0, 250)) {
+    const date = sanitizeShortText(rawDate, 10);
+    if (!/^repeat-[0-9a-f]{8}$/.test(key) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    acknowledgements[key] = date;
+  }
+  return acknowledgements;
 }
 
 export function sanitizeAppSettings(raw: unknown): AppSettings {
@@ -268,6 +281,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     setupChecklistShowCompleted: raw.setupChecklistShowCompleted === true,
     setupChecklistShowDismissed: raw.setupChecklistShowDismissed === true,
     setupChecklistOverrides: sanitizeSetupChecklistOverrides(raw.setupChecklistOverrides),
+    recurringExpenseCheckAcknowledgements: sanitizeRecurringExpenseCheckAcknowledgements(raw.recurringExpenseCheckAcknowledgements),
     realDataModeEnabled: raw.realDataModeEnabled === true,
   };
 }

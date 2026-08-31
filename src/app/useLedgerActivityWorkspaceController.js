@@ -5,6 +5,7 @@ import {
   getTransactionReviewIssues,
   getTransactionTaxReadiness,
 } from "../features/transactions/transactionReview.js";
+import { matchesLedgerTransactionSearch } from "./ledgerSearch.ts";
 
 export function useLedgerActivityWorkspaceController({
   activityActionFilter,
@@ -32,7 +33,7 @@ export function useLedgerActivityWorkspaceController({
           t.date.startsWith(yearFilter) &&
           (propertyFilter === "all" || t.propertyId === propertyFilter) &&
           (unitFilter === "all" || t.unit === unitFilter) &&
-          `${t.description} ${t.category}`.toLowerCase().includes(search.toLowerCase()),
+          matchesLedgerTransactionSearch(t, search),
       ),
     [activeTx, yearFilter, propertyFilter, unitFilter, search],
   );

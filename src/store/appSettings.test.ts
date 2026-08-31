@@ -67,6 +67,22 @@ test("restore defaults returns default settings and clears mutations", () => {
   assert.deepEqual(restored, DEFAULT_APP_SETTINGS);
 });
 
+test("recurring expense check acknowledgements keep only opaque keys and dates", () => {
+  const updated = sanitizeAppSettings({
+    ...DEFAULT_APP_SETTINGS,
+    recurringExpenseCheckAcknowledgements: {
+      "repeat-1234abcd": "2026-08-30",
+      "Utility Provider": "2026-08-30",
+      "repeat-deadbeef": "not-a-date",
+    },
+  });
+
+  assert.deepEqual(updated.recurringExpenseCheckAcknowledgements, {
+    "repeat-1234abcd": "2026-08-30",
+  });
+  assert.deepEqual(resetAppSettings().recurringExpenseCheckAcknowledgements, {});
+});
+
 test("settings saved feedback is shown and debounced", async () => {
   const events: boolean[] = [];
   const notifier = createSettingsSavedNotifier((isVisible) => events.push(isVisible), 120);

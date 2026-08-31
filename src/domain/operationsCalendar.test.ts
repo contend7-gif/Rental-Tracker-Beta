@@ -20,12 +20,14 @@ test("operations calendar derives dated work without creating duplicate task rec
     workOrders: [{ id: "wo-1", propertyId: "p1", unit: "Unit A", title: "Repair sink", description: "", priority: "High", status: "Open", reportedOn: "2026-08-20", dueDate: "2026-09-02", createdAt: "2026-08-20T00:00:00Z" }],
     documents: [{ id: "doc-1", propertyId: "p1", name: "Insurance.pdf", type: "Insurance", expiresOn: "2026-09-20" }],
     recurringTemplates: [{ id: "rt-1", description: "Mortgage", propertyId: "p1", unit: "Shared", type: "Expense", category: "Mortgage Interest", amount: 1200, frequency: "Monthly", nextDueDate: "2026-09-01", reviewRequired: true, ownerUsePct: 0, active: true }],
+    recurringExpenseChecks: [{ patternKey: "repeat-1234abcd", reviewDate: "2026-09-01", expectedDate: "2026-08-25", lastRecordedDate: "2026-07-25", propertyId: "p1", unit: "Shared", vendor: "Utility Co", category: "Utilities", occurrenceCount: 4 }],
     planningActionItems: [{ id: "pa-1", title: "Review bids", status: "in_progress", priority: "high", dueDate: "2026-09-10", propertyId: "p1" }],
     loans: [{ id: "loan-1", propertyId: "p1", lender: "Bank", loanType: "Primary Mortgage", lienPosition: 1, originatedOn: "2024-01-01", rate: 6, originalBalance: 100000, currentBalance: 99000, scheduledPI: 700, scheduledEscrow: 200, scheduledMortgageInsurance: 0, defaultExtraPrincipal: 0, interestYTD: 0, principalYTD: 0, escrowYTD: 0, nextPayment: "2026-09-01" }],
   });
 
-  assert.deepEqual(items.map((item) => item.source), ["rent", "loan", "recurring", "maintenance", "planning", "document", "lease"]);
+  assert.deepEqual(items.map((item) => item.source), ["rent", "loan", "smart_check", "recurring", "maintenance", "planning", "document", "lease"]);
   assert.equal(items.some((item) => item.sourceRecordId === "lease-open"), false);
+  assert.equal(items.find((item) => item.source === "smart_check")?.searchText, "Utility Co");
 });
 
 test("operations calendar respects scope, source, and horizon filters", () => {
@@ -58,4 +60,3 @@ test("operations calendar buckets overdue, near-term, and later dates", () => {
   assert.deepEqual(buckets.next30.map((entry) => entry.id), ["month"]);
   assert.deepEqual(buckets.later.map((entry) => entry.id), ["later"]);
 });
-

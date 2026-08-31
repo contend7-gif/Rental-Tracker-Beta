@@ -6,6 +6,7 @@ import type {
   WorkOrder,
 } from "../models.ts";
 import type { LeaseAutomationReminder } from "./leaseAutomation.ts";
+import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
 import { leaseIsOpenEnded } from "./leaseTerms.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -16,6 +17,7 @@ export type OperationsCalendarSource =
   | "maintenance"
   | "document"
   | "recurring"
+  | "smart_check"
   | "planning"
   | "loan";
 
@@ -29,6 +31,8 @@ export type OperationsCalendarItem = {
   propertyId: string;
   unit?: string;
   priority?: string;
+  searchText?: string;
+  expectedDate?: string;
 };
 
 export type PlanningCalendarAction = {
@@ -63,8 +67,9 @@ function sourcePriority(source: OperationsCalendarSource) {
   if (source === "lease") return 2;
   if (source === "document") return 3;
   if (source === "loan") return 4;
-  if (source === "recurring") return 5;
-  return 6;
+  if (source === "smart_check") return 5;
+  if (source === "recurring") return 6;
+  return 7;
 }
 
 function sortItems(items: OperationsCalendarItem[]) {
@@ -83,6 +88,7 @@ export function buildOperationsCalendarItems(args: {
   workOrders?: WorkOrder[];
   documents?: DocumentItem[];
   recurringTemplates?: RecurringTemplate[];
+  recurringExpenseChecks?: RecurringExpenseCheck[];
   planningActionItems?: PlanningCalendarAction[];
   loans?: Loan[];
 }): OperationsCalendarItem[] {
@@ -164,6 +170,23 @@ export function buildOperationsCalendarItems(args: {
     });
   });
 
+  (args.recurringExpenseChecks || []).forEach((check) => {
+    if (!check?.patternKey || !validIsoDate(check.reviewDate) || !validIsoDate(check.expectedDate)) return;
+    items.push({
+      id: `smart-check:${check.patternKey}:${check.expectedDate}`,
+      source: "smart_check",
+      sourceRecordId: check.patternKey,
+      date: check.reviewDate,
+      expectedDate: check.expectedDate,
+      title: `Check missing payment: ${check.vendor}`,
+      detail: `${check.vendor} usually appears monthly. Last recorded ${check.lastRecordedDate}; expected around ${check.expectedDate}. Confirm the gap was intentional.`,
+      propertyId: check.propertyId,
+      unit: check.unit,
+      priority: "high",
+      searchText: check.vendor,
+    });
+  });
+
   (args.planningActionItems || []).forEach((action) => {
     if (!action?.id || action.status === "done" || !validIsoDate(action.dueDate)) return;
     items.push({
@@ -232,4 +255,3 @@ export function bucketOperationsCalendarItems(items: OperationsCalendarItem[], t
   });
   return buckets;
 }
-

@@ -2402,6 +2402,7 @@ export default function App() {
     setPropertyOwnerDrafts,
     setPropertyQuickAddOpen,
     setRentAmountTouched,
+    setSearch,
     setSetting,
     setSettingsSectionCollapsed,
     setSetupChecklistOverride,
