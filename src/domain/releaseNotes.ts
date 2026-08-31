@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.6.0",
+    releaseDate: "2026-08-30",
+    title: "Operations calendar and smarter monthly checks",
+    summary: "Adds one operational schedule for the desktop, conservative missing-expense reminders, and safer multi-photo and large-file handling in the optional Mobile Companion.",
+    changes: [
+      "Operations Calendar brings rent reminders, lease endings, maintenance due dates, document renewals, recurring rules, loan payments, and Planning actions into one view with links back to the exact source record.",
+      "Smart Checks notice a convincing monthly pattern for utilities and other stable operating expenses, wait through a grace period, and ask whether a missing entry was intentional without ever creating a transaction automatically.",
+      "Smart Check review opens Transactions filtered to the matching vendor, while Intentional for now suppresses the current gap and a visible reset restores acknowledged checks.",
+      "The optional Mobile Companion can combine up to eight ordered photos into one PDF, resumes large private uploads, refreshes the desktop inbox automatically, and applies explicit imported-file retention with immediate, 7-day, or 30-day cleanup choices.",
+    ],
+  },
+  {
     version: "1.5.0",
     releaseDate: "2026-08-29",
     title: "More field capture and better inbox control",
