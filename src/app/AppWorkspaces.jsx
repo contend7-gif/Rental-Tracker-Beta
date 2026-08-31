@@ -141,6 +141,7 @@ const DOCUMENTS_WORKSPACE_PROP_KEYS = [
   "canAutoCreateWorkOrderFromSuggestion",
   "canDeleteRecords",
   "canReviewDocuments",
+  "clearWorkspaceFocus",
   "confirmAndDeleteDocument",
   "createExpenseTransactionsFromUtilitySections",
   "describeDocumentOwnership",
@@ -212,6 +213,7 @@ const DOCUMENTS_WORKSPACE_PROP_KEYS = [
   "visibleExpenseReviewRecords",
   "visibleSafeSuggestionCount",
   "workOrders",
+  "workspaceFocus",
 ];
 
 const TAX_WORKSPACE_PROP_KEYS = [
@@ -391,6 +393,7 @@ function buildLedgerWorkspaceContract(props, { bankImportMatchRuleOptions }) {
       "ledgerTransactions",
       "properties",
       "propertyNameById",
+      "recurringTemplates",
       "selectedTxn",
       "todayIso",
       "transactionById",
@@ -428,10 +431,12 @@ function buildLedgerWorkspaceContract(props, { bankImportMatchRuleOptions }) {
       "useTransactionDatesAsServicePeriods",
     ]),
     navigation: {
+      clearWorkspaceFocus: props.clearWorkspaceFocus,
       openReviewCenter: props.openReviewCenter,
       openTransaction: props.openTransaction,
       prefetchBankImportReviewDialog: () => prefetchDialog("bankImportReview"),
       prefetchTransactionDialog: () => prefetchDialog("transactionDetails"),
+      workspaceFocus: props.workspaceFocus,
     },
     workspaceUi: {
       BANK_IMPORT_MATCH_RULE_OPTIONS: bankImportMatchRuleOptions,

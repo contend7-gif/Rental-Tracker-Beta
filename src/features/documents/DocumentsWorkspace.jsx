@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useCallback, useMemo, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -98,6 +98,7 @@ export function DocumentsWorkspace({
   canAutoCreateWorkOrderFromSuggestion,
   canDeleteRecords,
   canReviewDocuments,
+  clearWorkspaceFocus,
   confirmAndDeleteDocument,
   createExpenseTransactionsFromUtilitySections,
   currency,
@@ -188,6 +189,7 @@ export function DocumentsWorkspace({
   workOrderSuggestionConfidenceLabel,
   workOrderSuggestionReasonSummary,
   workOrders,
+  workspaceFocus,
   propertyNameById,
 }) {
   const [documentsTab, setDocumentsTab] = useState("inbox");
@@ -203,6 +205,21 @@ export function DocumentsWorkspace({
     const documentWithFile = await loadDocumentForReview?.(document);
     setReviewDocument(documentWithFile || document);
   };
+
+  const documentFocusRequestId = workspaceFocus?.source === "document" ? workspaceFocus.requestId : "";
+  useEffect(() => {
+    if (!documentFocusRequestId) return;
+    const target = filteredDocuments.find((document) => document.id === workspaceFocus.recordId);
+    setDocumentsTab("library");
+    setDocumentSubview("all");
+    setDocumentStatusFilter("all");
+    setDocumentSearch("");
+    if (!target) {
+      clearWorkspaceFocus?.();
+      return;
+    }
+    void showDocumentReview(target).finally(() => clearWorkspaceFocus?.());
+  }, [documentFocusRequestId]);
 
   const getDocumentLinkedSummary = (document) => {
     return buildLinkedRecordSummary(document, {

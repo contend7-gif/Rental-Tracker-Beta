@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -23,6 +23,7 @@ import {
   transactionScheduleLabel,
   transactionTaxStatusLabel,
 } from "./transactionPresentation.js";
+import { workspaceFocusDomId } from "../../app/workspaceFocus.ts";
 
 const LEDGER_PANEL_CLASS = "rounded-xl border border-slate-200 bg-white shadow-none";
 const LEDGER_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
@@ -50,10 +51,11 @@ export function LedgerWorkspace({
   bankImportUnitOptions,
   bankImportUnmatchedRows,
   categories,
+  clearWorkspaceFocus,
   clearBankImportPreview,
   currency,
   documents = [],
-  expectedRecurringTransactions,
+  expectedRecurringTransactions = [],
   isTaxReviewRelevantTransaction,
   ledgerCategories,
   ledgerCategoryFilter,
@@ -73,6 +75,7 @@ export function LedgerWorkspace({
   prefetchTransactionDialog,
   properties,
   propertyNameById,
+  recurringTemplates = [],
   reconcileTransactions,
   search,
   selectedTxn,
@@ -87,6 +90,7 @@ export function LedgerWorkspace({
   startCreateAssetFromTransaction,
   todayIso,
   useTransactionDatesAsServicePeriods,
+  workspaceFocus,
 }) {
   const propertyOptions = activeProperties || properties;
   const [ledgerView, setLedgerView] = useState("all");
@@ -96,6 +100,27 @@ export function LedgerWorkspace({
   const [selectedReviewIds, setSelectedReviewIds] = useState([]);
   const [importPanelOpen, setImportPanelOpen] = useState(false);
   const [matchingRulesOpen, setMatchingRulesOpen] = useState(false);
+  const [focusedRecurringTemplateId, setFocusedRecurringTemplateId] = useState("");
+  const recurringFocusRequestId = workspaceFocus?.source === "recurring" ? workspaceFocus.requestId : "";
+  useEffect(() => {
+    if (!recurringFocusRequestId) return;
+    const target = recurringTemplates.find((template) => template.id === workspaceFocus.recordId);
+    if (!target) {
+      clearWorkspaceFocus?.();
+      return;
+    }
+    setWorkspaceMode("recurring");
+    setLedgerView("recurring");
+    setReviewReasonFilter("all");
+    setSelectedReviewIds([]);
+    setFocusedRecurringTemplateId(target.id);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById(workspaceFocusDomId("recurring", target.id))?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+    clearWorkspaceFocus?.();
+  }, [recurringFocusRequestId]);
   const reviewReasonOptions = useMemo(() => {
     const byKey = new Map();
     transactionReviewInbox.forEach((record) => {
@@ -205,8 +230,13 @@ export function LedgerWorkspace({
     setLedgerView(ledgerViewForTransactionWorkspaceMode(mode));
     setReviewReasonFilter("all");
     setSelectedReviewIds([]);
+    if (mode !== "recurring") setFocusedRecurringTemplateId("");
     if (mode === "imports") setImportPanelOpen(true);
   };
+  const focusedRecurringTemplate = recurringTemplates.find((template) => template.id === focusedRecurringTemplateId) || null;
+  const recurringScheduleRows = focusedRecurringTemplate
+    ? [focusedRecurringTemplate, ...expectedRecurringTransactions.filter((template) => template.id !== focusedRecurringTemplate.id).slice(0, 3)]
+    : expectedRecurringTransactions.slice(0, 4);
   const displayedReviewIds = new Set(displayedTransactions.map((transaction) => transaction.id));
   const selectedDisplayedReviewIds = selectedReviewIds.filter((id) => displayedReviewIds.has(id));
   const selectedDisplayedReviewRecords = selectedDisplayedReviewIds.map((id) => transactionReviewById[id]).filter(Boolean);
@@ -411,18 +441,22 @@ export function LedgerWorkspace({
         </div> : null}
 
         {workspaceMode === "recurring" ? (
-          <div className={`rounded-xl border p-3 ${expectedRecurringTransactions.length > 0 ? "border-amber-200 bg-amber-50/70" : "border-emerald-200 bg-emerald-50/70"}`}>
+          <div className={`rounded-xl border p-3 ${focusedRecurringTemplate ? "border-teal-200 bg-teal-50/50" : expectedRecurringTransactions.length > 0 ? "border-amber-200 bg-amber-50/70" : "border-emerald-200 bg-emerald-50/70"}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">Recurring schedule</div>
-                <div className="mt-1 text-xs text-slate-600">{expectedRecurringTransactions.length > 0 ? "Expected transactions that have not posted yet." : "Every recurring template due in this scope has posted."}</div>
+                <div className="mt-1 text-xs text-slate-600">{focusedRecurringTemplate ? "Focused rule and its next due date." : expectedRecurringTransactions.length > 0 ? "Expected transactions that have not posted yet." : "Every recurring template due in this scope has posted."}</div>
               </div>
               {expectedRecurringTransactions.length > 0 ? <Button size="sm" variant="secondary" onClick={postDueRecurringTransactions}>Post due recurring</Button> : null}
             </div>
-            {expectedRecurringTransactions.length > 0 ? (
+            {recurringScheduleRows.length > 0 ? (
               <div className="mt-2 grid gap-2 lg:grid-cols-2">
-                {expectedRecurringTransactions.slice(0, 4).map((template) => (
-                  <div key={`expected-recurring-${template.id}`} className="rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm">
+                {recurringScheduleRows.map((template) => (
+                  <div
+                    id={workspaceFocusDomId("recurring", template.id)}
+                    key={`expected-recurring-${template.id}`}
+                    className={`rounded-lg border bg-white px-3 py-2 text-sm transition ${focusedRecurringTemplateId === template.id ? "border-teal-400 ring-2 ring-teal-100" : "border-amber-100"}`}
+                  >
                     <div className="font-medium text-slate-900">{template.description}</div>
                     <div className="mt-1 text-xs text-slate-500">{template.nextDueDate} | {propertyNameById[template.propertyId] || template.propertyId} | {formatTransactionUnitLabel(template.unit)} | {template.category}</div>
                   </div>

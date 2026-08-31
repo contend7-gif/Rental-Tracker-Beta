@@ -129,6 +129,7 @@ export function OperationsCalendarWorkspace({
   propertyFilter,
   propertyNameById,
   recurringTemplates,
+  requestWorkspaceFocus,
   setMaintenanceStatusFilter,
   setNotice,
   setPlanningSubtab,
@@ -181,19 +182,22 @@ export function OperationsCalendarWorkspace({
       return;
     }
     if (item.source === "maintenance") {
+      requestWorkspaceFocus("maintenance", item.sourceRecordId);
       setMaintenanceStatusFilter("all");
       setView("maintenance");
-      setNotice(`Showing maintenance for ${item.title}.`);
+      setNotice(`Focused maintenance work order ${item.title}.`);
       return;
     }
     if (item.source === "document") {
+      requestWorkspaceFocus("document", item.sourceRecordId);
       setView("documents");
-      setNotice(`Showing documents for ${item.title.replace(/^Renew or replace: /, "")}.`);
+      setNotice(`Opening ${item.title.replace(/^Renew or replace: /, "")} for review.`);
       return;
     }
     if (item.source === "recurring") {
+      requestWorkspaceFocus("recurring", item.sourceRecordId);
       setView("ledger");
-      setNotice(`Showing transactions for recurring item ${item.title}.`);
+      setNotice(`Focused recurring rule ${item.title}.`);
       return;
     }
     if (item.source === "planning") {

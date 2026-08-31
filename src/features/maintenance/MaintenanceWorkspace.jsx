@@ -46,6 +46,7 @@ import {
 import { AuditReadinessBadge } from "../shared/AuditReadinessBadge.jsx";
 import { ResponsiveTableFrame, field } from "../shared/uiHelpers.jsx";
 import { selectableProperties } from "../../domain/propertyLifecycle.js";
+import { workspaceFocusDomId } from "../../app/workspaceFocus.ts";
 
 const CLOSED_STATUSES = new Set(["Completed", "Closed", "Canceled"]);
 const ACTIVE_STATUSES = new Set(["Open", "In Progress", "Waiting on Parts"]);
@@ -130,6 +131,7 @@ export function MaintenanceWorkspace({
   assetById,
   canCreateEditRecords,
   canDeleteRecords,
+  clearWorkspaceFocus,
   confirmAndDeleteVendor,
   createBlankWorkOrderDraft,
   createWorkOrder,
@@ -170,6 +172,7 @@ export function MaintenanceWorkspace({
   workOrderDraft,
   workOrderSuggestionConfidenceLabel,
   workOrderUnitOptions,
+  workspaceFocus,
   editingVendorId,
 }) {
   const [createPanelOpen, setCreatePanelOpen] = useState(Boolean(pendingDocumentWorkOrderSource?.documentId));
@@ -178,6 +181,7 @@ export function MaintenanceWorkspace({
   const [expandedOverrides, setExpandedOverrides] = useState({});
   const [workspaceMode, setWorkspaceMode] = useState("active");
   const [queueQuickFilter, setQueueQuickFilter] = useState("active");
+  const [focusedWorkOrderId, setFocusedWorkOrderId] = useState("");
   const [vendorActionsOpenId, setVendorActionsOpenId] = useState("");
   const propertyOptions = selectableProperties(properties, workOrderDraft.propertyId);
   const reviewContext = {
@@ -210,6 +214,33 @@ export function MaintenanceWorkspace({
       setVendorPanelOpen(true);
     }
   }, [editingVendorId]);
+
+  const maintenanceFocusRequestId = workspaceFocus?.source === "maintenance" ? workspaceFocus.requestId : "";
+  useEffect(() => {
+    if (!maintenanceFocusRequestId) return;
+    const target = maintenanceVisibleWorkOrders.find((workOrder) => workOrder.id === workspaceFocus.recordId);
+    if (!target) {
+      clearWorkspaceFocus?.();
+      return;
+    }
+    setWorkspaceMode("active");
+    setQueueQuickFilter("active");
+    setMaintenanceStatusFilter("all");
+    setExpandedOverrides((current) => ({ ...current, [target.id]: true }));
+    setFocusedWorkOrderId(target.id);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById(workspaceFocusDomId("work-order", target.id))?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
+    clearWorkspaceFocus?.();
+  }, [maintenanceFocusRequestId]);
+
+  useEffect(() => {
+    if (!focusedWorkOrderId) return undefined;
+    const timer = window.setTimeout(() => setFocusedWorkOrderId(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [focusedWorkOrderId]);
 
   const reviewRecords = maintenanceReviewInbox?.records || [];
   const cleanupCounts = {
@@ -575,7 +606,11 @@ export function MaintenanceWorkspace({
               const StatusIcon = isOverdue ? AlertTriangle : statusIconForStatus(workOrder.status);
 
               return (
-                <div key={workOrder.id} className={`rounded-lg border bg-white p-2.5 ${isOverdue ? "border-red-200" : "border-slate-200"}`}>
+                <div
+                  id={workspaceFocusDomId("work-order", workOrder.id)}
+                  key={workOrder.id}
+                  className={`rounded-lg border bg-white p-2.5 transition ${focusedWorkOrderId === workOrder.id ? "border-teal-400 ring-2 ring-teal-100" : isOverdue ? "border-red-200" : "border-slate-200"}`}
+                >
                   <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_minmax(360px,1.35fr)_minmax(300px,auto)]">
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-start gap-1.5">

@@ -133,6 +133,7 @@ import { useTransactionFormSuggestions } from "./app/useTransactionFormSuggestio
 import { useTransactionWorkflowController } from "./app/useTransactionWorkflowController.js";
 import { useWorkspaceFilterController } from "./app/useWorkspaceFilterController.js";
 import { useWorkspacePrefetchController } from "./app/useWorkspacePrefetchController.ts";
+import { createWorkspaceFocusRequest } from "./app/workspaceFocus.ts";
 import { useWorkOrderExpenseAction } from "./app/useWorkOrderExpenseAction.js";
 import { useOcrSuggestedFieldOptions } from "./app/useOcrSuggestedFieldOptions.js";
 import { useVisibleSafeSuggestionCount } from "./app/useVisibleSafeSuggestionCount.js";
@@ -145,6 +146,9 @@ export default function App() {
   const { appSettings, settingsSavedVisible, setSetting: persistSetting, setDashboardCardSetting: persistDashboardCardSetting, resetToDefaults: resetStoredSettings, replaceSettings } = useAppSettings();
   const [view, setView] = useState(() => appSettings.defaultView || "dashboard");
   const [newWorkOrderRequestKey, setNewWorkOrderRequestKey] = useState(0);
+  const [workspaceFocus, setWorkspaceFocus] = useState(null);
+  const requestWorkspaceFocus = (source, recordId) => setWorkspaceFocus(createWorkspaceFocusRequest(source, recordId));
+  const clearWorkspaceFocus = () => setWorkspaceFocus(null);
   const runtimePerformanceMetrics = useRuntimePerformanceMetrics(view);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => appSettings.sidebarCollapsedByDefault);
   const {
@@ -1945,6 +1949,7 @@ export default function App() {
   const appWorkspaceProps = {
     acceptVisibleSafeSuggestions,
     actions,
+    clearWorkspaceFocus,
     openConfirmDialog,
     activeProperties,
     activeAccessRoleOption,
@@ -2320,6 +2325,7 @@ export default function App() {
     queueDocumentForOcr,
     realDataChecklist,
     recurringTemplates,
+    requestWorkspaceFocus,
     recurringThroughDate,
     reconcileTransactions,
     recordLoanPayment,
@@ -2467,6 +2473,7 @@ export default function App() {
     WORK_ORDER_PRIORITY_OPTIONS,
     workOrderUnitOptions,
     workOrders,
+    workspaceFocus,
     yearFilter,
     yearScopedLoanPayments,
   };
