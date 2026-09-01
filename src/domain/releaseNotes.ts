@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.7.0",
+    releaseDate: "2026-08-31",
+    title: "Monthly close and full calendar planning",
+    summary: "Adds a month-grid operations calendar, a reversible month-end review, and optional quiet reminders for upcoming non-rent work.",
+    changes: [
+      "Operations Calendar now includes Agenda, Month, and Monthly Close views so upcoming work can be reviewed as a list, on a real calendar, or as a month-end checklist.",
+      "Monthly Close checks transactions, bank matches, receipts, rent, recurring-expense gaps, loan payments, maintenance, and backup status before saving a reversible review snapshot.",
+      "Closed months visibly return to Changed since close when their source records change, without locking accounting data or automatically creating transactions.",
+      "An optional daily Operations Calendar summary can quietly notify you about due non-rent work, with its setting and saved notification state kept local to the desktop app.",
+    ],
+  },
+  {
     version: "1.6.0",
     releaseDate: "2026-08-30",
     title: "Operations calendar and smarter monthly checks",
