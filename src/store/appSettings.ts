@@ -60,6 +60,12 @@ export type DashboardDensity = (typeof DASHBOARD_DENSITY_OPTIONS)[number]["value
 export type LedgerSortValue = (typeof LEDGER_SORT_OPTIONS)[number]["value"];
 export type AccessRole = (typeof ACCESS_ROLE_OPTIONS)[number]["value"];
 
+export type MonthlyCloseRecord = {
+  closedAt: string;
+  signature: string;
+  issueCount: number;
+};
+
 export type AppSettings = {
   theme: "light" | "dark";
   defaultView: string;
@@ -80,6 +86,7 @@ export type AppSettings = {
   leaseLateFeeType: "flat" | "percent";
   leaseLateFeeValue: number;
   leaseDesktopNotifications: boolean;
+  operationsDesktopNotifications: boolean;
   statementBusinessName: string;
   statementBusinessAddress: string;
   statementBusinessEmail: string;
@@ -102,6 +109,7 @@ export type AppSettings = {
   setupChecklistShowDismissed: boolean;
   setupChecklistOverrides: Record<string, { status?: "not_applicable" | "dismissed"; note?: string; updatedAt?: string }>;
   recurringExpenseCheckAcknowledgements: Record<string, string>;
+  monthlyCloseRecords: Record<string, MonthlyCloseRecord>;
   realDataModeEnabled: boolean;
 };
 
@@ -132,6 +140,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   leaseLateFeeType: "flat",
   leaseLateFeeValue: 50,
   leaseDesktopNotifications: true,
+  operationsDesktopNotifications: false,
   statementBusinessName: "",
   statementBusinessAddress: "",
   statementBusinessEmail: "",
@@ -154,6 +163,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   setupChecklistShowDismissed: false,
   setupChecklistOverrides: {},
   recurringExpenseCheckAcknowledgements: {},
+  monthlyCloseRecords: {},
   realDataModeEnabled: false,
 };
 
@@ -218,6 +228,25 @@ function sanitizeRecurringExpenseCheckAcknowledgements(value: unknown): AppSetti
   return acknowledgements;
 }
 
+function sanitizeMonthlyCloseRecords(value: unknown): AppSettings["monthlyCloseRecords"] {
+  if (!isRecord(value)) return {};
+  const records: AppSettings["monthlyCloseRecords"] = {};
+  for (const [rawKey, rawRecord] of Object.entries(value).slice(0, 240)) {
+    if (!isRecord(rawRecord)) continue;
+    const key = sanitizeShortText(rawKey, 160);
+    const closedAt = sanitizeShortText(rawRecord.closedAt, 40);
+    const signature = sanitizeShortText(rawRecord.signature, 24);
+    if (!/^\d{4}-(0[1-9]|1[0-2])::[A-Za-z0-9._:-]{1,140}$/.test(key)) continue;
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(closedAt) || !/^close-[0-9a-f]{8}$/.test(signature)) continue;
+    records[key] = {
+      closedAt,
+      signature,
+      issueCount: clampInt(rawRecord.issueCount, 0, 100000, 0),
+    };
+  }
+  return records;
+}
+
 export function sanitizeAppSettings(raw: unknown): AppSettings {
   if (!isRecord(raw)) return DEFAULT_APP_SETTINGS;
   const dashboardCardsRaw = isRecord(raw.dashboardCards) ? raw.dashboardCards : {};
@@ -253,6 +282,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     leaseLateFeeType: raw.leaseLateFeeType === "percent" ? "percent" : "flat",
     leaseLateFeeValue: clampNumber(raw.leaseLateFeeValue, 0, 100000, DEFAULT_APP_SETTINGS.leaseLateFeeValue),
     leaseDesktopNotifications: raw.leaseDesktopNotifications !== false,
+    operationsDesktopNotifications: raw.operationsDesktopNotifications === true,
     statementBusinessName: sanitizeShortText(raw.statementBusinessName, 120),
     statementBusinessAddress: sanitizeLongText(raw.statementBusinessAddress, 240),
     statementBusinessEmail: sanitizeShortText(raw.statementBusinessEmail, 120),
@@ -282,6 +312,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     setupChecklistShowDismissed: raw.setupChecklistShowDismissed === true,
     setupChecklistOverrides: sanitizeSetupChecklistOverrides(raw.setupChecklistOverrides),
     recurringExpenseCheckAcknowledgements: sanitizeRecurringExpenseCheckAcknowledgements(raw.recurringExpenseCheckAcknowledgements),
+    monthlyCloseRecords: sanitizeMonthlyCloseRecords(raw.monthlyCloseRecords),
     realDataModeEnabled: raw.realDataModeEnabled === true,
   };
 }

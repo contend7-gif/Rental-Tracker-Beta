@@ -4,9 +4,12 @@ import {
   BellRing,
   CalendarClock,
   CalendarDays,
+  CalendarRange,
+  ClipboardCheck,
   FileClock,
   Hammer,
   Landmark,
+  List,
   ListTodo,
   ReceiptText,
   Repeat2,
@@ -21,6 +24,8 @@ import {
 } from "../../domain/operationsCalendar.ts";
 import { buildRecurringExpenseChecks } from "../../domain/recurringExpenseChecks.ts";
 import { daysUntil, formatDaysLeft } from "../../app/dateHelpers.js";
+import { MonthlyClosePanel } from "./MonthlyClosePanel.jsx";
+import { OperationsMonthView } from "./OperationsMonthView.jsx";
 
 const SOURCE_META = {
   rent: { label: "Rent", icon: ReceiptText, tone: "border-rose-200 bg-rose-50 text-rose-700" },
@@ -131,9 +136,13 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
 
 export function OperationsCalendarWorkspace({
   appSettings,
+  backupValidationResult,
+  bankImportUnmatchedRows,
+  currency,
   documents,
   leaseAutomationReminders,
   leases,
+  loanPayments,
   loans,
   planningActionItems,
   propertyFilter,
@@ -141,6 +150,7 @@ export function OperationsCalendarWorkspace({
   recurringTemplates,
   requestWorkspaceFocus,
   setMaintenanceStatusFilter,
+  setLedgerReconciliationFilter,
   setNotice,
   setPlanningSubtab,
   setPropertyFilter,
@@ -149,13 +159,17 @@ export function OperationsCalendarWorkspace({
   setUnitFilter,
   setView,
   todayIso,
+  tenantLedgerEntries,
   transactions,
   unitFilter,
   workOrders,
   openLease,
+  persistenceHealth,
 }) {
   const [horizonDays, setHorizonDays] = useState(90);
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [workspaceMode, setWorkspaceMode] = useState("agenda");
+  const [selectedMonth, setSelectedMonth] = useState(todayIso.slice(0, 7));
   const recurringExpenseChecks = useMemo(() => buildRecurringExpenseChecks({
     acknowledgements: appSettings.recurringExpenseCheckAcknowledgements,
     recurringTemplates,
@@ -183,6 +197,11 @@ export function OperationsCalendarWorkspace({
     () => sourceFilter === "all" ? horizonItems : horizonItems.filter((item) => item.source === sourceFilter),
     [horizonItems, sourceFilter],
   );
+  const calendarItems = useMemo(() => allItems.filter((item) => {
+    if (propertyFilter !== "all" && item.propertyId !== propertyFilter) return false;
+    if (unitFilter !== "all" && item.unit && item.unit !== unitFilter) return false;
+    return sourceFilter === "all" || item.source === sourceFilter;
+  }), [allItems, propertyFilter, sourceFilter, unitFilter]);
   const buckets = useMemo(() => bucketOperationsCalendarItems(scopedItems, todayIso), [scopedItems, todayIso]);
   const sourceCounts = useMemo(() => horizonItems.reduce((counts, item) => {
     counts[item.source] = (counts[item.source] || 0) + 1;
@@ -244,6 +263,44 @@ export function OperationsCalendarWorkspace({
     setNotice(`${item.searchText || item.title} marked intentional through today. The check will resume for the next expected cycle.`);
   };
 
+  const openMonthlyCloseIssue = (kind) => {
+    if (kind === "bank_match") {
+      setLedgerReconciliationFilter("unreconciled");
+      setView("ledger");
+      setNotice("Showing imported transactions that still need a bank match.");
+      return;
+    }
+    if (kind === "missing_support") {
+      setView("review");
+      setNotice("Showing Review Center items, including expenses missing receipt support.");
+      return;
+    }
+    if (kind === "rent_balance") {
+      setView("leaseHistory");
+      setNotice("Showing leases and tenant ledgers for outstanding rent review.");
+      return;
+    }
+    if (kind === "smart_check") {
+      setWorkspaceMode("agenda");
+      setSourceFilter("smart_check");
+      setNotice("Showing unresolved recurring expense Smart Checks.");
+      return;
+    }
+    if (kind === "loan_payment") {
+      setView("loans");
+      setNotice("Showing loans for monthly payment review.");
+      return;
+    }
+    if (kind === "maintenance_handoff") {
+      setMaintenanceStatusFilter("all");
+      setView("maintenance");
+      setNotice("Showing maintenance records that may need an accounting handoff.");
+      return;
+    }
+    setView("settings");
+    setNotice("Open Data & Backup to validate the latest backup.");
+  };
+
   const acknowledgedCheckCount = Object.keys(appSettings.recurringExpenseCheckAcknowledgements || {}).length;
 
   return (
@@ -277,6 +334,14 @@ export function OperationsCalendarWorkspace({
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
             <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" variant={workspaceMode === "agenda" ? "default" : "outline"} onClick={() => setWorkspaceMode("agenda")}><List className="mr-1.5 h-4 w-4" />Agenda</Button>
+              <Button size="sm" variant={workspaceMode === "month" ? "default" : "outline"} onClick={() => setWorkspaceMode("month")}><CalendarRange className="mr-1.5 h-4 w-4" />Month</Button>
+              <Button size="sm" variant={workspaceMode === "close" ? "default" : "outline"} onClick={() => setWorkspaceMode("close")}><ClipboardCheck className="mr-1.5 h-4 w-4" />Monthly Close</Button>
+            </div>
+            {workspaceMode !== "close" ? <div className="text-xs text-slate-500">{workspaceMode === "month" ? "Full calendar view" : "Prioritized review queue"}</div> : <div className="text-xs text-slate-500">Reversible month-end review</div>}
+          </div>
+          {workspaceMode !== "close" ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+            <div className="flex flex-wrap gap-1.5">
               <Button size="sm" variant={sourceFilter === "all" ? "default" : "secondary"} onClick={() => setSourceFilter("all")}>All</Button>
               {Object.entries(SOURCE_META).map(([source, meta]) => (
                 <Button key={source} size="sm" variant={sourceFilter === source ? "default" : "secondary"} onClick={() => setSourceFilter(source)}>
@@ -297,16 +362,43 @@ export function OperationsCalendarWorkspace({
                   Reset intentional checks ({acknowledgedCheckCount})
                 </Button>
               ) : null}
-              <span className="mr-1 text-xs font-medium text-slate-500">Horizon</span>
-              {[30, 60, 90].map((days) => (
-                <Button key={days} size="sm" variant={horizonDays === days ? "default" : "outline"} onClick={() => setHorizonDays(days)}>{days} days</Button>
-              ))}
+              {workspaceMode === "agenda" ? <>
+                <span className="mr-1 text-xs font-medium text-slate-500">Horizon</span>
+                {[30, 60, 90].map((days) => (
+                  <Button key={days} size="sm" variant={horizonDays === days ? "default" : "outline"} onClick={() => setHorizonDays(days)}>{days} days</Button>
+                ))}
+              </> : null}
             </div>
-          </div>
+          </div> : null}
         </CardContent>
       </Card>
 
-      {scopedItems.length === 0 ? (
+      {workspaceMode === "close" ? (
+        <MonthlyClosePanel
+          appSettings={appSettings}
+          backupValidationResult={backupValidationResult}
+          bankImportUnmatchedRows={bankImportUnmatchedRows}
+          currency={currency}
+          leases={leases}
+          loanPayments={loanPayments}
+          loans={loans}
+          month={selectedMonth}
+          onMonthChange={setSelectedMonth}
+          onOpenIssue={openMonthlyCloseIssue}
+          persistenceHealth={persistenceHealth}
+          propertyFilter={propertyFilter}
+          propertyNameById={propertyNameById}
+          recurringTemplates={recurringTemplates}
+          setNotice={setNotice}
+          setSetting={setSetting}
+          tenantLedgerEntries={tenantLedgerEntries}
+          todayIso={todayIso}
+          transactions={transactions}
+          workOrders={workOrders}
+        />
+      ) : workspaceMode === "month" ? (
+        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} todayIso={todayIso} />
+      ) : scopedItems.length === 0 ? (
         <Card className="border-emerald-200 bg-emerald-50 shadow-none">
           <CardContent className="flex items-start gap-3 p-5">
             <CalendarDays className="mt-0.5 h-5 w-5 text-emerald-700" />

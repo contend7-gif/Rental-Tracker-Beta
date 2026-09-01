@@ -636,7 +636,7 @@ export function SettingsWorkspace({
                 </div>
               </div>
               <div className="mt-3">
-                <Label className="text-xs text-slate-600">Desktop/browser reminders</Label>
+                <Label className="text-xs text-slate-600">Rent desktop/browser reminders</Label>
                 <Select value={appSettings.leaseDesktopNotifications ? "on" : "off"} onValueChange={(value) => setSetting("leaseDesktopNotifications", value === "on")}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -644,6 +644,17 @@ export function SettingsWorkspace({
                     <SelectItem value="off">Off</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="mt-3">
+                <Label className="text-xs text-slate-600">Operations Calendar daily summary</Label>
+                <Select value={appSettings.operationsDesktopNotifications ? "on" : "off"} onValueChange={(value) => setSetting("operationsDesktopNotifications", value === "on")}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">Off</SelectItem>
+                    <SelectItem value="on">On</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="mt-2 text-xs text-slate-500">Optional. When the app is running, send one quiet Windows summary per day for due or overdue calendar items outside the existing rent reminders.</div>
               </div>
             </div>
           </div>

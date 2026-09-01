@@ -55,6 +55,12 @@ Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, 
 - Select transaction review rows with blocking issues and confirm bulk review actions remain disabled until the issues are resolved.
 - Confirm Activity Log is accessible from Settings/Audit Log.
 - Confirm Activity Log is not in primary nav.
+- Open Operations Calendar and confirm Agenda, Month, and Monthly Close are separate views.
+- In Month, navigate backward and forward, return to Today, and open a calendar item back to its exact source record.
+- In Monthly Close, review bank-match, receipt, rent, Smart Check, loan, maintenance, and backup checks for the selected month and property scope.
+- Close a fictional month with no open checks, change a source record, and confirm the close status changes to Changed since close; refresh the snapshot and then reopen it.
+- Close a fictional month with open checks and confirm the snapshot records the visible count without marking those checks fixed or creating transactions.
+- Enable Settings > Operations Calendar daily summary, restart with a due non-rent calendar item, and confirm only one quiet summary is delivered for the day.
 - Confirm access profile controls are under Settings/Advanced.
 - Open Settings and confirm the Workspace, Data & Backup, and Advanced tabs separate daily settings from admin tools.
 - On a fresh profile, confirm Mobile Companion defaults to Off and Mobile Inbox is absent from Documents.

@@ -4,6 +4,8 @@ import test from "node:test";
 
 const appSource = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
 const calendarSource = readFileSync(new URL("../features/operations/OperationsCalendarWorkspace.jsx", import.meta.url), "utf8");
+const monthViewSource = readFileSync(new URL("../features/operations/OperationsMonthView.jsx", import.meta.url), "utf8");
+const closeViewSource = readFileSync(new URL("../features/operations/MonthlyClosePanel.jsx", import.meta.url), "utf8");
 const maintenanceSource = readFileSync(new URL("../features/maintenance/MaintenanceWorkspace.jsx", import.meta.url), "utf8");
 const documentsSource = readFileSync(new URL("../features/documents/DocumentsWorkspace.jsx", import.meta.url), "utf8");
 const ledgerSource = readFileSync(new URL("../features/transactions/LedgerWorkspace.jsx", import.meta.url), "utf8");
@@ -28,6 +30,17 @@ test("Operations Calendar smart checks review the ledger and can be marked inten
   assert.match(calendarSource, /recurringExpenseCheckAcknowledgements/);
   assert.match(calendarSource, /Intentional for now/);
   assert.match(calendarSource, /No transaction was created/);
+});
+
+test("Operations Calendar exposes agenda, full month, and reversible monthly close views", () => {
+  assert.match(calendarSource, />Agenda</);
+  assert.match(calendarSource, />Month</);
+  assert.match(calendarSource, />Monthly Close</);
+  assert.match(monthViewSource, /buildCalendarMonthDays/);
+  assert.match(monthViewSource, /Select any item to open its authoritative record/);
+  assert.match(closeViewSource, /Changed since close/);
+  assert.match(closeViewSource, /Close with open checks/);
+  assert.match(closeViewSource, /Reopen month/);
 });
 
 test("destination workspaces consume their exact focus request", () => {

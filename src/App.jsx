@@ -83,6 +83,7 @@ import { useAppDataSnapshot } from "./app/useAppDataSnapshot.js";
 import { useAppDateScopes } from "./app/useAppDateScopes.js";
 import { useAppElementRefs } from "./app/useAppElementRefs.js";
 import { useAppLifecycleEffects } from "./app/useAppLifecycleEffects.ts";
+import { useOperationsDesktopNotifications } from "./app/useOperationsDesktopNotifications.ts";
 import { useAppLookupMaps } from "./app/useAppLookupMaps.js";
 import { useAppTransactionCollections } from "./app/useAppTransactionCollections.js";
 import { useBankImportController } from "./app/useBankImportController.js";
@@ -964,6 +965,20 @@ export default function App() {
     todayIso,
     units,
     view,
+  });
+
+  useOperationsDesktopNotifications({
+    appSettings,
+    documents,
+    isDataHydrated,
+    leaseAutomationReminders,
+    leases,
+    loans,
+    planningActionItems,
+    recurringTemplates,
+    todayIso,
+    transactions,
+    workOrders,
   });
 
   const {

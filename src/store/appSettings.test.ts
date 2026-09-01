@@ -83,6 +83,23 @@ test("recurring expense check acknowledgements keep only opaque keys and dates",
   assert.deepEqual(resetAppSettings().recurringExpenseCheckAcknowledgements, {});
 });
 
+test("monthly close snapshots and optional operations notifications are sanitized", () => {
+  const updated = sanitizeAppSettings({
+    ...DEFAULT_APP_SETTINGS,
+    operationsDesktopNotifications: true,
+    monthlyCloseRecords: {
+      "2026-08::all": { closedAt: "2026-08-31T12:00:00.000Z", signature: "close-1234abcd", issueCount: 3 },
+      "bad-key": { closedAt: "yesterday", signature: "unsafe", issueCount: -4 },
+    },
+  });
+
+  assert.equal(updated.operationsDesktopNotifications, true);
+  assert.deepEqual(updated.monthlyCloseRecords, {
+    "2026-08::all": { closedAt: "2026-08-31T12:00:00.000Z", signature: "close-1234abcd", issueCount: 3 },
+  });
+  assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, operationsDesktopNotifications: "yes" }).operationsDesktopNotifications, false);
+});
+
 test("settings saved feedback is shown and debounced", async () => {
   const events: boolean[] = [];
   const notifier = createSettingsSavedNotifier((isVisible) => events.push(isVisible), 120);

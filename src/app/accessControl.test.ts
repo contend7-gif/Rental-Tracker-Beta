@@ -15,4 +15,6 @@ test("access labels and sensitive settings remain mapped", () => {
   assert.equal(SETTING_CAPABILITY_BY_KEY.accessRole, "manage_access_profile");
   assert.equal(SETTING_CAPABILITY_BY_KEY.deMinimisHasAFS, "manage_financial_settings");
   assert.equal(SETTING_CAPABILITY_BY_KEY.aiOpenAiApiKey, "manage_personal_settings");
+  assert.equal(SETTING_CAPABILITY_BY_KEY.operationsDesktopNotifications, "manage_operational_settings");
+  assert.equal(SETTING_CAPABILITY_BY_KEY.monthlyCloseRecords, "reconcile_records");
 });

@@ -92,6 +92,8 @@ export const SETTING_CAPABILITY_BY_KEY: Partial<Record<keyof AppSettings, Access
   leaseLateFeeType: "manage_operational_settings",
   leaseLateFeeValue: "manage_operational_settings",
   leaseDesktopNotifications: "manage_operational_settings",
+  operationsDesktopNotifications: "manage_operational_settings",
+  monthlyCloseRecords: "reconcile_records",
   statementBusinessName: "manage_statement_branding",
   statementBusinessAddress: "manage_statement_branding",
   statementBusinessEmail: "manage_statement_branding",
