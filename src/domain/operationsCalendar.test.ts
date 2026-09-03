@@ -25,14 +25,37 @@ test("operations calendar derives dated work without creating duplicate task rec
     loans: [{ id: "loan-1", propertyId: "p1", lender: "Bank", loanType: "Primary Mortgage", lienPosition: 1, originatedOn: "2024-01-01", rate: 6, originalBalance: 100000, currentBalance: 99000, scheduledPI: 700, scheduledEscrow: 200, scheduledMortgageInsurance: 0, defaultExtraPrincipal: 0, interestYTD: 0, principalYTD: 0, escrowYTD: 0, nextPayment: "2026-09-01" }],
   });
 
-  assert.deepEqual(items.map((item) => item.source), ["rent", "loan", "smart_check", "recurring", "maintenance", "planning", "document", "lease"]);
-  assert.equal(items.some((item) => item.sourceRecordId === "lease-open"), false);
+  assert.ok(items.some((item) => item.eventKind === "lease_start" && item.sourceRecordId === "lease-1"));
+  assert.ok(items.some((item) => item.eventKind === "lease_review" && item.sourceRecordId === "lease-1"));
+  assert.ok(items.some((item) => item.eventKind === "lease_end" && item.sourceRecordId === "lease-1"));
+  assert.ok(items.some((item) => item.eventKind === "lease_start" && item.sourceRecordId === "lease-open"));
+  assert.equal(items.some((item) => item.sourceRecordId === "lease-open" && item.eventKind !== "lease_start"), false);
   assert.equal(items.find((item) => item.source === "smart_check")?.searchText, "Utility Co");
+});
+
+test("lease calendar includes lifecycle milestones and adapts review timing for short terms", () => {
+  const items = buildOperationsCalendarItems({
+    leaseReviewDaysBefore: 60,
+    leases: [
+      { id: "fixed", propertyId: "p1", unit: "A", tenantName: "Fixed", startDate: "2026-01-01", endDate: "2026-12-31", monthlyRent: 1000, rentalType: "Long-term", agreementType: "fixed_term", utilitiesIncluded: false, monthToMonthAfterTerm: false, extensionTermMonths: 0, status: "Active", notes: "" },
+      { id: "short", propertyId: "p1", unit: "B", tenantName: "Short", startDate: "2026-09-01", endDate: "2026-09-30", monthlyRent: 1200, rentalType: "Mid-term", agreementType: "fixed_term", utilitiesIncluded: true, monthToMonthAfterTerm: false, extensionTermMonths: 0, status: "Active", notes: "" },
+      { id: "transition", propertyId: "p1", unit: "C", tenantName: "Transition", startDate: "2026-01-01", endDate: "2026-10-31", monthlyRent: 1100, rentalType: "Long-term", agreementType: "fixed_then_month_to_month", utilitiesIncluded: false, monthToMonthAfterTerm: true, extensionTermMonths: 0, status: "Active", notes: "" },
+      { id: "moved", propertyId: "p1", unit: "D", tenantName: "Moved", startDate: "2026-01-01", endDate: "2026-08-31", actualEndDate: "2026-08-20", monthlyRent: 900, rentalType: "Long-term", agreementType: "fixed_term", utilitiesIncluded: false, monthToMonthAfterTerm: false, extensionTermMonths: 0, status: "Ended", notes: "" },
+    ],
+  });
+
+  assert.equal(items.find((item) => item.id.startsWith("lease-review:fixed"))?.date, "2026-11-01");
+  assert.equal(items.find((item) => item.id.startsWith("lease-review:short"))?.date, "2026-09-21");
+  assert.match(items.find((item) => item.id.startsWith("lease-review:transition"))?.title || "", /transition/i);
+  assert.equal(items.some((item) => item.id.startsWith("lease-end:transition")), true);
+  assert.equal(items.find((item) => item.id.startsWith("lease-move-out:moved"))?.role, "milestone");
+  assert.equal(items.some((item) => item.id.startsWith("lease-review:moved") || item.id.startsWith("lease-end:moved")), false);
 });
 
 test("operations calendar respects scope, source, and horizon filters", () => {
   const items = [
     { id: "1", source: "maintenance" as const, sourceRecordId: "1", date: "2026-08-29", title: "Late", detail: "", propertyId: "p1", unit: "Unit A" },
+    { id: "past-start", source: "lease" as const, sourceRecordId: "lease-1", date: "2026-08-20", title: "Started", detail: "", propertyId: "p1", unit: "Unit A", role: "milestone" as const },
     { id: "2", source: "document" as const, sourceRecordId: "2", date: "2026-09-05", title: "Soon", detail: "", propertyId: "p1", unit: "Unit B" },
     { id: "3", source: "maintenance" as const, sourceRecordId: "3", date: "2026-12-31", title: "Far", detail: "", propertyId: "p1", unit: "Unit A" },
   ];

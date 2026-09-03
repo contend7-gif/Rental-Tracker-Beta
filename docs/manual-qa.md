@@ -57,6 +57,9 @@ Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, 
 - Confirm Activity Log is not in primary nav.
 - Open Operations Calendar and confirm Agenda, Month, and Monthly Close are separate views.
 - In Month, navigate backward and forward, return to Today, and open a calendar item back to its exact source record.
+- Confirm fixed-term leases show start, renewal/move-out review, and scheduled end milestones; confirm fixed-then-month-to-month leases label the transition and actual move-outs remain visible only as historical milestones.
+- Set the lease review lead time in Settings, confirm short stays use a shorter review window, and confirm setting it to 0 hides the planning reminder without hiding lease starts or ends.
+- On a date with more than three items, select + more and confirm every item appears in the selected-day detail panel; use the month picker to jump directly to another month.
 - In Monthly Close, review bank-match, receipt, rent, Smart Check, loan, maintenance, and backup checks for the selected month and property scope.
 - Close a fictional month with no open checks, change a source record, and confirm the close status changes to Changed since close; refresh the snapshot and then reopen it.
 - Close a fictional month with open checks and confirm the snapshot records the visible count without marking those checks fixed or creating transactions.

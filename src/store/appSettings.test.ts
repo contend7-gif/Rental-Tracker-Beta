@@ -87,6 +87,7 @@ test("monthly close snapshots and optional operations notifications are sanitize
   const updated = sanitizeAppSettings({
     ...DEFAULT_APP_SETTINGS,
     operationsDesktopNotifications: true,
+    operationsLeaseReviewDaysBefore: 999,
     monthlyCloseRecords: {
       "2026-08::all": { closedAt: "2026-08-31T12:00:00.000Z", signature: "close-1234abcd", issueCount: 3 },
       "bad-key": { closedAt: "yesterday", signature: "unsafe", issueCount: -4 },
@@ -94,10 +95,12 @@ test("monthly close snapshots and optional operations notifications are sanitize
   });
 
   assert.equal(updated.operationsDesktopNotifications, true);
+  assert.equal(updated.operationsLeaseReviewDaysBefore, 180);
   assert.deepEqual(updated.monthlyCloseRecords, {
     "2026-08::all": { closedAt: "2026-08-31T12:00:00.000Z", signature: "close-1234abcd", issueCount: 3 },
   });
   assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, operationsDesktopNotifications: "yes" }).operationsDesktopNotifications, false);
+  assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, operationsLeaseReviewDaysBefore: "bad" }).operationsLeaseReviewDaysBefore, 60);
 });
 
 test("settings saved feedback is shown and debounced", async () => {

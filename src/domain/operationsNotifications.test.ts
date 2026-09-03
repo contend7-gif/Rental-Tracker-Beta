@@ -7,12 +7,14 @@ test("operations digest summarizes due items and excludes separate rent reminder
     { id: "rent-1", source: "rent", date: "2026-08-31" },
     { id: "maintenance-1", source: "maintenance", date: "2026-08-30" },
     { id: "loan-1", source: "loan", date: "2026-08-31" },
+    { id: "past-move-in", source: "lease", date: "2026-08-01", role: "milestone" },
   ] as never[], "2026-08-31");
   assert.ok(digest);
   assert.equal(digest.itemCount, 2);
   assert.match(digest.body, /1 overdue · 1 due today/);
   assert.match(digest.body, /maintenance/);
   assert.doesNotMatch(digest.signature, /rent-1/);
+  assert.doesNotMatch(digest.signature, /past-move-in/);
 });
 
 test("operations digest stays quiet when nothing is due", () => {
@@ -20,4 +22,3 @@ test("operations digest stays quiet when nothing is due", () => {
     { id: "future", source: "lease", date: "2026-09-01" },
   ] as never[], "2026-08-31"), null);
 });
-

@@ -656,6 +656,18 @@ export function SettingsWorkspace({
                 </Select>
                 <div className="mt-2 text-xs text-slate-500">Optional. When the app is running, send one quiet Windows summary per day for due or overdue calendar items outside the existing rent reminders.</div>
               </div>
+              <div className="mt-3">
+                <Label className="text-xs text-slate-600">Lease review lead time</Label>
+                <Input
+                  className="mt-1"
+                  type="number"
+                  min="0"
+                  max="180"
+                  value={appSettings.operationsLeaseReviewDaysBefore}
+                  onChange={(e) => setSetting("operationsLeaseReviewDaysBefore", Number(e.target.value || 0))}
+                />
+                <div className="mt-2 text-xs text-slate-500">Days before a fixed term ends to start renewal or move-out review. Short stays automatically use a shorter lead time. Set to 0 to hide this planning reminder; it is not a legal notice deadline.</div>
+              </div>
             </div>
           </div>
         </SettingsSectionShell>

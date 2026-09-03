@@ -87,6 +87,7 @@ export type AppSettings = {
   leaseLateFeeValue: number;
   leaseDesktopNotifications: boolean;
   operationsDesktopNotifications: boolean;
+  operationsLeaseReviewDaysBefore: number;
   statementBusinessName: string;
   statementBusinessAddress: string;
   statementBusinessEmail: string;
@@ -141,6 +142,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   leaseLateFeeValue: 50,
   leaseDesktopNotifications: true,
   operationsDesktopNotifications: false,
+  operationsLeaseReviewDaysBefore: 60,
   statementBusinessName: "",
   statementBusinessAddress: "",
   statementBusinessEmail: "",
@@ -283,6 +285,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     leaseLateFeeValue: clampNumber(raw.leaseLateFeeValue, 0, 100000, DEFAULT_APP_SETTINGS.leaseLateFeeValue),
     leaseDesktopNotifications: raw.leaseDesktopNotifications !== false,
     operationsDesktopNotifications: raw.operationsDesktopNotifications === true,
+    operationsLeaseReviewDaysBefore: clampInt(raw.operationsLeaseReviewDaysBefore, 0, 180, DEFAULT_APP_SETTINGS.operationsLeaseReviewDaysBefore),
     statementBusinessName: sanitizeShortText(raw.statementBusinessName, 120),
     statementBusinessAddress: sanitizeLongText(raw.statementBusinessAddress, 240),
     statementBusinessEmail: sanitizeShortText(raw.statementBusinessEmail, 120),

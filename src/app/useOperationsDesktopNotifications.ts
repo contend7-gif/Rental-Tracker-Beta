@@ -8,7 +8,7 @@ import type { LeaseAutomationReminder } from "../domain/leaseAutomation.ts";
 import { OPERATIONS_NOTIFICATION_STORAGE_KEY } from "./appStorageKeys.js";
 
 type Args = {
-  appSettings: Pick<AppSettings, "operationsDesktopNotifications" | "recurringExpenseCheckAcknowledgements">;
+  appSettings: Pick<AppSettings, "operationsDesktopNotifications" | "operationsLeaseReviewDaysBefore" | "recurringExpenseCheckAcknowledgements">;
   isDataHydrated: boolean;
   todayIso: string;
   transactions: Transaction[];
@@ -59,12 +59,13 @@ export function useOperationsDesktopNotifications(args: Args) {
     documents: args.documents,
     leaseAutomationReminders: args.leaseAutomationReminders,
     leases: args.leases,
+    leaseReviewDaysBefore: args.appSettings.operationsLeaseReviewDaysBefore,
     loans: args.loans,
     planningActionItems: args.planningActionItems,
     recurringTemplates: args.recurringTemplates,
     recurringExpenseChecks,
     workOrders: args.workOrders,
-  }), [args.documents, args.leaseAutomationReminders, args.leases, args.loans, args.planningActionItems, args.recurringTemplates, recurringExpenseChecks, args.workOrders]);
+  }), [args.appSettings.operationsLeaseReviewDaysBefore, args.documents, args.leaseAutomationReminders, args.leases, args.loans, args.planningActionItems, args.recurringTemplates, recurringExpenseChecks, args.workOrders]);
 
   useEffect(() => {
     if (!args.appSettings.operationsDesktopNotifications || !args.isDataHydrated || typeof window === "undefined") return;
@@ -91,4 +92,3 @@ export function useOperationsDesktopNotifications(args: Args) {
     };
   }, [args.appSettings.operationsDesktopNotifications, args.isDataHydrated, args.todayIso, items]);
 }
-

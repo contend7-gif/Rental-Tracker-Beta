@@ -7,7 +7,7 @@ import type {
 } from "../models.ts";
 import type { LeaseAutomationReminder } from "./leaseAutomation.ts";
 import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
-import { leaseIsOpenEnded } from "./leaseTerms.js";
+import { normalizeLeaseAgreementType } from "./leaseTerms.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -33,6 +33,8 @@ export type OperationsCalendarItem = {
   priority?: string;
   searchText?: string;
   expectedDate?: string;
+  role?: "action" | "milestone";
+  eventKind?: "lease_start" | "lease_review" | "lease_end" | "lease_move_out";
 };
 
 export type PlanningCalendarAction = {
@@ -59,6 +61,20 @@ function diffDays(startIso: string, endIso: string) {
   const start = new Date(`${startIso}T00:00:00.000Z`);
   const end = new Date(`${endIso}T00:00:00.000Z`);
   return Math.round((end.getTime() - start.getTime()) / DAY_MS);
+}
+
+function shiftIsoDate(date: string, offsetDays: number) {
+  if (!validIsoDate(date)) return "";
+  const shifted = new Date(`${date}T00:00:00.000Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + offsetDays);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function leaseReviewLeadDays(lease: Lease, configuredDays: number) {
+  if (!validIsoDate(lease.startDate) || !validIsoDate(lease.endDate)) return 0;
+  const termDays = diffDays(lease.startDate, lease.endDate);
+  if (termDays <= 1 || configuredDays <= 0) return 0;
+  return Math.min(configuredDays, Math.max(1, Math.floor(termDays / 3)));
 }
 
 function sourcePriority(source: OperationsCalendarSource) {
@@ -91,6 +107,7 @@ export function buildOperationsCalendarItems(args: {
   recurringExpenseChecks?: RecurringExpenseCheck[];
   planningActionItems?: PlanningCalendarAction[];
   loans?: Loan[];
+  leaseReviewDaysBefore?: number;
 }): OperationsCalendarItem[] {
   const items: OperationsCalendarItem[] = [];
 
@@ -109,18 +126,96 @@ export function buildOperationsCalendarItems(args: {
     });
   });
 
+  const configuredLeaseReviewDays = Math.max(0, Math.min(180, Math.round(Number(args.leaseReviewDaysBefore ?? 60))));
   (args.leases || []).forEach((lease) => {
-    if (!lease?.id || lease.actualEndDate || lease.status === "Ended" || leaseIsOpenEnded(lease) || !validIsoDate(lease.endDate)) return;
+    if (!lease?.id) return;
+    const tenantLabel = lease.tenantName || lease.unit || "Tenant";
+    const unitLabel = lease.unit || "Shared";
+    if (validIsoDate(lease.startDate)) {
+      items.push({
+        id: `lease-start:${lease.id}:${lease.startDate}`,
+        source: "lease",
+        sourceRecordId: lease.id,
+        date: lease.startDate,
+        title: `Lease starts: ${tenantLabel}`,
+        detail: `${unitLabel} occupancy begins.`,
+        propertyId: lease.propertyId,
+        unit: lease.unit,
+        priority: "normal",
+        role: "milestone",
+        eventKind: "lease_start",
+      });
+    }
+
+    if (validIsoDate(lease.actualEndDate)) {
+      items.push({
+        id: `lease-move-out:${lease.id}:${lease.actualEndDate}`,
+        source: "lease",
+        sourceRecordId: lease.id,
+        date: lease.actualEndDate,
+        title: `Move-out recorded: ${tenantLabel}`,
+        detail: `${unitLabel} actual move-out date.`,
+        propertyId: lease.propertyId,
+        unit: lease.unit,
+        priority: "normal",
+        role: "milestone",
+        eventKind: "lease_move_out",
+      });
+      return;
+    }
+
+    const agreementType = normalizeLeaseAgreementType(lease);
+    if (agreementType === "month_to_month" || !validIsoDate(lease.endDate)) return;
+    if (lease.status === "Ended") {
+      items.push({
+        id: `lease-ended:${lease.id}:${lease.endDate}`,
+        source: "lease",
+        sourceRecordId: lease.id,
+        date: lease.endDate,
+        title: `Lease ended: ${tenantLabel}`,
+        detail: `${unitLabel} recorded term end.`,
+        propertyId: lease.propertyId,
+        unit: lease.unit,
+        priority: "normal",
+        role: "milestone",
+        eventKind: "lease_end",
+      });
+      return;
+    }
+
+    const reviewLeadDays = leaseReviewLeadDays(lease, configuredLeaseReviewDays);
+    const reviewDate = reviewLeadDays > 0 ? shiftIsoDate(lease.endDate, -reviewLeadDays) : "";
+    if (validIsoDate(reviewDate) && reviewDate > lease.startDate) {
+      items.push({
+        id: `lease-review:${lease.id}:${reviewDate}`,
+        source: "lease",
+        sourceRecordId: lease.id,
+        date: reviewDate,
+        title: agreementType === "fixed_then_month_to_month" ? `Review lease transition: ${tenantLabel}` : `Review renewal or move-out: ${tenantLabel}`,
+        detail: agreementType === "fixed_then_month_to_month"
+          ? `${unitLabel} fixed term ends in ${reviewLeadDays} days. Confirm the renewal or month-to-month plan.`
+          : `${unitLabel} term ends in ${reviewLeadDays} days. Confirm renewal, notice, or turnover plans; this is a planning reminder, not a legal deadline.`,
+        propertyId: lease.propertyId,
+        unit: lease.unit,
+        priority: lease.status === "Pending Renewal" ? "high" : "normal",
+        role: "action",
+        eventKind: "lease_review",
+      });
+    }
     items.push({
-      id: `lease:${lease.id}:${lease.endDate}`,
+      id: `lease-end:${lease.id}:${lease.endDate}`,
       source: "lease",
       sourceRecordId: lease.id,
       date: lease.endDate,
-      title: `Lease term ends: ${lease.tenantName || lease.unit}`,
-      detail: `${lease.unit || "Shared"} lease reaches its scheduled end date.`,
+      title: agreementType === "fixed_then_month_to_month" ? `Fixed term ends: ${tenantLabel}` : `Lease term ends: ${tenantLabel}`,
+      detail: agreementType === "fixed_then_month_to_month"
+        ? `${unitLabel} reaches its scheduled transition to month-to-month.`
+        : `${unitLabel} lease reaches its scheduled end date.`,
       propertyId: lease.propertyId,
       unit: lease.unit,
       priority: lease.status === "Pending Renewal" ? "high" : "normal",
+      role: "action",
+      eventKind: "lease_end",
     });
   });
 
@@ -235,6 +330,7 @@ export function selectOperationsCalendarItems(
     if (args.propertyFilter && args.propertyFilter !== "all" && item.propertyId !== args.propertyFilter) return false;
     if (args.unitFilter && args.unitFilter !== "all" && item.unit && item.unit !== args.unitFilter) return false;
     if (args.sourceFilter && args.sourceFilter !== "all" && item.source !== args.sourceFilter) return false;
+    if (item.role === "milestone" && item.date < args.todayIso) return false;
     return diffDays(args.todayIso, item.date) <= horizonDays;
   });
 }

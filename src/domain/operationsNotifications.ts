@@ -18,7 +18,7 @@ const SOURCE_LABELS: Record<string, string> = {
 };
 
 export function buildOperationsNotificationDigest(items: OperationsCalendarItem[], todayIso: string): OperationsNotificationDigest | null {
-  const dueItems = items.filter((item) => item.source !== "rent" && item.date <= todayIso);
+  const dueItems = items.filter((item) => item.source !== "rent" && item.date <= todayIso && (item.role !== "milestone" || item.date === todayIso));
   if (dueItems.length === 0) return null;
   const overdueCount = dueItems.filter((item) => item.date < todayIso).length;
   const todayCount = dueItems.length - overdueCount;
@@ -39,4 +39,3 @@ export function buildOperationsNotificationDigest(items: OperationsCalendarItem[
     signature: dueItems.map((item) => item.id).sort().join("|"),
   };
 }
-

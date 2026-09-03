@@ -180,12 +180,13 @@ export function OperationsCalendarWorkspace({
     documents,
     leaseAutomationReminders,
     leases,
+    leaseReviewDaysBefore: appSettings.operationsLeaseReviewDaysBefore,
     loans,
     planningActionItems,
     recurringTemplates,
     recurringExpenseChecks,
     workOrders,
-  }), [documents, leaseAutomationReminders, leases, loans, planningActionItems, recurringExpenseChecks, recurringTemplates, workOrders]);
+  }), [appSettings.operationsLeaseReviewDaysBefore, documents, leaseAutomationReminders, leases, loans, planningActionItems, recurringExpenseChecks, recurringTemplates, workOrders]);
   const horizonItems = useMemo(() => selectOperationsCalendarItems(allItems, {
     horizonDays,
     propertyFilter,
@@ -197,16 +198,26 @@ export function OperationsCalendarWorkspace({
     () => sourceFilter === "all" ? horizonItems : horizonItems.filter((item) => item.source === sourceFilter),
     [horizonItems, sourceFilter],
   );
-  const calendarItems = useMemo(() => allItems.filter((item) => {
+  const propertyUnitItems = useMemo(() => allItems.filter((item) => {
     if (propertyFilter !== "all" && item.propertyId !== propertyFilter) return false;
     if (unitFilter !== "all" && item.unit && item.unit !== unitFilter) return false;
-    return sourceFilter === "all" || item.source === sourceFilter;
-  }), [allItems, propertyFilter, sourceFilter, unitFilter]);
+    return true;
+  }), [allItems, propertyFilter, unitFilter]);
+  const calendarItems = useMemo(
+    () => propertyUnitItems.filter((item) => sourceFilter === "all" || item.source === sourceFilter),
+    [propertyUnitItems, sourceFilter],
+  );
   const buckets = useMemo(() => bucketOperationsCalendarItems(scopedItems, todayIso), [scopedItems, todayIso]);
-  const sourceCounts = useMemo(() => horizonItems.reduce((counts, item) => {
+  const sourceCountItems = useMemo(
+    () => workspaceMode === "month"
+      ? propertyUnitItems.filter((item) => item.date.startsWith(selectedMonth))
+      : horizonItems,
+    [horizonItems, propertyUnitItems, selectedMonth, workspaceMode],
+  );
+  const sourceCounts = useMemo(() => sourceCountItems.reduce((counts, item) => {
     counts[item.source] = (counts[item.source] || 0) + 1;
     return counts;
-  }, {}), [horizonItems]);
+  }, {}), [sourceCountItems]);
 
   const openSourceRecord = (item) => {
     if (item.propertyId) setPropertyFilter(item.propertyId);
@@ -364,7 +375,7 @@ export function OperationsCalendarWorkspace({
               ) : null}
               {workspaceMode === "agenda" ? <>
                 <span className="mr-1 text-xs font-medium text-slate-500">Horizon</span>
-                {[30, 60, 90].map((days) => (
+                {[30, 60, 90, 180].map((days) => (
                   <Button key={days} size="sm" variant={horizonDays === days ? "default" : "outline"} onClick={() => setHorizonDays(days)}>{days} days</Button>
                 ))}
               </> : null}
@@ -397,7 +408,7 @@ export function OperationsCalendarWorkspace({
           workOrders={workOrders}
         />
       ) : workspaceMode === "month" ? (
-        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} todayIso={todayIso} />
+        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} propertyNameById={propertyNameById} todayIso={todayIso} />
       ) : scopedItems.length === 0 ? (
         <Card className="border-emerald-200 bg-emerald-50 shadow-none">
           <CardContent className="flex items-start gap-3 p-5">

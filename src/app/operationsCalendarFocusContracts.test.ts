@@ -38,6 +38,9 @@ test("Operations Calendar exposes agenda, full month, and reversible monthly clo
   assert.match(calendarSource, />Monthly Close</);
   assert.match(monthViewSource, /buildCalendarMonthDays/);
   assert.match(monthViewSource, /Select any item to open its authoritative record/);
+  assert.match(monthViewSource, /type="month"/);
+  assert.match(monthViewSource, /selectedItems/);
+  assert.match(monthViewSource, /more<\/button>/);
   assert.match(closeViewSource, /Changed since close/);
   assert.match(closeViewSource, /Close with open checks/);
   assert.match(closeViewSource, /Reopen month/);
