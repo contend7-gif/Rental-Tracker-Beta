@@ -1,13 +1,16 @@
 import Database from "better-sqlite3";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { backupDocumentArchivePath, buildBackupZipBuffer, inspectBackupZipBuffer, readBackupZipBuffer, ZIP_BACKUP_FORMAT } from "./backupArchive.mjs";
 import { ensureRentalTrackerDataDirs, getFileSize, getRentalTrackerDataPaths, readDocumentAsDataUrl, safeRelativeDocumentPath, writeDocumentBlob } from "./fileStore.mjs";
 
 export const DATABASE_SCHEMA_VERSION = 1;
 export const BACKUP_SCHEMA_VERSION = 5;
 export const SQLITE_MIGRATION_META_KEY = "legacyLocalStorageImportedAt";
-export const DEFAULT_AUTO_BACKUP_RETENTION = 8;
+export const DEFAULT_AUTO_BACKUP_RETENTION = 12;
+export const DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 3;
+const MANAGED_BACKUP_MAGIC = Buffer.from("RTBK1");
 
 const JSON_ONLY_BACKUP_NOTE = "Document files are stored in the local documents folder and are not embedded in this JSON backup.";
 
@@ -591,7 +594,7 @@ function writeCollection(db, collection, items, now) {
   }
 }
 
-export async function saveAppDataToDatabase({ db, paths, backup, appVersion = "", autoBackup = true, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION }) {
+export async function saveAppDataToDatabase({ db, paths, backup, appVersion = "", autoBackup = true, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION, encryptionKey = null }) {
   const now = new Date().toISOString();
   const safeBackup = sanitizeBackupForPersistence({
     ...backup,
@@ -629,20 +632,23 @@ export async function saveAppDataToDatabase({ db, paths, backup, appVersion = ""
   transaction();
 
   if (autoBackup) {
-    await maybeWriteAutomaticBackup({ db, paths, backup: safeBackup, retentionCount });
+    const policy = backupPolicyFromSettings(safeBackup.settings);
+    await maybeWriteAutomaticBackup({ db, paths, backup: safeBackup, retentionCount: policy.retentionCount, intervalDays: policy.intervalDays, encryptionKey });
   }
 
   return { ok: true, savedAt: now };
 }
 
-export async function createRestorePointInDatabase({ db, paths, backup, appVersion = "", retentionCount = DEFAULT_AUTO_BACKUP_RETENTION }) {
+export async function createRestorePointInDatabase({ db, paths, backup, appVersion = "", retentionCount = DEFAULT_AUTO_BACKUP_RETENTION, encryptionKey = null }) {
+  const policy = backupPolicyFromSettings(backup?.settings);
   const saveResult = await saveAppDataToDatabase({
     db,
     paths,
     backup,
     appVersion,
     autoBackup: false,
-    retentionCount,
+    retentionCount: policy.retentionCount,
+    encryptionKey,
   });
   const backupResult = await maybeWriteAutomaticBackup({
     db,
@@ -652,7 +658,9 @@ export async function createRestorePointInDatabase({ db, paths, backup, appVersi
       appVersion: backup?.appVersion || appVersion,
       exportedAt: backup?.exportedAt || saveResult.savedAt,
     },
-    retentionCount,
+    retentionCount: policy.retentionCount,
+    intervalDays: policy.intervalDays,
+    encryptionKey,
     force: true,
   });
   return {
@@ -765,7 +773,7 @@ export function loadDeferredCollectionsFromDatabase({ db, collectionKeys = [] })
   );
 }
 
-export async function importLegacyLocalStorageData({ db, paths, payload, appVersion = "" }) {
+export async function importLegacyLocalStorageData({ db, paths, payload, appVersion = "", encryptionKey = null }) {
   const source = isRecord(payload) ? payload : {};
   const backup = sanitizeBackupForPersistence({
     schemaVersion: source.schemaVersion || BACKUP_SCHEMA_VERSION,
@@ -774,7 +782,7 @@ export async function importLegacyLocalStorageData({ db, paths, payload, appVers
     settings: source.settings,
     data: isRecord(source.data) ? source.data : source,
   });
-  await saveAppDataToDatabase({ db, paths, backup, appVersion, autoBackup: true });
+  await saveAppDataToDatabase({ db, paths, backup, appVersion, autoBackup: true, encryptionKey });
   const importedAt = new Date().toISOString();
   setMeta(db, SQLITE_MIGRATION_META_KEY, importedAt);
   return { ok: true, importedAt };
@@ -813,7 +821,7 @@ export async function exportBackupArchiveFromDatabase({ db, paths, appVersion = 
   };
 }
 
-export async function importBackupArchiveToDatabase({ db, paths, archiveBuffer, appVersion = "" }) {
+export async function importBackupArchiveToDatabase({ db, paths, archiveBuffer, appVersion = "", encryptionKey = null }) {
   const imported = await readBackupZipBuffer({ archiveBuffer, documentsDir: paths.documentsDir });
   await saveAppDataToDatabase({
     db,
@@ -821,6 +829,7 @@ export async function importBackupArchiveToDatabase({ db, paths, archiveBuffer, 
     backup: imported.backup,
     appVersion,
     autoBackup: true,
+    encryptionKey,
   });
   return {
     ok: true,
@@ -831,19 +840,56 @@ export async function importBackupArchiveToDatabase({ db, paths, archiveBuffer, 
   };
 }
 
-export async function maybeWriteAutomaticBackup({ db, paths, backup, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION, force = false }) {
+function backupPolicyFromSettings(settings) {
+  const source = isRecord(settings) ? settings : {};
+  const intervalDays = Math.max(1, Math.min(30, Math.round(Number(source.backupIntervalDays || DEFAULT_AUTO_BACKUP_INTERVAL_DAYS))));
+  const retentionCount = Math.max(3, Math.min(30, Math.round(Number(source.backupRetentionCount || DEFAULT_AUTO_BACKUP_RETENTION))));
+  return { intervalDays, retentionCount };
+}
+
+export function encryptManagedBackup(buffer, key) {
+  const normalizedKey = Buffer.from(key || []);
+  if (normalizedKey.length !== 32) throw new Error("Managed backup encryption requires a 32-byte key.");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", normalizedKey, iv);
+  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+  return Buffer.concat([MANAGED_BACKUP_MAGIC, iv, cipher.getAuthTag(), encrypted]);
+}
+
+export function decryptManagedBackup(buffer, key) {
+  const payload = Buffer.from(buffer || []);
+  if (!payload.subarray(0, MANAGED_BACKUP_MAGIC.length).equals(MANAGED_BACKUP_MAGIC)) return payload;
+  const normalizedKey = Buffer.from(key || []);
+  if (normalizedKey.length !== 32) throw new Error("This managed backup needs the local Windows encryption key.");
+  const ivStart = MANAGED_BACKUP_MAGIC.length;
+  const tagStart = ivStart + 12;
+  const contentStart = tagStart + 16;
+  if (payload.length <= contentStart) throw new Error("Encrypted managed backup is incomplete.");
+  const decipher = createDecipheriv("aes-256-gcm", normalizedKey, payload.subarray(ivStart, tagStart));
+  decipher.setAuthTag(payload.subarray(tagStart, contentStart));
+  return Buffer.concat([decipher.update(payload.subarray(contentStart)), decipher.final()]);
+}
+
+async function inspectManagedBackupFile(filePath, encryptionKey) {
+  const decrypted = decryptManagedBackup(await fs.readFile(filePath), encryptionKey);
+  const inspected = await inspectBackupZipBuffer(decrypted);
+  return { ...inspected, encrypted: String(filePath).endsWith(".rtbackup") };
+}
+
+export async function maybeWriteAutomaticBackup({ db, paths, backup, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION, intervalDays = DEFAULT_AUTO_BACKUP_INTERVAL_DAYS, force = false, encryptionKey = null }) {
   const now = new Date();
   const lastBackupAt = getMeta(db, "lastBackupAt", "");
   const lastBackupMs = Date.parse(lastBackupAt);
-  const weeklyMs = 7 * 24 * 60 * 60 * 1000;
-  if (!force && !Number.isNaN(lastBackupMs) && now.getTime() - lastBackupMs < weeklyMs) {
+  const intervalMs = Math.max(1, Math.min(30, Number(intervalDays || DEFAULT_AUTO_BACKUP_INTERVAL_DAYS))) * 24 * 60 * 60 * 1000;
+  if (!force && !Number.isNaN(lastBackupMs) && now.getTime() - lastBackupMs < intervalMs) {
     return { ok: true, skipped: true, reason: "recent" };
   }
 
   await fs.mkdir(paths.backupsDir, { recursive: true });
   const timestamp = now.toISOString();
   const safeTimestamp = timestamp.replace(/[:.]/g, "-");
-  const backupFile = path.join(paths.backupsDir, `rental-tracker-auto-backup-${safeTimestamp}.zip`);
+  const encrypted = Buffer.from(encryptionKey || []).length === 32;
+  const backupFile = path.join(paths.backupsDir, `rental-tracker-auto-backup-${safeTimestamp}.${encrypted ? "rtbackup" : "zip"}`);
   const payload = {
     ...sanitizeBackupForPersistence(backup),
     exportedAt: timestamp,
@@ -852,17 +898,23 @@ export async function maybeWriteAutomaticBackup({ db, paths, backup, retentionCo
     documentBackupNote: "Document files are embedded in this zip under documents/.",
   };
   const archive = await buildBackupZipBuffer({ backup: payload, documentsDir: paths.documentsDir });
-  await fs.writeFile(backupFile, archive.buffer);
+  await fs.writeFile(backupFile, encrypted ? encryptManagedBackup(archive.buffer, encryptionKey) : archive.buffer);
+  const inspected = await inspectManagedBackupFile(backupFile, encryptionKey);
+  const validation = validateBackupEnvelope(inspected);
+  if (validation.status === "invalid") throw new Error(`Managed backup verification failed: ${validation.errors.join(" ")}`);
+  const checkedAt = new Date().toISOString();
   setMeta(db, "lastBackupAt", payload.exportedAt);
+  setMeta(db, "lastRecoverableBackupAt", payload.exportedAt);
+  setMeta(db, "lastBackupValidation", JSON.stringify({ status: validation.status, label: validation.label, checkedAt, backupName: path.basename(backupFile) }));
   await enforceBackupRetention(paths.backupsDir, retentionCount);
-  return { ok: true, filePath: backupFile, backedUpAt: payload.exportedAt };
+  return { ok: true, filePath: backupFile, backedUpAt: payload.exportedAt, encrypted, validation };
 }
 
 export async function enforceBackupRetention(backupsDir, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION) {
   const entries = await fs.readdir(backupsDir, { withFileTypes: true }).catch(() => []);
   const backupFiles = [];
   for (const entry of entries) {
-    if (!entry.isFile() || (!entry.name.endsWith(".json") && !entry.name.endsWith(".zip"))) continue;
+    if (!entry.isFile() || (!entry.name.endsWith(".json") && !entry.name.endsWith(".zip") && !entry.name.endsWith(".rtbackup"))) continue;
     const filePath = path.join(backupsDir, entry.name);
     const stat = await fs.stat(filePath).catch(() => null);
     if (stat) backupFiles.push({ filePath, mtimeMs: stat.mtimeMs });
@@ -936,7 +988,7 @@ async function listBackupFiles(backupsDir) {
   const backupEntries = await fs.readdir(backupsDir, { withFileTypes: true }).catch(() => []);
   const backupFiles = [];
   for (const entry of backupEntries) {
-    if (!entry.isFile() || (!entry.name.endsWith(".json") && !entry.name.endsWith(".zip"))) continue;
+    if (!entry.isFile() || (!entry.name.endsWith(".json") && !entry.name.endsWith(".zip") && !entry.name.endsWith(".rtbackup"))) continue;
     const filePath = path.join(backupsDir, entry.name);
     const stat = await fs.stat(filePath).catch(() => null);
     if (stat) backupFiles.push({ name: entry.name, filePath, mtimeMs: stat.mtimeMs, size: stat.size });
@@ -992,7 +1044,7 @@ export function validateBackupEnvelope({ backup, archiveFilePaths = null }) {
   };
 }
 
-export async function validateLatestBackup({ db, paths }) {
+export async function validateLatestBackup({ db, paths, encryptionKey = null }) {
   const backupFiles = await listBackupFiles(paths.backupsDir);
   const latest = backupFiles[0];
   if (!latest) {
@@ -1010,8 +1062,10 @@ export async function validateLatestBackup({ db, paths }) {
   }
   let backup;
   let archiveFilePaths = null;
-  if (latest.name.endsWith(".zip")) {
-    const inspected = await inspectBackupZipBuffer(await fs.readFile(latest.filePath));
+  if (latest.name.endsWith(".zip") || latest.name.endsWith(".rtbackup")) {
+    const inspected = latest.name.endsWith(".rtbackup")
+      ? await inspectManagedBackupFile(latest.filePath, encryptionKey)
+      : await inspectBackupZipBuffer(await fs.readFile(latest.filePath));
     backup = inspected.backup;
     archiveFilePaths = inspected.archiveFilePaths;
   } else {
@@ -1028,8 +1082,10 @@ export async function validateLatestBackup({ db, paths }) {
     exportedAt: String(backup?.exportedAt || ""),
     schemaVersion: Number(backup?.schemaVersion || 0),
     documentMetadataCount: Array.isArray(backup?.data?.documents) ? backup.data.documents.length : 0,
+    encrypted: latest.name.endsWith(".rtbackup"),
   };
-  setMeta(db, "lastBackupValidation", JSON.stringify({ status: result.status, label: result.label, checkedAt: result.checkedAt }));
+  if (result.status === "valid" || result.status === "valid_with_warnings") setMeta(db, "lastRecoverableBackupAt", result.exportedAt || result.checkedAt);
+  setMeta(db, "lastBackupValidation", JSON.stringify({ status: result.status, label: result.label, checkedAt: result.checkedAt, backupName: latest.name }));
   return result;
 }
 
@@ -1041,6 +1097,8 @@ export async function getPersistenceHealth({ db, paths }) {
   const documentDiagnostics = await getDocumentStorageDiagnostics(db, paths.documentsDir);
   const backupFiles = await listBackupFiles(paths.backupsDir);
   const lastBackupValidation = parseJson(meta.lastBackupValidation, {});
+  const settingsRow = db.prepare("SELECT value FROM app_data WHERE key = 'settings'").get();
+  const backupPolicy = backupPolicyFromSettings(parseJson(settingsRow?.value, {}));
 
   return {
     persistenceAvailable: true,
@@ -1053,12 +1111,16 @@ export async function getPersistenceHealth({ db, paths }) {
     structuredDataRecordCount: Object.values(collectionCounts).reduce((total, count) => total + Number(count || 0), 0),
     lastSaveAt: meta.lastSaveAt || "",
     lastBackupAt: meta.lastBackupAt || "",
+    lastRecoverableBackupAt: meta.lastRecoverableBackupAt || "",
     migrationStatus: meta[SQLITE_MIGRATION_META_KEY] ? "Migrated from Alpha localStorage data" : "SQLite ready",
     backupPath: paths.backupsDir,
     backupFolderExists: true,
     backupCount: backupFiles.length,
     mostRecentBackupSizeBytes: backupFiles[0]?.size || 0,
     mostRecentBackupName: backupFiles[0]?.name || "",
+    managedBackupsEncrypted: backupFiles[0]?.name?.endsWith(".rtbackup") || false,
+    backupIntervalDays: backupPolicy.intervalDays,
+    backupRetentionCount: backupPolicy.retentionCount,
     lastBackupValidationStatus: lastBackupValidation.status || "",
     lastBackupValidationLabel: lastBackupValidation.label || "",
     lastBackupValidationAt: lastBackupValidation.checkedAt || "",
@@ -1068,7 +1130,7 @@ export async function getPersistenceHealth({ db, paths }) {
   };
 }
 
-export async function createPersistenceService({ userDataPath, appVersion = "" }) {
+export async function createPersistenceService({ userDataPath, appVersion = "", backupEncryptionKey = null }) {
   const paths = getRentalTrackerDataPaths(userDataPath);
   await ensureRentalTrackerDataDirs(paths);
   const db = openRentalTrackerDatabase(paths.databasePath);
@@ -1090,13 +1152,13 @@ export async function createPersistenceService({ userDataPath, appVersion = "" }
       return readDocumentAsDataUrl(document, paths.documentsDir);
     },
     async saveAppData(payload) {
-      return saveAppDataToDatabase({ db, paths, backup: payload, appVersion });
+      return saveAppDataToDatabase({ db, paths, backup: payload, appVersion, encryptionKey: backupEncryptionKey });
     },
     async createRestorePoint(payload) {
-      return createRestorePointInDatabase({ db, paths, backup: payload, appVersion });
+      return createRestorePointInDatabase({ db, paths, backup: payload, appVersion, encryptionKey: backupEncryptionKey });
     },
     async importLegacyLocalStorageData(payload) {
-      return importLegacyLocalStorageData({ db, paths, payload, appVersion });
+      return importLegacyLocalStorageData({ db, paths, payload, appVersion, encryptionKey: backupEncryptionKey });
     },
     async exportBackup() {
       return exportBackupFromDatabase({ db, paths, appVersion });
@@ -1105,13 +1167,16 @@ export async function createPersistenceService({ userDataPath, appVersion = "" }
       return exportBackupArchiveFromDatabase({ db, paths, appVersion });
     },
     async importBackupArchive(archiveBuffer) {
-      return importBackupArchiveToDatabase({ db, paths, archiveBuffer, appVersion });
+      return importBackupArchiveToDatabase({ db, paths, archiveBuffer, appVersion, encryptionKey: backupEncryptionKey });
     },
     async getHealth() {
-      return getPersistenceHealth({ db, paths });
+      return {
+        ...(await getPersistenceHealth({ db, paths })),
+        managedBackupEncryptionAvailable: Buffer.from(backupEncryptionKey || []).length === 32,
+      };
     },
     async validateLatestBackup() {
-      return validateLatestBackup({ db, paths });
+      return validateLatestBackup({ db, paths, encryptionKey: backupEncryptionKey });
     },
     close() {
       db.close();

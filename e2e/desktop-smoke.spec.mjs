@@ -356,3 +356,29 @@ test("packaged desktop gives each Tax Center mode one clear job", async () => {
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });
+
+test("packaged desktop creates an encrypted verified restore point", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-backup-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+
+  try {
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByRole("button", { name: /Data & Backup/ }).click();
+    await page.getByRole("button", { name: "Expand", exact: true }).click();
+    await page.getByRole("button", { name: "Create restore point", exact: true }).click();
+
+    await expect.poll(async () => {
+      const result = await page.evaluate(async () => window.desktopPersistence?.getHealth?.());
+      return result?.managedBackupsEncrypted;
+    }).toBe(true);
+    await expect.poll(async () => {
+      const result = await page.evaluate(async () => window.desktopPersistence?.getHealth?.());
+      return Boolean(result?.lastRecoverableBackupAt);
+    }).toBe(true);
+    await expect(page.getByText("Protection: OS-encrypted", { exact: true })).toBeVisible();
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});

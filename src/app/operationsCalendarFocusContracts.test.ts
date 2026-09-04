@@ -28,7 +28,9 @@ test("Operations Calendar smart checks review the ledger and can be marked inten
   assert.match(calendarSource, /buildRecurringExpenseChecks/);
   assert.match(calendarSource, /setSearch\(item\.searchText \|\| ""\)/);
   assert.match(calendarSource, /recurringExpenseCheckAcknowledgements/);
-  assert.match(calendarSource, /Intentional for now/);
+  assert.match(calendarSource, /Intentional/);
+  assert.match(calendarSource, /Snooze 7 days/);
+  assert.match(calendarSource, /Show handled/);
   assert.match(calendarSource, /No transaction was created/);
 });
 

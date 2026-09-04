@@ -8,8 +8,8 @@ This app is not a tax filing product. Keep your own backups and confirm tax fili
 
 - `Dashboard`: status-first rental summary, urgent review counts, compact previews, and setup attention only while setup needs work.
 - `Review Center`: one place for transaction, document, asset, maintenance, lease, tenant-ledger, loan, and Tax Center cleanup, with what/why/fix guidance, safe fix-in-place actions, and loan year-end 1098/escrow review fields.
-- `Operations Calendar`: agenda and full month views for rent, lease lifecycle, maintenance, document, recurring, planning, loan, and Smart Check dates, with selectable day details, month jumping, and a reversible Monthly Close review for accounting and operational gaps.
-- `Ledger` and `Add Transaction`: transaction entry, bank import, repeated-vendor templates, mileage support, reconciliation, and clear handling for owner draws, contributions, transfers, principal, escrow, and deposits.
+- `Operations Calendar`: agenda and full month views for rent, lease lifecycle, maintenance, document, recurring, planning, loan, backup, and Smart Check dates, with reversible Done, Snooze, Waiting, and Intentional follow-up states plus a reversible Monthly Close review.
+- `Ledger` and `Add Transaction`: transaction entry, bank import, repeated-vendor templates, mileage support, statement-level balance reconciliation, and clear handling for owner draws, contributions, transfers, principal, escrow, and deposits.
 - `Documents`: OCR-backed document inbox, guided Add bill from document flow, expense/work-order draft review, source-record links, supporting-only files, optional AI document analysis, and an optional privately deployed Mobile Companion inbox with ordered multi-photo documents and an automatically refreshed desktop waiting badge.
 - `Properties`, `Leases`, `Maintenance`, `Assets`, and `Loans`: source records for valuation history, property documents, occupancy, tenant ledger readiness, work-order accounting handoff, depreciation support, and loan payment entry. Property value is updated from Properties and read by Loans for LTV.
 - `Tax Center`: Overview landing tab, preparer-facing Schedule E summaries, click-through source rows, depreciation and loan support, final tax packet handoff, and optional owner-reporting tools under Tools.
@@ -78,7 +78,7 @@ The Mobile Companion is off by default for new installs. Users who want mobile c
 
 ## Backups And Validation
 
-The desktop app can create local restore points and ZIP backups containing `backup.json` plus embedded document files. Backup validation checks the latest managed backup before restore and reports `valid`, `valid_with_warnings`, or `invalid`.
+The desktop app creates scheduled managed restore points and portable ZIP exports containing `backup.json` plus embedded document files. Managed restore points are read back and validated immediately; when OS-backed encryption is available, they are encrypted with a local key that is itself protected by the operating system. Portable ZIP exports remain unencrypted for cross-device recovery and should be stored securely.
 
 Settings > Data & Backup includes controls for:
 

@@ -13,6 +13,7 @@ import {
   ListTodo,
   ReceiptText,
   Repeat2,
+  ShieldCheck,
 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -20,12 +21,15 @@ import { Card, CardContent } from "../../components/ui/card";
 import {
   bucketOperationsCalendarItems,
   buildOperationsCalendarItems,
+  applyOperationsFollowUps,
+  operationsFollowUpRecord,
   selectOperationsCalendarItems,
 } from "../../domain/operationsCalendar.ts";
 import { buildRecurringExpenseChecks } from "../../domain/recurringExpenseChecks.ts";
 import { daysUntil, formatDaysLeft } from "../../app/dateHelpers.js";
 import { MonthlyClosePanel } from "./MonthlyClosePanel.jsx";
 import { OperationsMonthView } from "./OperationsMonthView.jsx";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 
 const SOURCE_META = {
   rent: { label: "Rent", icon: ReceiptText, tone: "border-rose-200 bg-rose-50 text-rose-700" },
@@ -36,6 +40,7 @@ const SOURCE_META = {
   smart_check: { label: "Smart check", icon: BellRing, tone: "border-amber-200 bg-amber-50 text-amber-700" },
   planning: { label: "Planning", icon: ListTodo, tone: "border-purple-200 bg-purple-50 text-purple-700" },
   loan: { label: "Loan", icon: Landmark, tone: "border-sky-200 bg-sky-50 text-sky-700" },
+  backup: { label: "Backup", icon: ShieldCheck, tone: "border-emerald-200 bg-emerald-50 text-emerald-700" },
 };
 
 const BUCKET_META = {
@@ -58,10 +63,29 @@ function actionLabelForSource(source) {
   if (source === "recurring") return "Open transactions";
   if (source === "smart_check") return "Review transactions";
   if (source === "planning") return "Open action plan";
+  if (source === "backup") return "Open backup settings";
   return "Open loans";
 }
 
-function OperationsRow({ item, propertyNameById, todayIso, onOpen, onAcknowledge }) {
+function FollowUpSelect({ item, onFollowUp }) {
+  if (item.role === "milestone") return null;
+  return (
+    <Select value={item.followUpStatus || "open"} onValueChange={(value) => onFollowUp(item, value)}>
+      <SelectTrigger className="h-9 w-36 bg-white text-xs" aria-label={`Follow-up status for ${item.title}`}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="open">Open</SelectItem>
+        <SelectItem value="done">Done</SelectItem>
+        <SelectItem value="snoozed">Snooze 7 days</SelectItem>
+        <SelectItem value="waiting">Waiting</SelectItem>
+        <SelectItem value="intentional">Intentional</SelectItem>
+      </SelectContent>
+    </Select>
+  );
+}
+
+function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp }) {
   const meta = SOURCE_META[item.source] || SOURCE_META.planning;
   const Icon = meta.icon;
   const propertyLabel = propertyNameById[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide");
@@ -84,19 +108,19 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onAcknowledge
               <div className="font-semibold text-slate-900">{item.title}</div>
               <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{formatDaysLeft(days)}</Badge>
               <Badge variant="outline" className="bg-white text-[11px]">{meta.label}</Badge>
+              {item.followUpStatus ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus}</Badge> : null}
             </div>
             <div className="mt-1 text-xs text-slate-600">{item.detail}</div>
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
               <span>{formatDate(item.date)}</span>
+              {item.originalDate && item.originalDate !== item.date ? <span>Originally {formatDate(item.originalDate)}</span> : null}
               <span>{propertyLabel}</span>
               {item.unit ? <span>{item.unit}</span> : null}
             </div>
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2">
-          {item.source === "smart_check" ? (
-            <Button size="sm" variant="outline" onClick={() => onAcknowledge(item)}>Intentional for now</Button>
-          ) : null}
+          <FollowUpSelect item={item} onFollowUp={onFollowUp} />
           <Button size="sm" variant="secondary" onClick={() => onOpen(item)}>
             {actionLabelForSource(item.source)}
           </Button>
@@ -106,7 +130,7 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onAcknowledge
   );
 }
 
-function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen, onAcknowledge }) {
+function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen, onFollowUp }) {
   const meta = BUCKET_META[bucketKey];
   const Icon = meta.icon;
   return (
@@ -124,7 +148,7 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
         </div>
         <div className="mt-3 space-y-2">
           {items.length > 0 ? items.map((item) => (
-            <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} onAcknowledge={onAcknowledge} />
+            <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} onFollowUp={onFollowUp} />
           )) : (
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Nothing due in this window.</div>
           )}
@@ -170,13 +194,14 @@ export function OperationsCalendarWorkspace({
   const [sourceFilter, setSourceFilter] = useState("all");
   const [workspaceMode, setWorkspaceMode] = useState("agenda");
   const [selectedMonth, setSelectedMonth] = useState(todayIso.slice(0, 7));
+  const [showHandled, setShowHandled] = useState(false);
   const recurringExpenseChecks = useMemo(() => buildRecurringExpenseChecks({
     acknowledgements: appSettings.recurringExpenseCheckAcknowledgements,
     recurringTemplates,
     todayIso,
     transactions,
   }), [appSettings.recurringExpenseCheckAcknowledgements, recurringTemplates, todayIso, transactions]);
-  const allItems = useMemo(() => buildOperationsCalendarItems({
+  const rawItems = useMemo(() => buildOperationsCalendarItems({
     documents,
     leaseAutomationReminders,
     leases,
@@ -186,7 +211,17 @@ export function OperationsCalendarWorkspace({
     recurringTemplates,
     recurringExpenseChecks,
     workOrders,
-  }), [appSettings.operationsLeaseReviewDaysBefore, documents, leaseAutomationReminders, leases, loans, planningActionItems, recurringExpenseChecks, recurringTemplates, workOrders]);
+    backup: {
+      lastRecoverableBackupAt: persistenceHealth?.lastRecoverableBackupAt,
+      intervalDays: appSettings.backupIntervalDays,
+      todayIso,
+    },
+  }), [appSettings.backupIntervalDays, appSettings.operationsLeaseReviewDaysBefore, documents, leaseAutomationReminders, leases, loans, persistenceHealth?.lastRecoverableBackupAt, planningActionItems, recurringExpenseChecks, recurringTemplates, todayIso, workOrders]);
+  const allItems = useMemo(() => applyOperationsFollowUps(
+    rawItems,
+    appSettings.operationsFollowUps,
+    { showHandled },
+  ), [appSettings.operationsFollowUps, rawItems, showHandled]);
   const horizonItems = useMemo(() => selectOperationsCalendarItems(allItems, {
     horizonDays,
     propertyFilter,
@@ -262,6 +297,11 @@ export function OperationsCalendarWorkspace({
       setNotice(`Showing Planning action item ${item.title}.`);
       return;
     }
+    if (item.source === "backup") {
+      setView("settings");
+      setNotice("Open Data & Backup to create or validate a recoverable restore point.");
+      return;
+    }
     setView("loans");
     setNotice(`Showing loans for ${item.title}.`);
   };
@@ -272,6 +312,24 @@ export function OperationsCalendarWorkspace({
       [item.sourceRecordId]: todayIso,
     });
     setNotice(`${item.searchText || item.title} marked intentional through today. The check will resume for the next expected cycle.`);
+  };
+
+  const updateFollowUp = (item, status) => {
+    if (status === "intentional" && item.source === "smart_check") {
+      acknowledgeSmartCheck(item);
+      return;
+    }
+    const next = { ...appSettings.operationsFollowUps };
+    if (status === "open") {
+      delete next[item.id];
+      setSetting("operationsFollowUps", next);
+      setNotice(`${item.title} reopened.`);
+      return;
+    }
+    next[item.id] = operationsFollowUpRecord(item, status, todayIso, 7);
+    setSetting("operationsFollowUps", next);
+    const label = status === "snoozed" ? "snoozed for 7 days" : `marked ${status}`;
+    setNotice(`${item.title} ${label}. The source record was not changed.`);
   };
 
   const openMonthlyCloseIssue = (kind) => {
@@ -313,6 +371,10 @@ export function OperationsCalendarWorkspace({
   };
 
   const acknowledgedCheckCount = Object.keys(appSettings.recurringExpenseCheckAcknowledgements || {}).length;
+  const handledCount = rawItems.filter((item) => {
+    const status = appSettings.operationsFollowUps?.[item.id]?.status;
+    return status === "done" || status === "intentional";
+  }).length;
 
   return (
     <div className="space-y-4">
@@ -373,6 +435,11 @@ export function OperationsCalendarWorkspace({
                   Reset intentional checks ({acknowledgedCheckCount})
                 </Button>
               ) : null}
+              {handledCount > 0 ? (
+                <Button size="sm" variant={showHandled ? "default" : "ghost"} onClick={() => setShowHandled((value) => !value)}>
+                  {showHandled ? "Hide handled" : `Show handled (${handledCount})`}
+                </Button>
+              ) : null}
               {workspaceMode === "agenda" ? <>
                 <span className="mr-1 text-xs font-medium text-slate-500">Horizon</span>
                 {[30, 60, 90, 180].map((days) => (
@@ -408,7 +475,7 @@ export function OperationsCalendarWorkspace({
           workOrders={workOrders}
         />
       ) : workspaceMode === "month" ? (
-        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} propertyNameById={propertyNameById} todayIso={todayIso} />
+        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} onFollowUp={updateFollowUp} propertyNameById={propertyNameById} todayIso={todayIso} />
       ) : scopedItems.length === 0 ? (
         <Card className="border-emerald-200 bg-emerald-50 shadow-none">
           <CardContent className="flex items-start gap-3 p-5">
@@ -422,7 +489,7 @@ export function OperationsCalendarWorkspace({
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {Object.keys(BUCKET_META).map((bucketKey) => (
-            <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onAcknowledge={acknowledgeSmartCheck} />
+            <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} />
           ))}
         </div>
       )}

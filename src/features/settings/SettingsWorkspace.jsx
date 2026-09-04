@@ -17,6 +17,7 @@ import {
   SETTINGS_TOOLTIPS,
   SIDEBAR_DEFAULT_OPTIONS,
 } from "../../store/appSettings.ts";
+import { buildBackupConfidence } from "../../domain/backupConfidence.ts";
 
 const SETTINGS_SECTION_CLASS = "rounded-xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-200/30";
 const SETTINGS_CARD_CLASS = "self-start rounded-lg border border-slate-200 bg-slate-50/60 p-3";
@@ -184,13 +185,19 @@ export function SettingsWorkspace({
     : "";
   const lastBackupLabel = formatDesktopUpdateDate(persistenceHealth?.lastBackupAt || currentDataStatus?.lastBackupAt || "") || autoBackupStatusLabel;
   const lastValidationLabel = backupValidationResult?.label || currentDataStatus?.lastValidationStatus || persistenceHealth?.lastBackupValidationLabel || "Not validated";
-  const backupCheckpointClass =
-    persistenceHealth?.lastBackupAt && (backupValidationResult?.status === "valid" || backupValidationResult?.status === "valid_with_warnings" || persistenceHealth?.lastBackupValidationStatus)
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : "border-amber-200 bg-amber-50 text-amber-900";
+  const backupConfidence = buildBackupConfidence({
+    lastBackupAt: persistenceHealth?.lastBackupAt || currentDataStatus?.lastBackupAt,
+    lastRecoverableBackupAt: persistenceHealth?.lastRecoverableBackupAt,
+    intervalDays: appSettings.backupIntervalDays,
+    encryptionAvailable: persistenceHealth?.managedBackupEncryptionAvailable,
+    latestEncrypted: persistenceHealth?.managedBackupsEncrypted,
+  });
+  const backupCheckpointClass = backupConfidence.healthy
+    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+    : "border-amber-200 bg-amber-50 text-amber-900";
   const workspaceSummary = `${appSettings.defaultView || "dashboard"} opens first`;
-  const backupTone = persistenceLastError || Number(currentDataStatus?.missingDocumentFileCount || 0) > 0 ? "amber" : persistenceHealth?.lastBackupAt ? "emerald" : "blue";
-  const backupSummary = persistenceHealth?.lastBackupAt ? "Restore point available" : "Create first restore point";
+  const backupTone = persistenceLastError || Number(currentDataStatus?.missingDocumentFileCount || 0) > 0 || !backupConfidence.healthy ? "amber" : "emerald";
+  const backupSummary = backupConfidence.healthy ? "Verified recoverable" : backupConfidence.label;
   const adminToolsSummary = aiDocumentCopilotReady ? "AI ready" : appSettings.aiDocumentCopilotEnabled ? "AI setup needed" : "Admin tools ready";
   const adminToolsTone = appSettings.aiDocumentCopilotEnabled && !aiDocumentCopilotReady ? "amber" : "slate";
 
@@ -1073,7 +1080,7 @@ export function SettingsWorkspace({
                     </div>
                   </div>
                   <Badge variant="secondary" className={backupCheckpointClass.includes("emerald") ? "!bg-emerald-100 !text-emerald-700" : "!bg-amber-100 !text-amber-800"}>
-                    {backupCheckpointClass.includes("emerald") ? "Ready" : "Needs backup"}
+                    {backupConfidence.label}
                   </Badge>
                 </div>
                 <div className="mt-3 grid gap-2 text-xs md:grid-cols-3">
@@ -1082,8 +1089,8 @@ export function SettingsWorkspace({
                     <div className="mt-0.5">{lastBackupLabel}</div>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-slate-700">
-                    <div className="font-medium text-slate-900">2. Validate</div>
-                    <div className="mt-0.5">{lastValidationLabel}</div>
+                    <div className="font-medium text-slate-900">2. Recoverable</div>
+                    <div className="mt-0.5">{formatDesktopUpdateDate(persistenceHealth?.lastRecoverableBackupAt || "") || lastValidationLabel}</div>
                   </div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-slate-700">
                     <div className="font-medium text-slate-900">3. Folder</div>
@@ -1112,6 +1119,15 @@ export function SettingsWorkspace({
                 ) : null}
                 {(backupValidationResult?.errors || []).length > 0 ? (
                   <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-2 text-xs text-rose-900">{backupValidationResult.errors.slice(0, 3).join(" ")}</div>
+                ) : null}
+                {!backupConfidence.healthy ? (
+                  <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                    {backupConfidence.status === "overdue"
+                      ? `The last verified recoverable backup is ${backupConfidence.overdueDays} day${backupConfidence.overdueDays === 1 ? "" : "s"} overdue.`
+                      : backupConfidence.status === "needs_encryption"
+                        ? "The newest restore point predates managed backup encryption. Create a restore point to replace it with an OS-protected copy."
+                        : "Create or validate a restore point before relying on it for recovery."}
+                  </div>
                 ) : null}
               </div>
 
@@ -1142,9 +1158,34 @@ export function SettingsWorkspace({
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Latest size: {Number(persistenceHealth?.mostRecentBackupSizeBytes || backupValidationResult?.mostRecentBackupSizeBytes || 0)} bytes</div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Last auto: {autoBackupStatusLabel}</div>
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Validated: {formatDesktopUpdateDate(backupValidationResult?.checkedAt || persistenceHealth?.lastBackupValidationAt || "") || "Not yet"}</div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Protection: {persistenceHealth?.managedBackupsEncrypted ? "OS-encrypted" : persistenceHealth?.managedBackupEncryptionAvailable ? "Ready after next backup" : "Unavailable"}</div>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-slate-600">Recoverable: {formatDesktopUpdateDate(persistenceHealth?.lastRecoverableBackupAt || "") || "Not confirmed"}</div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <Label className="text-xs text-slate-600">Automatic backup interval</Label>
+                    <Select value={String(appSettings.backupIntervalDays || 3)} onValueChange={(value) => setSetting("backupIntervalDays", Number(value))} disabled={!canManageDataAdmin}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Daily</SelectItem>
+                        <SelectItem value="3">Every 3 days</SelectItem>
+                        <SelectItem value="7">Weekly</SelectItem>
+                        <SelectItem value="14">Every 2 weeks</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-600">Restore points to keep</Label>
+                    <Select value={String(appSettings.backupRetentionCount || 12)} onValueChange={(value) => setSetting("backupRetentionCount", Number(value))} disabled={!canManageDataAdmin}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {[5, 8, 12, 20, 30].map((count) => <SelectItem key={count} value={String(count)}>{count} restore points</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="mt-3 rounded-md border border-blue-100 bg-blue-50 p-2 text-xs text-blue-900">
-                  Desktop keeps the newest 8 managed restore-point files. Automatic restore points are throttled to about weekly; manual restore points are created when you click Create restore point.
+                  Managed restore points are created on your schedule, read back immediately, and counted as recoverable only after validation. When Windows encryption is available, managed copies are encrypted; exported ZIP files remain portable and should be stored securely.
                 </div>
               </div>
             </div>

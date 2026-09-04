@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { buildCalendarMonthDays, shiftCalendarMonth } from "../../domain/operationsMonth.ts";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -14,6 +15,7 @@ const SOURCE_DOT = {
   smart_check: "bg-amber-500",
   planning: "bg-purple-500",
   loan: "bg-sky-500",
+  backup: "bg-emerald-500",
 };
 
 const SOURCE_LABEL = {
@@ -25,6 +27,7 @@ const SOURCE_LABEL = {
   smart_check: "Smart check",
   planning: "Planning",
   loan: "Loan",
+  backup: "Backup",
 };
 
 function monthLabel(month) {
@@ -38,7 +41,7 @@ function dayLabel(date) {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(parsed);
 }
 
-export function OperationsMonthView({ items, month, onMonthChange, onOpen, propertyNameById, todayIso }) {
+export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFollowUp, propertyNameById, todayIso }) {
   const days = useMemo(() => buildCalendarMonthDays(month), [month]);
   const [selectedDate, setSelectedDate] = useState(month === todayIso.slice(0, 7) ? todayIso : `${month}-01`);
   useEffect(() => {
@@ -108,16 +111,31 @@ export function OperationsMonthView({ items, month, onMonthChange, onOpen, prope
         {selectedItems.length ? (
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {selectedItems.map((item) => (
-              <button key={item.id} type="button" onClick={() => onOpen(item)} className="rounded-lg border border-slate-200 bg-white p-3 text-left hover:border-teal-300 hover:bg-teal-50/40">
+              <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3 text-left hover:border-teal-300 hover:bg-teal-50/40">
                 <div className="flex items-start gap-2">
                   <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${SOURCE_DOT[item.source] || "bg-slate-400"}`} />
                   <div className="min-w-0">
                     <div className="font-medium text-slate-900">{item.title}</div>
                     <div className="mt-1 text-xs text-slate-600">{item.detail}</div>
                     <div className="mt-1.5 text-[11px] font-medium text-slate-500">{SOURCE_LABEL[item.source] || "Calendar"} · {propertyNameById?.[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide")}{item.unit ? ` · ${item.unit}` : ""}{item.role === "milestone" ? " · Milestone" : ""}</div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => onOpen(item)}>Open source</Button>
+                      {item.role !== "milestone" ? (
+                        <Select value={item.followUpStatus || "open"} onValueChange={(value) => onFollowUp(item, value)}>
+                          <SelectTrigger className="h-9 w-36 text-xs" aria-label={`Follow-up status for ${item.title}`}><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="open">Open</SelectItem>
+                            <SelectItem value="done">Done</SelectItem>
+                            <SelectItem value="snoozed">Snooze 7 days</SelectItem>
+                            <SelectItem value="waiting">Waiting</SelectItem>
+                            <SelectItem value="intentional">Intentional</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         ) : <div className="mt-3 rounded-lg border border-dashed border-slate-200 bg-white px-3 py-4 text-sm text-slate-500">Select another date or adjust the source and property filters above.</div>}

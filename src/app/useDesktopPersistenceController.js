@@ -12,7 +12,6 @@ import {
 } from "../lib/appSupport.ts";
 import {
   APP_DATA_STORAGE_KEY,
-  AUTO_BACKUP_INTERVAL_MS,
   AUTO_BACKUP_MAX_ENTRIES,
   AUTO_BACKUP_META_STORAGE_KEY,
   AUTO_BACKUP_STORAGE_KEY,
@@ -1020,21 +1019,22 @@ export function useDesktopPersistenceController({
 
     const nowMs = Date.now();
     const lastBackupMs = Date.parse(lastAutoBackupAt || "");
-    if (!Number.isNaN(lastBackupMs) && nowMs - lastBackupMs < AUTO_BACKUP_INTERVAL_MS) {
+    const configuredIntervalMs = Math.max(1, Number(appSettings.backupIntervalDays || 3)) * 24 * 60 * 60 * 1000;
+    if (!Number.isNaN(lastBackupMs) && nowMs - lastBackupMs < configuredIntervalMs) {
       return;
     }
 
     const snapshot = buildBackupSnapshot();
     try {
       const existingBackups = readStoredAutoBackups(window.localStorage.getItem(AUTO_BACKUP_STORAGE_KEY));
-      const nextBackups = [snapshot, ...existingBackups].slice(0, AUTO_BACKUP_MAX_ENTRIES);
+      const nextBackups = [snapshot, ...existingBackups].slice(0, Math.max(3, Number(appSettings.backupRetentionCount || AUTO_BACKUP_MAX_ENTRIES)));
       window.localStorage.setItem(AUTO_BACKUP_STORAGE_KEY, JSON.stringify(nextBackups));
       window.localStorage.setItem(AUTO_BACKUP_META_STORAGE_KEY, JSON.stringify({ lastAutoBackupAt: snapshot.exportedAt }));
       setLastAutoBackupAt(snapshot.exportedAt);
     } catch {
       // Ignore storage write errors.
     }
-  }, [buildBackupSnapshot, hasAnyData, lastAutoBackupAt]);
+  }, [appSettings.backupIntervalDays, appSettings.backupRetentionCount, buildBackupSnapshot, hasAnyData, lastAutoBackupAt]);
 
   return {
     applyLeaseAutomation,

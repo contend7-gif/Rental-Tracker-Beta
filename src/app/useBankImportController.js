@@ -8,6 +8,7 @@ import {
 } from "../domain/bankImport.ts";
 import { BANK_IMPORT_MATCH_RULE_OPTIONS } from "./bankImportShared.js";
 import { buildTransactionVendorMemory, findTransactionVendorMemoryForDescription } from "../features/transactions/transactionVendorMemory.js";
+import { buildBankReconciliationSummary, createBankReconciliationRecord, inferBankStatementPeriod } from "../domain/bankReconciliation.ts";
 
 const BANK_IMPORT_TYPE_OPTIONS = ["Income", "Expense", "Transfer", "Owner Contribution", "Owner Draw"];
 
@@ -31,6 +32,8 @@ export function useBankImportController({
   transactionById,
   transactions,
   units,
+  appSettings,
+  setSetting,
 }) {
   const bankImportInputRef = useRef(null);
   const [bankImportFileName, setBankImportFileName] = useState("");
@@ -46,6 +49,12 @@ export function useBankImportController({
   const [bankImportReviewOpen, setBankImportReviewOpen] = useState(false);
   const [bankImportReviewDrafts, setBankImportReviewDrafts] = useState({});
   const [bankImportMatchRule, setBankImportMatchRule] = useState("standard");
+  const [bankReconciliationDraft, setBankReconciliationDraft] = useState({
+    periodStart: "",
+    periodEnd: "",
+    openingBalance: "",
+    closingBalance: "",
+  });
 
   const bankImportUnitOptions = useMemo(
     () => buildValidBankImportUnits(bankImportDefaults.propertyId, units),
@@ -76,6 +85,15 @@ export function useBankImportController({
     [activeTx],
   );
   const getBankImportRowVendorMemory = (row) => findTransactionVendorMemoryForDescription(row?.description || "", bankImportVendorMemory);
+  const bankReconciliationSummary = useMemo(() => buildBankReconciliationSummary({
+    rows: bankImportRows,
+    skippedRows: bankImportSkippedRows,
+    ...bankReconciliationDraft,
+  }), [bankImportRows, bankImportSkippedRows, bankReconciliationDraft]);
+  const bankReconciliationRecords = useMemo(
+    () => Object.values(appSettings.bankReconciliationRecords || {}).sort((left, right) => String(right.closedAt).localeCompare(String(left.closedAt))),
+    [appSettings.bankReconciliationRecords],
+  );
 
   useEffect(() => {
     const fallbackPropertyId = propertyFilter !== "all" ? propertyFilter : (properties[0]?.id || "");
@@ -110,6 +128,7 @@ export function useBankImportController({
     setBankImportFileName("");
     setBankImportReviewDrafts({});
     setBankImportReviewOpen(false);
+    setBankReconciliationDraft({ periodStart: "", periodEnd: "", openingBalance: "", closingBalance: "" });
   };
 
   const openBankImportPicker = () => {
@@ -146,6 +165,11 @@ export function useBankImportController({
       setBankImportMatches(matches);
       setBankImportSkippedRows(parsed.skippedRows);
       setBankImportFileName(file.name || "bank-statement");
+      setBankReconciliationDraft({
+        ...inferBankStatementPeriod(rowsWithImportStatus),
+        openingBalance: "",
+        closingBalance: "",
+      });
 
       const alreadyImportedCount = rowsWithImportStatus.filter((row) => Boolean(row.importedTransactionId)).length;
       const matchCount = rowsWithImportStatus.filter((row) => !row.importedTransactionId && Boolean(matches[row.id])).length;
@@ -450,6 +474,63 @@ export function useBankImportController({
     setNotice(`Imported and bank matched ${rowsToImport.length} reviewed bank row${rowsToImport.length === 1 ? "" : "s"}.`);
   };
 
+  const updateBankReconciliationDraft = (patch) => {
+    setBankReconciliationDraft((previous) => ({ ...previous, ...patch }));
+  };
+
+  const closeBankReconciliation = () => {
+    if (!requirePermission("reconcile_records", "This access profile cannot close statement reconciliations.")) return;
+    if (!bankReconciliationSummary.canClose) {
+      setNotice(bankReconciliationSummary.issues[0] || "Finish the statement reconciliation before closing it.");
+      return;
+    }
+    const closedAt = new Date().toISOString();
+    const id = `bank-reconciliation-${Date.now()}`;
+    const record = createBankReconciliationRecord({
+      id,
+      fileName: bankImportFileName,
+      accountLabel: bankImportDefaults.paidFrom,
+      propertyId: bankImportDefaults.propertyId,
+      closedAt,
+      summary: bankReconciliationSummary,
+    });
+    setSetting("bankReconciliationRecords", {
+      ...appSettings.bankReconciliationRecords,
+      [id]: record,
+    });
+    addAuditEntry({
+      action: "close",
+      entityType: "bank-reconciliation",
+      entityId: id,
+      propertyId: bankImportDefaults.propertyId || undefined,
+      unit: bankImportDefaults.unit || undefined,
+      summary: `Closed ${bankImportFileName || "bank statement"}.`,
+      details: `${record.periodStart} through ${record.periodEnd} | ${record.rowCount} rows | Difference $${record.difference.toFixed(2)}.`,
+      category: "workflow",
+    });
+    setNotice("Statement reconciled and closed with a $0.00 difference.");
+    clearBankImportPreview();
+  };
+
+  const reopenBankReconciliation = (id) => {
+    if (!requirePermission("reconcile_records", "This access profile cannot reopen statement reconciliations.")) return;
+    const record = appSettings.bankReconciliationRecords?.[id];
+    if (!record) return;
+    const next = { ...appSettings.bankReconciliationRecords };
+    delete next[id];
+    setSetting("bankReconciliationRecords", next);
+    addAuditEntry({
+      action: "reopen",
+      entityType: "bank-reconciliation",
+      entityId: id,
+      propertyId: record.propertyId || undefined,
+      summary: `Reopened ${record.fileName || "bank statement"} reconciliation.`,
+      details: `${record.periodStart} through ${record.periodEnd}. The ledger transactions remain bank matched.`,
+      category: "workflow",
+    });
+    setNotice("Reconciliation snapshot reopened. Existing transaction matches were not changed.");
+  };
+
   return {
     bankImportDefaults,
     bankImportFileName,
@@ -467,18 +548,24 @@ export function useBankImportController({
     bankImportTypeOptions: BANK_IMPORT_TYPE_OPTIONS,
     bankImportUnitOptions,
     bankImportUnmatchedRows,
+    bankReconciliationDraft,
+    bankReconciliationRecords,
+    bankReconciliationSummary,
     applyBankImportVendorMemoryToDraft,
     applyBankImportMatches,
     buildBankImportReviewDraft,
     clearBankImportPreview,
+    closeBankReconciliation,
     importReviewedBankRows,
     onBankImportInputChange,
     onBankImportMatchRuleChange,
     openBankImportPicker,
     openBankImportReview,
+    reopenBankReconciliation,
     setBankImportDefaults,
     setBankImportReviewOpen,
     getBankImportRowVendorMemory,
     updateBankImportReviewDraft,
+    updateBankReconciliationDraft,
   };
 }

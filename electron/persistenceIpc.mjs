@@ -1,6 +1,7 @@
 import { ipcMain, shell } from "electron";
 import { createPersistenceService, setMeta } from "./db.mjs";
 import { createSecretStore } from "./secrets.mjs";
+import { randomBytes } from "node:crypto";
 
 export const PERSISTENCE_CHANNELS = {
   isAvailable: "persistence:is-available",
@@ -72,10 +73,24 @@ async function safely(label, servicePromise, recordDesktopHealthEvent, operation
   }
 }
 
-export function registerPersistenceIpc({ app, recordDesktopHealthEvent } = {}) {
+async function resolveManagedBackupEncryptionKey(secretStore) {
+  if (!secretStore?.isEncryptionAvailable?.()) return null;
+  const secretKey = "backup.managedEncryptionKey";
+  const current = await secretStore.getSecret(secretKey);
+  if (current?.hasValue) {
+    const decoded = Buffer.from(String(current.value || ""), "base64");
+    if (decoded.length === 32) return decoded;
+  }
+  const created = randomBytes(32);
+  const saved = await secretStore.setSecret(secretKey, created.toString("base64"));
+  return saved?.ok === false ? null : created;
+}
+
+export function registerPersistenceIpc({ app, recordDesktopHealthEvent, secretStore } = {}) {
   const appVersion = typeof app?.getVersion === "function" ? app.getVersion() : "";
   const userDataPath = typeof app?.getPath === "function" ? app.getPath("userData") : "";
-  const servicePromise = createPersistenceService({ userDataPath, appVersion });
+  const servicePromise = resolveManagedBackupEncryptionKey(secretStore)
+    .then((backupEncryptionKey) => createPersistenceService({ userDataPath, appVersion, backupEncryptionKey }));
 
   ipcMain.handle(PERSISTENCE_CHANNELS.isAvailable, async () =>
     safely("Persistence availability check failed.", servicePromise, recordDesktopHealthEvent, async (service) => ({

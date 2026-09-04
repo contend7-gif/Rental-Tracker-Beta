@@ -7,7 +7,7 @@ test("settings workspace exposes compact tab summaries and backup controls", () 
 
   assert.doesNotMatch(source, /CardTitle>Settings<\/CardTitle>/);
   assert.doesNotMatch(source, /SettingsStatusTile/);
-  assert.match(source, /Restore point available/);
+  assert.match(source, /Verified recoverable/);
   assert.match(source, /Daily preferences/);
   assert.match(source, /Restore points/);
   assert.match(source, /Admin tools/);
@@ -23,7 +23,8 @@ test("settings workspace exposes compact tab summaries and backup controls", () 
   assert.match(source, /Show folder paths/);
   assert.match(source, /Show recovery tools/);
   assert.match(source, /Show checklist/);
-  assert.match(source, /Desktop keeps the newest 8 managed restore-point files/);
+  assert.match(source, /counted as recoverable only after validation/);
+  assert.match(source, /OS-encrypted/);
   assert.match(source, /Recovery tools/);
   assert.match(source, /Hidden for now\. Expand when you need to adjust these settings\./);
   assert.match(source, /title="Mobile companion"/);

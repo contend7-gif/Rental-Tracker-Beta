@@ -103,6 +103,30 @@ test("monthly close snapshots and optional operations notifications are sanitize
   assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, operationsLeaseReviewDaysBefore: "bad" }).operationsLeaseReviewDaysBefore, 60);
 });
 
+test("operations follow-ups, reconciliations, and backup policy are sanitized", () => {
+  const updated = sanitizeAppSettings({
+    ...DEFAULT_APP_SETTINGS,
+    backupIntervalDays: 0,
+    backupRetentionCount: 99,
+    operationsFollowUps: {
+      "maintenance:wo-1:2026-09-01": { status: "snoozed", originalDate: "2026-09-01", snoozedUntil: "2026-09-10", updatedAt: "2026-09-03T12:00:00.000Z" },
+      unsafe: { status: "snoozed", originalDate: "bad", snoozedUntil: "later", updatedAt: "today" },
+    },
+    bankReconciliationRecords: {
+      "bank-reconciliation-1": {
+        id: "bank-reconciliation-1", fileName: "august.ofx", accountLabel: "Duplex bank", propertyId: "p1",
+        periodStart: "2026-08-01", periodEnd: "2026-08-31", openingBalance: 100, closingBalance: 125,
+        activityTotal: 25, difference: 0, rowCount: 2, resolvedCount: 2, skippedRows: 0,
+        closedAt: "2026-09-03T12:00:00.000Z", signature: "recon-1234abcd",
+      },
+    },
+  });
+  assert.equal(updated.backupIntervalDays, 1);
+  assert.equal(updated.backupRetentionCount, 30);
+  assert.equal(Object.keys(updated.operationsFollowUps).length, 1);
+  assert.equal(updated.bankReconciliationRecords["bank-reconciliation-1"].difference, 0);
+});
+
 test("settings saved feedback is shown and debounced", async () => {
   const events: boolean[] = [];
   const notifier = createSettingsSavedNotifier((isVisible) => events.push(isVisible), 120);

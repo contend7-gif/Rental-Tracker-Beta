@@ -1,14 +1,14 @@
 import { useEffect, useMemo } from "react";
 import type { AppSettings } from "../store/appSettings.ts";
 import type { DocumentItem, Lease, Loan, RecurringTemplate, Transaction, WorkOrder } from "../models.ts";
-import { buildOperationsCalendarItems, type PlanningCalendarAction } from "../domain/operationsCalendar.ts";
+import { applyOperationsFollowUps, buildOperationsCalendarItems, type PlanningCalendarAction } from "../domain/operationsCalendar.ts";
 import { buildOperationsNotificationDigest } from "../domain/operationsNotifications.ts";
 import { buildRecurringExpenseChecks } from "../domain/recurringExpenseChecks.ts";
 import type { LeaseAutomationReminder } from "../domain/leaseAutomation.ts";
 import { OPERATIONS_NOTIFICATION_STORAGE_KEY } from "./appStorageKeys.js";
 
 type Args = {
-  appSettings: Pick<AppSettings, "operationsDesktopNotifications" | "operationsLeaseReviewDaysBefore" | "recurringExpenseCheckAcknowledgements">;
+  appSettings: Pick<AppSettings, "operationsDesktopNotifications" | "operationsLeaseReviewDaysBefore" | "recurringExpenseCheckAcknowledgements" | "operationsFollowUps">;
   isDataHydrated: boolean;
   todayIso: string;
   transactions: Transaction[];
@@ -55,7 +55,7 @@ export function useOperationsDesktopNotifications(args: Args) {
     todayIso: args.todayIso,
     transactions: args.transactions,
   }), [args.appSettings.recurringExpenseCheckAcknowledgements, args.recurringTemplates, args.todayIso, args.transactions]);
-  const items = useMemo(() => buildOperationsCalendarItems({
+  const items = useMemo(() => applyOperationsFollowUps(buildOperationsCalendarItems({
     documents: args.documents,
     leaseAutomationReminders: args.leaseAutomationReminders,
     leases: args.leases,
@@ -65,7 +65,7 @@ export function useOperationsDesktopNotifications(args: Args) {
     recurringTemplates: args.recurringTemplates,
     recurringExpenseChecks,
     workOrders: args.workOrders,
-  }), [args.appSettings.operationsLeaseReviewDaysBefore, args.documents, args.leaseAutomationReminders, args.leases, args.loans, args.planningActionItems, args.recurringTemplates, recurringExpenseChecks, args.workOrders]);
+  }), args.appSettings.operationsFollowUps), [args.appSettings.operationsFollowUps, args.appSettings.operationsLeaseReviewDaysBefore, args.documents, args.leaseAutomationReminders, args.leases, args.loans, args.planningActionItems, args.recurringTemplates, recurringExpenseChecks, args.workOrders]);
 
   useEffect(() => {
     if (!args.appSettings.operationsDesktopNotifications || !args.isDataHydrated || typeof window === "undefined") return;

@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   bucketOperationsCalendarItems,
+  applyOperationsFollowUps,
   buildOperationsCalendarItems,
+  operationsFollowUpRecord,
   selectOperationsCalendarItems,
 } from "./operationsCalendar.ts";
 
@@ -23,6 +25,7 @@ test("operations calendar derives dated work without creating duplicate task rec
     recurringExpenseChecks: [{ patternKey: "repeat-1234abcd", reviewDate: "2026-09-01", expectedDate: "2026-08-25", lastRecordedDate: "2026-07-25", propertyId: "p1", unit: "Shared", vendor: "Utility Co", category: "Utilities", occurrenceCount: 4 }],
     planningActionItems: [{ id: "pa-1", title: "Review bids", status: "in_progress", priority: "high", dueDate: "2026-09-10", propertyId: "p1" }],
     loans: [{ id: "loan-1", propertyId: "p1", lender: "Bank", loanType: "Primary Mortgage", lienPosition: 1, originatedOn: "2024-01-01", rate: 6, originalBalance: 100000, currentBalance: 99000, scheduledPI: 700, scheduledEscrow: 200, scheduledMortgageInsurance: 0, defaultExtraPrincipal: 0, interestYTD: 0, principalYTD: 0, escrowYTD: 0, nextPayment: "2026-09-01" }],
+    backup: { lastRecoverableBackupAt: "2026-08-30T12:00:00.000Z", intervalDays: 3, todayIso: "2026-09-01" },
   });
 
   assert.ok(items.some((item) => item.eventKind === "lease_start" && item.sourceRecordId === "lease-1"));
@@ -31,6 +34,20 @@ test("operations calendar derives dated work without creating duplicate task rec
   assert.ok(items.some((item) => item.eventKind === "lease_start" && item.sourceRecordId === "lease-open"));
   assert.equal(items.some((item) => item.sourceRecordId === "lease-open" && item.eventKind !== "lease_start"), false);
   assert.equal(items.find((item) => item.source === "smart_check")?.searchText, "Utility Co");
+  assert.equal(items.find((item) => item.source === "backup")?.date, "2026-09-02");
+});
+
+test("operations follow-ups hide handled items, move snoozes, and preserve source dates", () => {
+  const items = [{ id: "maintenance:wo-1:2026-09-01", source: "maintenance" as const, sourceRecordId: "wo-1", date: "2026-09-01", title: "Repair", detail: "", propertyId: "p1" }];
+  const snoozed = operationsFollowUpRecord(items[0], "snoozed", "2026-09-03", 7);
+  const visible = applyOperationsFollowUps(items, { [items[0].id]: snoozed });
+  assert.equal(visible[0].date, "2026-09-10");
+  assert.equal(visible[0].originalDate, "2026-09-01");
+  assert.equal(visible[0].followUpStatus, "snoozed");
+
+  const done = { ...snoozed, status: "done" as const };
+  assert.equal(applyOperationsFollowUps(items, { [items[0].id]: done }).length, 0);
+  assert.equal(applyOperationsFollowUps(items, { [items[0].id]: done }, { showHandled: true })[0].followUpStatus, "done");
 });
 
 test("lease calendar includes lifecycle milestones and adapts review timing for short terms", () => {

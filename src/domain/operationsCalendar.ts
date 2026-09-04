@@ -8,6 +8,7 @@ import type {
 import type { LeaseAutomationReminder } from "./leaseAutomation.ts";
 import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
 import { normalizeLeaseAgreementType } from "./leaseTerms.js";
+import type { OperationsFollowUpRecord } from "../store/appSettings.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -19,7 +20,8 @@ export type OperationsCalendarSource =
   | "recurring"
   | "smart_check"
   | "planning"
-  | "loan";
+  | "loan"
+  | "backup";
 
 export type OperationsCalendarItem = {
   id: string;
@@ -35,6 +37,8 @@ export type OperationsCalendarItem = {
   expectedDate?: string;
   role?: "action" | "milestone";
   eventKind?: "lease_start" | "lease_review" | "lease_end" | "lease_move_out";
+  originalDate?: string;
+  followUpStatus?: OperationsFollowUpRecord["status"];
 };
 
 export type PlanningCalendarAction = {
@@ -68,6 +72,36 @@ function shiftIsoDate(date: string, offsetDays: number) {
   const shifted = new Date(`${date}T00:00:00.000Z`);
   shifted.setUTCDate(shifted.getUTCDate() + offsetDays);
   return shifted.toISOString().slice(0, 10);
+}
+
+export function operationsFollowUpRecord(
+  item: OperationsCalendarItem,
+  status: OperationsFollowUpRecord["status"],
+  todayIso: string,
+  snoozeDays = 7,
+): OperationsFollowUpRecord {
+  return {
+    status,
+    originalDate: item.originalDate || item.date,
+    ...(status === "snoozed" ? { snoozedUntil: shiftIsoDate(todayIso, Math.max(1, Math.round(snoozeDays))) } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function applyOperationsFollowUps(
+  items: OperationsCalendarItem[],
+  records: Record<string, OperationsFollowUpRecord> = {},
+  options: { showHandled?: boolean } = {},
+) {
+  return sortItems(items.flatMap((item) => {
+    const record = records[item.id];
+    if (!record) return [item];
+    if ((record.status === "done" || record.status === "intentional") && !options.showHandled) return [];
+    if (record.status === "snoozed" && validIsoDate(record.snoozedUntil)) {
+      return [{ ...item, originalDate: record.originalDate || item.date, date: record.snoozedUntil, followUpStatus: record.status }];
+    }
+    return [{ ...item, originalDate: record.originalDate || item.date, followUpStatus: record.status }];
+  }));
 }
 
 function leaseReviewLeadDays(lease: Lease, configuredDays: number) {
@@ -108,6 +142,7 @@ export function buildOperationsCalendarItems(args: {
   planningActionItems?: PlanningCalendarAction[];
   loans?: Loan[];
   leaseReviewDaysBefore?: number;
+  backup?: { lastRecoverableBackupAt?: string; intervalDays?: number; todayIso?: string };
 }): OperationsCalendarItem[] {
   const items: OperationsCalendarItem[] = [];
 
@@ -310,6 +345,26 @@ export function buildOperationsCalendarItems(args: {
       priority: "normal",
     });
   });
+
+  const backupToday = String(args.backup?.todayIso || "").slice(0, 10);
+  const lastRecoverableDate = String(args.backup?.lastRecoverableBackupAt || "").slice(0, 10);
+  const backupIntervalDays = Math.max(1, Math.min(30, Math.round(Number(args.backup?.intervalDays || 3))));
+  const backupDueDate = validIsoDate(lastRecoverableDate) ? shiftIsoDate(lastRecoverableDate, backupIntervalDays) : backupToday;
+  if (validIsoDate(backupDueDate)) {
+    items.push({
+      id: `backup:recoverable:${backupDueDate}`,
+      source: "backup",
+      sourceRecordId: "backup-health",
+      date: backupDueDate,
+      title: lastRecoverableDate ? "Verify next restore point" : "Create verified restore point",
+      detail: lastRecoverableDate
+        ? `The current recovery schedule calls for a verified restore point every ${backupIntervalDays} day${backupIntervalDays === 1 ? "" : "s"}.`
+        : "No managed restore point has been confirmed recoverable yet.",
+      propertyId: "",
+      priority: "high",
+      role: "action",
+    });
+  }
 
   return sortItems(items);
 }

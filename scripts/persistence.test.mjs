@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   BACKUP_SCHEMA_VERSION,
   createPersistenceService,
+  decryptManagedBackup,
   expectedPersistenceTableNames,
   sanitizeSettingsForPersistence,
 } from "../electron/db.mjs";
@@ -21,6 +22,7 @@ async function withPersistence(t) {
 }
 
 function sampleBackup(overrides = {}) {
+  const { data: dataOverrides = {}, ...rootOverrides } = overrides;
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     appVersion: "9.9.9-test",
@@ -72,9 +74,9 @@ function sampleBackup(overrides = {}) {
       activityLog: [{ id: "ale1", at: "2026-05-01T00:00:00.000Z", actor: "local-user", action: "create", entityType: "transaction", entityId: "t1", summary: "Created transaction.", immutable: true }],
       planningActiveScenarioId: "base",
       taxDayOverrides: { p1: true },
-      ...overrides.data,
+      ...dataOverrides,
     },
-    ...overrides,
+    ...rootOverrides,
   };
 }
 
@@ -334,4 +336,32 @@ test("manual restore points force a fresh managed backup with the latest data", 
   assert.equal(backupFiles.length, 2);
   assert.equal(exported.data.transactions[0].id, "t2");
   assert.match(health.lastBackupAt, /^202/);
+});
+
+test("managed restore points can be OS-key encrypted and are verified after writing", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rental-tracker-encrypted-backup-"));
+  const key = Buffer.alloc(32, 7);
+  const service = await createPersistenceService({ userDataPath: dir, appVersion: "9.9.9-test", backupEncryptionKey: key });
+  t.after(async () => {
+    service.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  });
+
+  await service.saveAppData(sampleBackup({ settings: { backupIntervalDays: 3, backupRetentionCount: 5 } }));
+  const fileName = (await fs.readdir(service.paths.backupsDir)).find((name) => name.endsWith(".rtbackup"));
+  assert.ok(fileName);
+  const encrypted = await fs.readFile(path.join(service.paths.backupsDir, fileName));
+  assert.equal(encrypted.subarray(0, 2).toString(), "RT");
+  assert.equal(decryptManagedBackup(encrypted, key).subarray(0, 2).toString(), "PK");
+  assert.throws(() => decryptManagedBackup(encrypted, Buffer.alloc(32, 8)));
+
+  const validation = await service.validateLatestBackup();
+  const health = await service.getHealth();
+  assert.equal(validation.status, "valid");
+  assert.equal(validation.encrypted, true);
+  assert.equal(health.managedBackupsEncrypted, true);
+  assert.equal(health.managedBackupEncryptionAvailable, true);
+  assert.match(health.lastRecoverableBackupAt, /^202/);
+  assert.equal(health.backupIntervalDays, 3);
+  assert.equal(health.backupRetentionCount, 5);
 });

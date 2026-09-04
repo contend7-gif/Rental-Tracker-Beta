@@ -66,6 +66,33 @@ export type MonthlyCloseRecord = {
   issueCount: number;
 };
 
+export type OperationsFollowUpStatus = "done" | "snoozed" | "waiting" | "intentional";
+
+export type OperationsFollowUpRecord = {
+  status: OperationsFollowUpStatus;
+  originalDate: string;
+  snoozedUntil?: string;
+  updatedAt: string;
+};
+
+export type BankReconciliationRecord = {
+  id: string;
+  fileName: string;
+  accountLabel: string;
+  propertyId: string;
+  periodStart: string;
+  periodEnd: string;
+  openingBalance: number;
+  closingBalance: number;
+  activityTotal: number;
+  difference: number;
+  rowCount: number;
+  resolvedCount: number;
+  skippedRows: number;
+  closedAt: string;
+  signature: string;
+};
+
 export type AppSettings = {
   theme: "light" | "dark";
   defaultView: string;
@@ -110,7 +137,11 @@ export type AppSettings = {
   setupChecklistShowDismissed: boolean;
   setupChecklistOverrides: Record<string, { status?: "not_applicable" | "dismissed"; note?: string; updatedAt?: string }>;
   recurringExpenseCheckAcknowledgements: Record<string, string>;
+  operationsFollowUps: Record<string, OperationsFollowUpRecord>;
   monthlyCloseRecords: Record<string, MonthlyCloseRecord>;
+  bankReconciliationRecords: Record<string, BankReconciliationRecord>;
+  backupIntervalDays: number;
+  backupRetentionCount: number;
   realDataModeEnabled: boolean;
 };
 
@@ -165,7 +196,11 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   setupChecklistShowDismissed: false,
   setupChecklistOverrides: {},
   recurringExpenseCheckAcknowledgements: {},
+  operationsFollowUps: {},
   monthlyCloseRecords: {},
+  bankReconciliationRecords: {},
+  backupIntervalDays: 3,
+  backupRetentionCount: 12,
   realDataModeEnabled: false,
 };
 
@@ -249,6 +284,67 @@ function sanitizeMonthlyCloseRecords(value: unknown): AppSettings["monthlyCloseR
   return records;
 }
 
+function isIsoDate(value: unknown) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function sanitizeOperationsFollowUps(value: unknown): AppSettings["operationsFollowUps"] {
+  if (!isRecord(value)) return {};
+  const records: AppSettings["operationsFollowUps"] = {};
+  for (const [rawKey, rawRecord] of Object.entries(value).slice(0, 1000)) {
+    if (!isRecord(rawRecord)) continue;
+    const key = sanitizeShortText(rawKey, 220);
+    const status = rawRecord.status;
+    const originalDate = sanitizeShortText(rawRecord.originalDate, 10);
+    const updatedAt = sanitizeShortText(rawRecord.updatedAt, 40);
+    const snoozedUntil = sanitizeShortText(rawRecord.snoozedUntil, 10);
+    if (!key || !["done", "snoozed", "waiting", "intentional"].includes(String(status))) continue;
+    if (!isIsoDate(originalDate) || !/^\d{4}-\d{2}-\d{2}T/.test(updatedAt)) continue;
+    if (status === "snoozed" && !isIsoDate(snoozedUntil)) continue;
+    records[key] = {
+      status: status as OperationsFollowUpStatus,
+      originalDate,
+      ...(status === "snoozed" ? { snoozedUntil } : {}),
+      updatedAt,
+    };
+  }
+  return records;
+}
+
+function sanitizeBankReconciliationRecords(value: unknown): AppSettings["bankReconciliationRecords"] {
+  if (!isRecord(value)) return {};
+  const records: AppSettings["bankReconciliationRecords"] = {};
+  for (const [rawKey, rawRecord] of Object.entries(value).slice(0, 240)) {
+    if (!isRecord(rawRecord)) continue;
+    const key = sanitizeShortText(rawKey, 180);
+    const id = sanitizeShortText(rawRecord.id, 180);
+    const closedAt = sanitizeShortText(rawRecord.closedAt, 40);
+    const signature = sanitizeShortText(rawRecord.signature, 24);
+    if (!key || id !== key || !/^\d{4}-\d{2}-\d{2}T/.test(closedAt) || !/^recon-[0-9a-f]{8}$/.test(signature)) continue;
+    const periodStart = sanitizeShortText(rawRecord.periodStart, 10);
+    const periodEnd = sanitizeShortText(rawRecord.periodEnd, 10);
+    if (!isIsoDate(periodStart) || !isIsoDate(periodEnd) || periodEnd < periodStart) continue;
+    records[key] = {
+      id,
+      fileName: sanitizeShortText(rawRecord.fileName, 180),
+      accountLabel: sanitizeShortText(rawRecord.accountLabel, 120),
+      propertyId: sanitizeShortText(rawRecord.propertyId, 120),
+      periodStart,
+      periodEnd,
+      openingBalance: clampNumber(rawRecord.openingBalance, -1_000_000_000, 1_000_000_000, 0),
+      closingBalance: clampNumber(rawRecord.closingBalance, -1_000_000_000, 1_000_000_000, 0),
+      activityTotal: clampNumber(rawRecord.activityTotal, -1_000_000_000, 1_000_000_000, 0),
+      difference: clampNumber(rawRecord.difference, -1_000_000_000, 1_000_000_000, 0),
+      rowCount: clampInt(rawRecord.rowCount, 0, 1_000_000, 0),
+      resolvedCount: clampInt(rawRecord.resolvedCount, 0, 1_000_000, 0),
+      skippedRows: clampInt(rawRecord.skippedRows, 0, 1_000_000, 0),
+      closedAt,
+      signature,
+    };
+  }
+  return records;
+}
+
 export function sanitizeAppSettings(raw: unknown): AppSettings {
   if (!isRecord(raw)) return DEFAULT_APP_SETTINGS;
   const dashboardCardsRaw = isRecord(raw.dashboardCards) ? raw.dashboardCards : {};
@@ -315,7 +411,11 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     setupChecklistShowDismissed: raw.setupChecklistShowDismissed === true,
     setupChecklistOverrides: sanitizeSetupChecklistOverrides(raw.setupChecklistOverrides),
     recurringExpenseCheckAcknowledgements: sanitizeRecurringExpenseCheckAcknowledgements(raw.recurringExpenseCheckAcknowledgements),
+    operationsFollowUps: sanitizeOperationsFollowUps(raw.operationsFollowUps),
     monthlyCloseRecords: sanitizeMonthlyCloseRecords(raw.monthlyCloseRecords),
+    bankReconciliationRecords: sanitizeBankReconciliationRecords(raw.bankReconciliationRecords),
+    backupIntervalDays: clampInt(raw.backupIntervalDays, 1, 30, DEFAULT_APP_SETTINGS.backupIntervalDays),
+    backupRetentionCount: clampInt(raw.backupRetentionCount, 3, 30, DEFAULT_APP_SETTINGS.backupRetentionCount),
     realDataModeEnabled: raw.realDataModeEnabled === true,
   };
 }

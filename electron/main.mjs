@@ -698,7 +698,7 @@ app.whenReady().then(async () => {
     app.quit();
     return;
   }
-  persistenceServicePromise = registerPersistenceIpc({ app, recordDesktopHealthEvent });
+  persistenceServicePromise = registerPersistenceIpc({ app, recordDesktopHealthEvent, secretStore });
   registerCompanionSyncIpc({ secretStore, recordDesktopHealthEvent });
   registerNotificationIpc();
   registerDesktopDiagnosticsIpc();

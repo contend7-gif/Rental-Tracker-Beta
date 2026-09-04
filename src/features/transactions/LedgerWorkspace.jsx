@@ -50,9 +50,13 @@ export function LedgerWorkspace({
   bankImportSkippedRows,
   bankImportUnitOptions,
   bankImportUnmatchedRows,
+  bankReconciliationDraft,
+  bankReconciliationRecords = [],
+  bankReconciliationSummary,
   categories,
   clearWorkspaceFocus,
   clearBankImportPreview,
+  closeBankReconciliation,
   currency,
   documents = [],
   expectedRecurringTransactions = [],
@@ -67,6 +71,7 @@ export function LedgerWorkspace({
   onBankImportMatchRuleChange,
   openBankImportPicker,
   openBankImportReview,
+  reopenBankReconciliation,
   openReviewCenter,
   openTransaction,
   markTransactionsTaxReviewed,
@@ -91,6 +96,7 @@ export function LedgerWorkspace({
   todayIso,
   useTransactionDatesAsServicePeriods,
   workspaceFocus,
+  updateBankReconciliationDraft,
 }) {
   const propertyOptions = activeProperties || properties;
   const [ledgerView, setLedgerView] = useState("all");
@@ -542,6 +548,47 @@ export function LedgerWorkspace({
 
           {(importPanelOpen || hasBankImportActivity) && bankImportRows.length > 0 && (
             <>
+              <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">Statement balance</div>
+                    <div className="mt-0.5 text-xs text-slate-600">Close only after every row is resolved and the statement difference is zero.</div>
+                  </div>
+                  <Badge variant="secondary" className={bankReconciliationSummary?.canClose ? "!bg-emerald-100 !text-emerald-800" : "!bg-amber-100 !text-amber-800"}>
+                    {bankReconciliationSummary?.canClose ? "Ready to close" : "In progress"}
+                  </Badge>
+                </div>
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <Label className="text-xs text-slate-600">Period start</Label>
+                    <Input className="mt-1" type="date" value={bankReconciliationDraft?.periodStart || ""} onChange={(event) => updateBankReconciliationDraft({ periodStart: event.target.value })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-600">Period end</Label>
+                    <Input className="mt-1" type="date" value={bankReconciliationDraft?.periodEnd || ""} onChange={(event) => updateBankReconciliationDraft({ periodEnd: event.target.value })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-600">Opening balance</Label>
+                    <Input className="mt-1" inputMode="decimal" placeholder="0.00" value={bankReconciliationDraft?.openingBalance ?? ""} onChange={(event) => updateBankReconciliationDraft({ openingBalance: event.target.value })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-slate-600">Closing balance</Label>
+                    <Input className="mt-1" inputMode="decimal" placeholder="0.00" value={bankReconciliationDraft?.closingBalance ?? ""} onChange={(event) => updateBankReconciliationDraft({ closingBalance: event.target.value })} />
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-md border border-slate-200 bg-white px-2 py-2 text-slate-700">Statement activity <span className="float-right font-semibold">{currency(bankReconciliationSummary?.activityTotal || 0)}</span></div>
+                  <div className="rounded-md border border-slate-200 bg-white px-2 py-2 text-slate-700">Expected close <span className="float-right font-semibold">{bankReconciliationSummary?.expectedClosingBalance == null ? "—" : currency(bankReconciliationSummary.expectedClosingBalance)}</span></div>
+                  <div className={`rounded-md border bg-white px-2 py-2 ${bankReconciliationSummary?.difference != null && Math.abs(bankReconciliationSummary.difference) < 0.005 ? "border-emerald-200 text-emerald-800" : "border-rose-200 text-rose-800"}`}>Difference <span className="float-right font-semibold">{bankReconciliationSummary?.difference == null ? "—" : currency(bankReconciliationSummary.difference)}</span></div>
+                  <div className="rounded-md border border-slate-200 bg-white px-2 py-2 text-slate-700">Rows resolved <span className="float-right font-semibold">{bankReconciliationSummary?.resolvedCount || 0}/{bankReconciliationSummary?.rowCount || 0}</span></div>
+                </div>
+                {!bankReconciliationSummary?.canClose ? <div className="mt-2 text-xs text-amber-800">{bankReconciliationSummary?.issues?.[0]}</div> : null}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button size="sm" onClick={closeBankReconciliation} disabled={!bankReconciliationSummary?.canClose}>Close statement</Button>
+                  <span className="text-[11px] text-slate-500">Closing saves a snapshot; it does not lock or alter individual transactions.</span>
+                </div>
+              </div>
+
               <div className="mt-3 grid gap-2 md:grid-cols-4">
                 <div>
                   <Label className="text-xs text-slate-600">Property for imported rows</Label>
@@ -665,6 +712,22 @@ export function LedgerWorkspace({
               {bankImportRows.length > 20 && <div className="mt-2 text-xs text-slate-500">Showing first 20 rows in preview.</div>}
             </>
           )}
+          {bankReconciliationRecords.length > 0 ? (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+              <div className="text-sm font-semibold text-slate-900">Closed statements</div>
+              <div className="mt-2 space-y-2">
+                {bankReconciliationRecords.slice(0, 6).map((record) => (
+                  <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-emerald-100 bg-white px-3 py-2 text-xs">
+                    <div>
+                      <div className="font-medium text-slate-900">{record.fileName || record.accountLabel || "Bank statement"}</div>
+                      <div className="mt-0.5 text-slate-500">{record.periodStart} to {record.periodEnd} · {record.resolvedCount}/{record.rowCount} rows · Difference {currency(record.difference)}</div>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => reopenBankReconciliation(record.id)}>Reopen</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div> : null}
 
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-2">
