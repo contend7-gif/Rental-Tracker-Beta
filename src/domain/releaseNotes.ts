@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.8.0",
+    releaseDate: "2026-09-03",
+    title: "Follow-through, statement reconciliation, and verified backups",
+    summary: "Adds practical follow-up controls to the calendar, true bank-statement tie-outs, and scheduled encrypted restore points that are verified before the app relies on them.",
+    changes: [
+      "Calendar items can now be marked Done, Waiting, Intentional, or snoozed for seven days without changing the authoritative lease, maintenance, document, recurring, loan, or planning record.",
+      "Statement imports now include opening and closing balance reconciliation, require every imported row to be resolved, and can be closed only when the difference is exactly zero.",
+      "Closed statement reconciliations are saved as reversible review snapshots, so reopening a statement does not undo or alter its matched transactions.",
+      "Managed desktop restore points now follow configurable schedules and retention limits, are read back and validated immediately, and use Windows-backed encryption when available; portable ZIP exports remain unencrypted for compatibility.",
+    ],
+  },
+  {
     version: "1.7.0",
     releaseDate: "2026-08-31",
     title: "Monthly close and full calendar planning",
