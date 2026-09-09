@@ -1440,7 +1440,12 @@ function looksLikeSupportOnlyDocument(text: string) {
   return /\b(lease (?:summary|extension|renewal|packet|addendum)|seller lease|servicing summary|mortgage statement|closing (?:package|summary)|inspection (?:report|summary)|property inspection|personal property(?: schedule)?|furnishings schedule)\b/.test(text);
 }
 
-export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): DocumentExpenseSuggestion | null {
+export type PreparedDocumentAnalysis = {
+  utilitySections: DocumentUtilitySection[];
+  extractedFields: DocumentExtractedFields | null;
+};
+
+export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs, prepared?: PreparedDocumentAnalysis): DocumentExpenseSuggestion | null {
   const { document, property, lease, transaction, workOrder, vendor, candidateVendors = [] } = args;
   const extractedText = normalizeExtractedDocumentText(document.extractedText);
   const extractedSearchText = normalizeSearchText(normalizeLooseOcrText(extractedText));
@@ -1456,7 +1461,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
   if (supportOnlyDocument && !transaction && !workOrder) return null;
   if (!looksExpenseLike && !transaction && !workOrder) return null;
 
-  const utilitySections = inferDocumentUtilitySections(args);
+  const utilitySections = prepared ? prepared.utilitySections : inferDocumentUtilitySections(args);
   const internalUtilitySections = utilitySections.filter((section) => !section.external);
   if (internalUtilitySections.length > 1) return null;
   const utilitySection = internalUtilitySections.length === 1 ? internalUtilitySections[0] : null;
@@ -1473,7 +1478,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
     transaction,
     candidateVendors,
   });
-  const extractedFields = inferDocumentExtractedFields(args);
+  const extractedFields = prepared ? prepared.extractedFields : inferDocumentExtractedFields(args);
   const hasCorrectedAmount = Number.isFinite(Number(document.ocrFieldOverrides?.totalAmount));
   const amount = hasCorrectedAmount
     ? extractedFields?.totalAmount
@@ -1549,7 +1554,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs): Doc
   };
 }
 
-export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs): DocumentWorkOrderSuggestion | null {
+export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs, prepared?: PreparedDocumentAnalysis): DocumentWorkOrderSuggestion | null {
   const { document, property, lease, transaction, workOrder, vendor, candidateVendors = [] } = args;
   const extractedText = normalizeExtractedDocumentText(document.extractedText);
   const extractedSearchText = normalizeSearchText(extractedText);
@@ -1575,7 +1580,7 @@ export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs): D
     transaction,
     candidateVendors,
   });
-  const extractedFields = inferDocumentExtractedFields(args);
+  const extractedFields = prepared ? prepared.extractedFields : inferDocumentExtractedFields(args);
   const contextualTransactionAmount = Number(transaction?.amount || 0) || undefined;
   const estimatedCost = extractedFields?.totalAmount ?? pickBestExpenseAmount(extractedText) ?? contextualTransactionAmount;
   const reportedOn = extractedFields?.serviceDate || extractedFields?.invoiceDate || pickBestExpenseDate(extractedText) || String(transaction?.date || "").trim();
@@ -1745,7 +1750,7 @@ export function inferDocumentTagSuggestions(args: InferDocumentTagsArgs): Docume
   }));
 }
 
-export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): DocumentLinkSuggestion[] {
+export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs, prepared?: PreparedDocumentAnalysis): DocumentLinkSuggestion[] {
   const { document, candidateLeases = [], candidateProperties = [], candidateTransactions = [], candidateWorkOrders = [] } = args;
   const extractedText = normalizeExtractedDocumentText(document.extractedText).toLowerCase();
   const extractedSearchText = normalizeSearchText(extractedText);
@@ -1753,13 +1758,13 @@ export function inferDocumentLinkSuggestions(args: InferDocumentTagsArgs): Docum
 
   const propertyId = String(document.propertyId || args.property?.id || "").trim();
   const detectedUnits = extractPossibleUnits(extractedText, collectKnownUnits(args, propertyId));
-  const extractedFields = inferDocumentExtractedFields(args);
+  const extractedFields = prepared ? prepared.extractedFields : inferDocumentExtractedFields(args);
   const extractedInvoiceRef = normalizeSearchText(extractedFields?.invoiceRef || "");
   const extractedInvoiceDate = String(extractedFields?.invoiceDate || extractedFields?.serviceDate || "").trim();
   const extractedServicePeriodEnd = String(extractedFields?.servicePeriodEnd || "").trim();
   const extractedAmount = Number(extractedFields?.totalAmount);
   const extractedPropertyId = String(extractedFields?.propertyId || propertyId).trim();
-  const utilitySections = inferDocumentUtilitySections(args);
+  const utilitySections = prepared ? prepared.utilitySections : inferDocumentUtilitySections(args);
   const hasMultipleUtilitySections = utilitySections.length > 1;
   const internalUtilitySections = utilitySections.filter((section) => !section.external && utilitySectionHasSignal(section));
   const linkSuggestions = new Map<string, { suggestion: DocumentLinkSuggestion; score: number; sourceSet: Set<DocumentTagSuggestionSource> }>();

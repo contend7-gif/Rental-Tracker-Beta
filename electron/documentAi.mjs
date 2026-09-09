@@ -46,7 +46,9 @@ function normalizeAiAnalysis(rawAnalysis, model) {
   const summary = sanitizeLongText(analysis.summary, 1500);
   if (!summary) return null;
 
-  const totalAmount = Number(analysis.totalAmount);
+  const totalAmount = typeof analysis.totalAmount === "number"
+    || (typeof analysis.totalAmount === "string" && analysis.totalAmount.trim() !== "")
+    ? Number(analysis.totalAmount) : NaN;
   return {
     summary,
     actionItems: sanitizeActionItems(analysis.actionItems),

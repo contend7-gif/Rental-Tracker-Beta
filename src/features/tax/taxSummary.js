@@ -326,12 +326,12 @@ export function getTaxDoubleCountingWarnings(args = {}) {
   });
 
   tenantLedgerEntries
-    .filter((entry) => String(entry.date || "").startsWith(year))
+    .filter((entry) => !entry.voidedAt && String(entry.date || "").startsWith(year))
     .filter((entry) => matchesScope(entry, propertyFilter))
     .forEach((entry) => {
       const treatment = String(entry.accountingTreatment || "");
       if (treatment === "security_deposit_liability" || treatment === "security_deposit_return") return;
-      const looksIncome = entry.kind === "charge" && (treatment.includes("income") || /rent|fee|cleaning|pet|late/i.test([entry.memo, treatment].join(" ")));
+      const looksIncome = !entry.leaseExtensionId && entry.kind === "charge" && (treatment.includes("income") || /rent|fee|cleaning|pet|late/i.test([entry.memo, treatment].join(" ")));
       if (looksIncome && !hasLinkedIncomeForLedgerEntry(entry, scopedIncomeTransactions)) {
         warnings.push({ key: "tenant_ledger_unposted_income", label: "Tenant ledger income is not posted to an income transaction", targetView: "leaseHistory", sourceId: entry.id });
       }

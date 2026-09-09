@@ -64,6 +64,7 @@ export type MonthlyCloseRecord = {
   closedAt: string;
   signature: string;
   issueCount: number;
+  reviewVersion?: number;
 };
 
 export type OperationsFollowUpStatus = "done" | "snoozed" | "waiting" | "intentional";
@@ -279,6 +280,7 @@ function sanitizeMonthlyCloseRecords(value: unknown): AppSettings["monthlyCloseR
       closedAt,
       signature,
       issueCount: clampInt(rawRecord.issueCount, 0, 100000, 0),
+      ...(rawRecord.reviewVersion === 2 ? { reviewVersion: 2 } : {}),
     };
   }
   return records;

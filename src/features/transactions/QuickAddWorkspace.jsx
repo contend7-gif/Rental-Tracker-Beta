@@ -13,7 +13,7 @@ import {
   leaseRentSummaryLabel,
   leaseTermSummaryLabel,
 } from "../../domain/leaseTerms.js";
-import { CircleDollarSign, Droplets, Home, Landmark, MoreHorizontal, RotateCcw, Wrench } from "lucide-react";
+import { CircleDollarSign, Droplets, Home, Landmark, MoreHorizontal, Wrench } from "lucide-react";
 
 function TransactionSection({ title, children, action, className = "" }) {
   return (

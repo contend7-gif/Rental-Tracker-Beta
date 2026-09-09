@@ -16,6 +16,7 @@ export function MonthlyClosePanel({
   backupValidationResult,
   bankImportUnmatchedRows,
   currency,
+  documents,
   leases,
   loanPayments,
   loans,
@@ -43,6 +44,7 @@ export function MonthlyClosePanel({
   const backupValidated = backupStatus === "valid" || backupStatus === "valid_with_warnings";
   const review = useMemo(() => buildMonthlyCloseReview({
     backupValidated,
+    documents,
     leases,
     loanPayments,
     loans,
@@ -54,14 +56,15 @@ export function MonthlyClosePanel({
     transactions,
     unmatchedBankImportCount: bankImportUnmatchedRows?.length || 0,
     workOrders,
-  }), [backupValidated, bankImportUnmatchedRows, leases, loanPayments, loans, month, propertyFilter, recurringExpenseChecks, tenantLedgerEntries, todayIso, transactions, workOrders]);
+  }), [backupValidated, bankImportUnmatchedRows, documents, leases, loanPayments, loans, month, propertyFilter, recurringExpenseChecks, tenantLedgerEntries, todayIso, transactions, workOrders]);
   if (!review) return null;
 
   const scopeKey = propertyFilter === "all" ? "all" : propertyFilter;
   const closeKey = `${month}::${scopeKey}`;
   const closeRecord = appSettings.monthlyCloseRecords?.[closeKey];
-  const isClosed = closeRecord?.signature === review.signature;
-  const changedSinceClose = Boolean(closeRecord && !isClosed);
+  const reviewUpdated = Boolean(closeRecord && closeRecord.reviewVersion !== 2);
+  const isClosed = !reviewUpdated && closeRecord?.signature === review.signature;
+  const changedSinceClose = Boolean(closeRecord && !isClosed && !reviewUpdated);
   const isFutureMonth = month > todayIso.slice(0, 7);
   const propertyLabel = propertyFilter === "all" ? "Portfolio" : (propertyNameById[propertyFilter] || "Selected property");
 
@@ -72,6 +75,7 @@ export function MonthlyClosePanel({
         closedAt: new Date().toISOString(),
         signature: review.signature,
         issueCount: review.issues.length,
+        reviewVersion: 2,
       },
     });
     setNotice(`${monthLabel(month)} closed for ${propertyLabel}${review.issues.length ? ` with ${review.issues.length} open checks recorded` : ""}.`);
@@ -83,8 +87,8 @@ export function MonthlyClosePanel({
     setNotice(`${monthLabel(month)} reopened for ${propertyLabel}.`);
   };
 
-  const status = isClosed ? "Closed" : changedSinceClose ? "Changed since close" : review.issues.length === 0 ? "Ready to close" : "Needs review";
-  const statusTone = isClosed ? "bg-emerald-100 text-emerald-800" : changedSinceClose ? "bg-amber-100 text-amber-800" : review.issues.length === 0 ? "bg-teal-100 text-teal-800" : "bg-rose-100 text-rose-800";
+  const status = isClosed ? "Closed" : reviewUpdated ? "Review updated" : changedSinceClose ? "Changed since close" : review.issues.length === 0 ? "Ready to close" : "Needs review";
+  const statusTone = isClosed ? "bg-emerald-100 text-emerald-800" : changedSinceClose || reviewUpdated ? "bg-amber-100 text-amber-800" : review.issues.length === 0 ? "bg-teal-100 text-teal-800" : "bg-rose-100 text-rose-800";
   const summaryCards = [
     ["Transactions", review.summary.transactionCount],
     ["Income", currency(review.summary.income)],
@@ -119,7 +123,7 @@ export function MonthlyClosePanel({
         </CardContent>
       </Card>
 
-      {changedSinceClose ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Records changed after this month was closed. Review the current checks and close it again to refresh the snapshot.</div> : null}
+      {reviewUpdated || changedSinceClose ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{reviewUpdated ? "Monthly Close now checks more record details. Review this month and refresh its snapshot to use the improved checks. Your saved records have not been changed by this update." : "Records changed after this month was closed. Review the current checks and close it again to refresh the snapshot."}</div> : null}
 
       <div className="space-y-2">
         {review.issues.length === 0 ? (
@@ -146,10 +150,9 @@ export function MonthlyClosePanel({
                   ? "Closing with open checks records that they were visible; it does not mark them fixed or create transactions."
                   : "Closing saves the current review signature so later record changes remain visible."}
           </div>
-          {isClosed ? <Button size="sm" variant="outline" onClick={reopenMonth}><RotateCcw className="mr-1.5 h-4 w-4" />Reopen month</Button> : <Button size="sm" disabled={isFutureMonth} onClick={closeMonth}>{changedSinceClose ? "Refresh close snapshot" : review.issues.length ? "Close with open checks" : "Close month"}</Button>}
+          {isClosed ? <Button size="sm" variant="outline" onClick={reopenMonth}><RotateCcw className="mr-1.5 h-4 w-4" />Reopen month</Button> : <Button size="sm" disabled={isFutureMonth} onClick={closeMonth}>{changedSinceClose || reviewUpdated ? "Refresh close snapshot" : review.issues.length ? "Close with open checks" : "Close month"}</Button>}
         </CardContent>
       </Card>
     </div>
   );
 }
-

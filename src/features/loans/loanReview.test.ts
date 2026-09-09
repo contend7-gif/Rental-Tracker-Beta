@@ -5,6 +5,7 @@ import {
   getLoanReadiness,
   getLoanReviewIssues,
   getMissingLoanPaymentMonths,
+  summarizeLoanPayments,
 } from "./loanReview.js";
 
 const baseLoan = {
@@ -47,6 +48,19 @@ function payment(month: string, overrides = {}) {
 
 const twelvePayments = Array.from({ length: 12 }, (_, index) => payment(String(index + 1).padStart(2, "0")));
 const context = { yearFilter: "2026", todayIso: "2026-12-31", loanPayments: twelvePayments };
+
+test("December early payment covers January without moving cash into the next year", () => {
+  const loan = { ...baseLoan, originatedOn: "2025-01-01" };
+  const payments = [payment("12", { paymentDate: "2025-12-31" })];
+  const january = { yearFilter: "2026", todayIso: "2026-01-15" };
+  assert.deepEqual(getMissingLoanPaymentMonths(loan, payments, january), []);
+  assert.equal(summarizeLoanPayments(loan, payments, january).total, 0);
+  assert.equal(summarizeLoanPayments(loan, payments, { yearFilter: "2025" }).total, 1200);
+});
+
+test("future loan payment months are not reported as missing", () => {
+  assert.deepEqual(getMissingLoanPaymentMonths(baseLoan, [], { yearFilter: "2027", todayIso: "2026-09-05" }), []);
+});
 
 function issueKeys(loan = baseLoan, extraContext = {}) {
   return getLoanReviewIssues(loan, { ...context, ...extraContext }).map((issue) => issue.key);

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import type { Transaction } from "../models.ts";
 import { createDemoDataState, normalizeBackupData, type RentalStoreData } from "./rentalStoreData.ts";
 import { createUnitActions } from "./unitStore.ts";
+import { createLeaseExtensionActions } from "./leaseExtensionStore.ts";
 import { useActivitySlice } from "./useActivitySlice.ts";
 import { useAssetSlice } from "./useAssetSlice.ts";
 import { useDocumentSlice } from "./useDocumentSlice.ts";
@@ -138,6 +139,17 @@ export function useRentalStore(auditContext: { actorName?: string; actorRole?: s
       ...recurringActions,
       ...loanActions,
       ...leaseActions,
+      ...createLeaseExtensionActions({
+        getLeases: () => leases,
+        getLedgerEntries: () => tenantLedgerEntries,
+        getTransactions: () => transactions,
+        getDocuments: () => documents,
+        setLeases,
+        setLedgerEntries: setTenantLedgerEntries,
+        setTransactions,
+        setDocuments,
+        appendActivityLog,
+      }),
       ...maintenanceActions,
       ...assetActions,
       ...documentActions,
@@ -145,7 +157,7 @@ export function useRentalStore(auditContext: { actorName?: string; actorRole?: s
       ...unitActions,
       ...usePeriodActions,
     }),
-    [activityActions, assetActions, documentActions, leaseActions, loanActions, maintenanceActions, propertyActions, recurringActions, transactionActions, unitActions, usePeriodActions],
+    [activityActions, appendActivityLog, assetActions, documentActions, documents, leaseActions, leases, loanActions, maintenanceActions, properties, recurringActions, setDocuments, setLeases, setTenantLedgerEntries, setTransactions, tenantLedgerEntries, transactions, unitActions, usePeriodActions],
   );
   const actions = useStableActions(actionImplementations);
 

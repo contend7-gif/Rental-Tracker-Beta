@@ -22,20 +22,7 @@ export function proratedRentForMonth(lease, billingDate) {
 
 export { leaseEffectiveEndDateForMonth };
 
-export function leaseIsActiveByDate(lease, dateStr) {
-  if (!dateStr) return false;
-  if (lease.startDate > dateStr) return false;
-
-  if (lease.actualEndDate) {
-    return lease.actualEndDate >= dateStr;
-  }
-
-  if (leaseIsOpenEnded(lease)) {
-    return true;
-  }
-
-  return lease.endDate >= dateStr;
-}
+export { leaseIsActiveByDate };
 
 export function leaseStatusForDate(lease, dateStr) {
   if (!dateStr) return lease.status || "Active";
@@ -71,3 +58,4 @@ export function leaseTypeLabel(lease) {
 }
 import { leaseEffectiveEndDateForMonth, proratedRentForMonth30Day } from "../domain/rentProration.js";
 import { leaseIsOpenEnded, leaseTermSummaryLabel } from "../domain/leaseTerms.js";
+import { leaseIsActiveByDate } from "../domain/leaseActivity.ts";

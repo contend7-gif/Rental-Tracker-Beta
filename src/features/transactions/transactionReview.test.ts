@@ -29,6 +29,12 @@ const context = {
   isTaxReviewRelevantTransaction: (transaction) => transaction.type === "Expense",
 };
 
+test("blank receipt names are missing support in both individual and inbox reviews", () => {
+  const transaction = { ...baseTransaction, receiptName: "   " };
+  assert.ok(getTransactionReviewIssues(transaction, context).some((issue) => issue.key === "missing_receipt"));
+  assert.ok(buildTransactionReviewInbox([transaction], context)[0].issues.some((issue) => issue.key === "missing_receipt"));
+});
+
 test("transaction review flags missing receipts unless a document is attached", () => {
   const transaction = { ...baseTransaction, receiptName: "", taxChecked: false };
 

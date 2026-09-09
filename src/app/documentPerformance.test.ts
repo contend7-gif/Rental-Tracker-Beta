@@ -3,6 +3,10 @@ import test from "node:test";
 import { performance } from "node:perf_hooks";
 import { analyzeDocumentBatch, type DocumentAnalysisEntry } from "./documentAnalysisBatch.ts";
 import { buildDocumentSearchIndex, matchesDocumentSearch } from "./documentSearchIndex.ts";
+import {
+  inferDocumentUtilitySections, inferDocumentExtractedFields, inferDocumentTagSuggestions,
+  inferDocumentLinkSuggestions, inferDocumentExpenseSuggestion, inferDocumentWorkOrderSuggestion,
+} from "../domain/documentIntelligence.ts";
 
 const ANALYSIS_DOCUMENT_COUNT = 150;
 const ANALYSIS_BUDGET_MS = 3_000;
@@ -58,6 +62,30 @@ function createAnalysisEntries(count: number): DocumentAnalysisEntry[] {
     },
   }));
 }
+
+test("shared extraction preserves the independent document-analysis results and refreshes after edits", () => {
+  const entries = createAnalysisEntries(6);
+  entries[1].context.document.extractedText = "";
+  entries[2].context.document.extractedText = "Lease summary. Monthly rent $1000.00.";
+  entries[3].context.document.extractedText = "Plumbing estimate. Replace leaking valve. Total $425.32. Date 06/15/2026.";
+  entries[4].context.document.ocrFieldOverrides = { totalAmount: 0 };
+  const verify = () => {
+    const results = analyzeDocumentBatch(entries);
+    for (const { id, context } of entries) {
+      assert.deepEqual(results[id], {
+        utilitySections: inferDocumentUtilitySections(context),
+        extractedFields: inferDocumentExtractedFields(context),
+        tagSuggestions: inferDocumentTagSuggestions(context),
+        linkSuggestions: inferDocumentLinkSuggestions(context),
+        expenseSuggestion: inferDocumentExpenseSuggestion(context),
+        workOrderSuggestion: inferDocumentWorkOrderSuggestion(context),
+      });
+    }
+  };
+  verify();
+  entries[0].context.document.extractedText = "Corrected invoice. Total $950.00. Date 06/16/2026.";
+  verify();
+});
 
 test("document analysis batch stays below the regression budget", () => {
   const entries = createAnalysisEntries(ANALYSIS_DOCUMENT_COUNT);

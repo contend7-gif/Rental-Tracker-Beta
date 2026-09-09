@@ -457,6 +457,7 @@ export function OperationsCalendarWorkspace({
           backupValidationResult={backupValidationResult}
           bankImportUnmatchedRows={bankImportUnmatchedRows}
           currency={currency}
+          documents={documents}
           leases={leases}
           loanPayments={loanPayments}
           loans={loans}

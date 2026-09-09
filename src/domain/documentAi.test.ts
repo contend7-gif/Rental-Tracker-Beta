@@ -2,6 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { documentAiActionLabel, normalizeDocumentAiAnalysis } from "./documentAi.ts";
 
+test("unknown AI totals stay unknown while explicit zero remains valid", () => {
+  for (const totalAmount of [null, undefined, "", "  ", false, [], {}, "unknown"]) {
+    assert.equal(normalizeDocumentAiAnalysis({ summary: "Review document", totalAmount })?.totalAmount, undefined);
+  }
+  for (const totalAmount of [0, "0", "0.00"]) {
+    assert.equal(normalizeDocumentAiAnalysis({ summary: "Zero balance", totalAmount })?.totalAmount, 0);
+  }
+});
+
 test("normalizeDocumentAiAnalysis trims and preserves useful AI analysis fields", () => {
   const result = normalizeDocumentAiAnalysis({
     summary: "  Tenant-ready invoice for plumbing repair.  ",

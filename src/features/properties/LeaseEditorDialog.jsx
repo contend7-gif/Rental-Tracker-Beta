@@ -10,6 +10,7 @@ import {
   leaseAgreementTypeLabel,
   leaseBillingCadenceLabel,
   leaseMonthlyEquivalent,
+  leaseRentBreakdown,
   leaseRentSummaryLabel,
   normalizeLeaseAgreementType,
   normalizeLeaseBillingCadence,
@@ -49,6 +50,7 @@ export function LeaseEditorDialog({
   monthStartIso,
   normalizeTenantLedgerAccountingTreatment,
   onLeasePdfInputChange,
+  openLeaseExtension,
   openDocumentPreview,
   openLinkedTenantLedgerTransaction,
   openLeasePdfPicker,
@@ -135,7 +137,12 @@ export function LeaseEditorDialog({
                     <div className="font-semibold">Term and billing are tracked separately</div>
                     <div className="mt-1">{leaseDraft.rentalType || "Long-term"} | {leaseAgreementTypeLabel(leaseDraft)} | {leaseBillingCadenceLabel(leaseDraft)}</div>
                     <div className="mt-1">{leaseRentSummaryLabel(leaseDraft, currency)}{billingCadence !== "monthly" ? ` | ${currency(leaseMonthlyEquivalent(leaseDraft))} monthly equivalent for planning` : ""}</div>
+                    {((leaseDraft.extensions || []).filter((extension) => !extension.canceledAt).length > 0) && (() => {
+                      const breakdown = leaseRentBreakdown(leaseDraft, currency);
+                      return <div className="mt-2 rounded border border-blue-200 bg-white/70 p-2"><div>Original rent: {breakdown.originalLabel}</div><div>Extension rent: {breakdown.extensionLabel}</div><div className="font-semibold">Combined fixed-term rent: {breakdown.combinedLabel}</div></div>;
+                    })()}
                   </div>
+                  <div className="md:col-span-2 flex justify-end"><Button variant="secondary" onClick={() => openLeaseExtension(leaseDraft)}>Extend lease</Button></div>
                   {field(
                     "Stay length",
                     <Select value={leaseDraft.rentalType || "Long-term"} onValueChange={(value) => setLeaseDraft({ ...leaseDraft, rentalType: value })}>

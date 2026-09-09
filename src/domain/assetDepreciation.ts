@@ -1,4 +1,5 @@
 import type { Asset, Lease, Unit, UsePeriod } from "../models.ts";
+import { leaseIsActiveByDate } from "./leaseActivity.ts";
 
 function clampRentalUsePct(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -19,23 +20,6 @@ function normalizeBonusRate(value: unknown) {
   if (decimal > 1) return 1;
   return decimal;
 }
-
-function leaseIsActiveByDate(lease: Lease, dateStr: string) {
-  if (!dateStr) return false;
-  if (lease.startDate > dateStr) return false;
-
-  if (lease.actualEndDate) {
-    return lease.actualEndDate >= dateStr;
-  }
-
-  if (leaseIsOpenEnded(lease)) {
-    return true;
-  }
-
-  return lease.endDate >= dateStr;
-}
-
-import { leaseIsOpenEnded } from "./leaseTerms.js";
 
 function findMatchingUsePeriod(usePeriods: UsePeriod[], propertyId: string, unit: string, date: string) {
   return usePeriods

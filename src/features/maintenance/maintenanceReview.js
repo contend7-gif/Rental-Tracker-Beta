@@ -1,5 +1,6 @@
 import { maintenanceAccountingTreatmentLabel } from "../../domain/maintenance.ts";
 import { toLocalIsoDate } from "../../lib/localDate.ts";
+import { buildTransactionSupportIndex, hasTransactionSupport } from "../../domain/transactionSupport.ts";
 
 const COMPLETED_STATUSES = new Set(["Completed", "Closed"]);
 const OPEN_STATUSES = new Set(["Open", "In Progress", "Waiting on Parts"]);
@@ -53,15 +54,6 @@ function hasWorkOrderDocument(workOrder, documents = []) {
   return documents.some((document) => document.workOrderId === workOrder?.id);
 }
 
-function hasTransactionDocument(transaction, documents = []) {
-  if (!transaction) return false;
-  if (String(transaction.receiptName || "").trim()) return true;
-  return documents.some((document) =>
-    document.transactionId === transaction.id ||
-    (Array.isArray(document.relatedTransactionIds) && document.relatedTransactionIds.includes(transaction.id))
-  );
-}
-
 function assetLinkedToWorkOrder(workOrder, assets = []) {
   if (!workOrder) return null;
   if (workOrder.assetId) {
@@ -110,6 +102,7 @@ export function buildAssetDraftFromWorkOrder(workOrder, context = {}) {
 export function getWorkOrderReviewIssues(workOrder, context = {}) {
   if (!workOrder) return [];
   const documents = context.documents || [];
+  const supportIndex = context.transactionSupportIndex || buildTransactionSupportIndex(documents);
   const assets = context.assets || [];
   const vendors = context.vendors || [];
   const transactions = context.transactions || [];
@@ -130,7 +123,7 @@ export function getWorkOrderReviewIssues(workOrder, context = {}) {
     issues.push(issue("actual_cost_without_transaction", "transactionId"));
   }
 
-  if (actualCost > 0 && !hasWorkOrderDocument(workOrder, documents) && !hasTransactionDocument(linkedTransaction, documents)) {
+  if (actualCost > 0 && !hasWorkOrderDocument(workOrder, documents) && !hasTransactionSupport(linkedTransaction, supportIndex)) {
     issues.push(issue("actual_cost_without_document", "sourceDocumentIds"));
   }
 
@@ -143,7 +136,7 @@ export function getWorkOrderReviewIssues(workOrder, context = {}) {
     issues.push(issue("linked_transaction_not_capitalized", "transactionId"));
   }
 
-  if (linkedTransaction && !hasTransactionDocument(linkedTransaction, documents) && !hasWorkOrderDocument(workOrder, documents)) {
+  if (linkedTransaction && !hasTransactionSupport(linkedTransaction, supportIndex) && !hasWorkOrderDocument(workOrder, documents)) {
     issues.push(issue("linked_transaction_missing_document", "transactionId"));
   }
 
@@ -190,6 +183,7 @@ function primaryActionForIssues(issues) {
 }
 
 export function buildMaintenanceReviewInbox(workOrders = [], context = {}) {
+  context = { ...context, transactionSupportIndex: buildTransactionSupportIndex(context.documents) };
   const records = workOrders
     .map((workOrder) => {
       const issues = getWorkOrderReviewIssues(workOrder, context);

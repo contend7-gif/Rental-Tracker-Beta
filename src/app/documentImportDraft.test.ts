@@ -3,6 +3,18 @@ import test from "node:test";
 import { createBlankDocumentImportDraft } from "./draftFactories.js";
 import { buildDocumentImportFileDraft, buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
 
+test("a button event cannot become document metadata or retain a previous import link", () => {
+  const previous = { ...createBlankDocumentImportDraft("old-property", "Unit A"), type: "Invoice", linkedId: "old-transaction", linkType: "transaction" };
+  const clickEvent = { type: "click", target: {}, preventDefault() {} };
+  assert.equal(hasDocumentImportContext(clickEvent), false);
+  const draft = buildDocumentImportPickerDraft(previous, clickEvent, {
+    propertyFilter: "new-property", unitFilter: "all", defaultPropertyId: "new-property",
+  });
+  assert.equal(draft.type, "Scanned PDF");
+  assert.equal(draft.propertyId, "new-property");
+  assert.equal(draft.linkedId, "");
+});
+
 test("document import drafts start from the active workspace scope", () => {
   const draft = buildDocumentImportPickerDraft(null, {}, {
     propertyFilter: "p2",

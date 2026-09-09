@@ -1,4 +1,5 @@
 import type { RecurringTemplate, Transaction } from "../models.ts";
+import { isValidIsoDate } from "./isoDate.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MONTHLY_MIN_DAYS = 20;
@@ -22,13 +23,6 @@ export type RecurringExpenseCheck = {
   category: string;
   occurrenceCount: number;
 };
-
-function validIsoDate(value: unknown): value is string {
-  const date = String(value || "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  const parsed = new Date(`${date}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-}
 
 function normalize(value: unknown) {
   return String(value || "")
@@ -93,7 +87,7 @@ export function buildRecurringExpenseChecks(args: {
   todayIso: string;
   graceDays?: number;
 }): RecurringExpenseCheck[] {
-  if (!validIsoDate(args.todayIso)) return [];
+  if (!isValidIsoDate(args.todayIso)) return [];
   const graceDays = Math.max(0, Math.min(30, Math.round(Number(args.graceDays ?? DEFAULT_GRACE_DAYS))));
   const groups = new Map<string, Transaction[]>();
 
@@ -104,7 +98,7 @@ export function buildRecurringExpenseChecks(args: {
       || transaction.type !== "Expense"
       || !WATCHED_CATEGORIES.has(transaction.category)
       || !vendor
-      || !validIsoDate(transaction.date)
+      || !isValidIsoDate(transaction.date)
     ) return;
     const signature = [transaction.propertyId, transaction.unit, transaction.category, vendor].join("|");
     const group = groups.get(signature) || [];
@@ -127,7 +121,7 @@ export function buildRecurringExpenseChecks(args: {
     let monthOffset = 1;
     let expectedDate = addMonths(lastRecordedDate, monthOffset);
     const acknowledgedThrough = args.acknowledgements?.[patternKey];
-    if (validIsoDate(acknowledgedThrough)) {
+    if (isValidIsoDate(acknowledgedThrough)) {
       while (expectedDate <= acknowledgedThrough) {
         monthOffset += 1;
         expectedDate = addMonths(lastRecordedDate, monthOffset);

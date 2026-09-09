@@ -10,13 +10,6 @@ function monthBounds(billingDate) {
   };
 }
 
-function isoDayDifference(startDate, endDate) {
-  const start = new Date(`${startDate}T00:00:00.000Z`);
-  const end = new Date(`${endDate}T00:00:00.000Z`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
-  return Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
-}
-
 export function isSingleMonthFixedTermLease(lease) {
   if (!lease?.startDate || !lease?.endDate || normalizeLeaseAgreementType(lease) !== "fixed_term") return false;
   if (normalizeLeaseBillingCadence(lease) !== "full_term") return false;

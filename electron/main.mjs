@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { registerDocumentAiIpc } from "./documentAi.mjs";
 import { registerDocumentOcrIpc } from "./documentOcr.mjs";
 import { registerCompanionSyncIpc } from "./companionSync.mjs";
-import { getRentalTrackerDataPaths } from "./fileStore.mjs";
+import { getRentalTrackerDataPaths, sanitizeFileStem } from "./fileStore.mjs";
 import { registerPersistenceIpc, registerSecretsIpc } from "./persistenceIpc.mjs";
 
 const { autoUpdater } = electronUpdater;
@@ -122,12 +122,6 @@ function documentExtensionForMimeType(mimeType, fileName = "") {
   return mimeExtensionMap[String(mimeType || "").trim().toLowerCase()] || ".bin";
 }
 
-function sanitizeDocumentFileStem(fileName = "document") {
-  const stem = path.basename(String(fileName || "document"), path.extname(String(fileName || "document")));
-  const cleaned = stem.replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return cleaned || "document";
-}
-
 async function ensureDocumentOpenTempDir() {
   await fs.mkdir(DOCUMENT_OPEN_TEMP_DIR, { recursive: true });
   return DOCUMENT_OPEN_TEMP_DIR;
@@ -137,7 +131,7 @@ async function openDocumentExternally(payload) {
   const parsed = parseDocumentDataUrl(payload?.dataUrl);
   const mimeType = String(payload?.mimeType || parsed.mimeType || "application/octet-stream").toLowerCase();
   const extension = documentExtensionForMimeType(mimeType, payload?.name);
-  const fileName = `${sanitizeDocumentFileStem(payload?.name)}-${randomUUID()}${extension}`;
+  const fileName = `${sanitizeFileStem(payload?.name)}-${randomUUID()}${extension}`;
   const filePath = path.join(await ensureDocumentOpenTempDir(), fileName);
   await fs.writeFile(filePath, parsed.buffer);
   const shellResult = await shell.openPath(filePath);

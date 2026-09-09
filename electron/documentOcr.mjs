@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { sanitizeFileStem } from "./fileStore.mjs";
 
 const DOCUMENT_OCR_SUPPORTED_CHANNEL = "document-ocr:supported";
 const DOCUMENT_OCR_EXTRACT_CHANNEL = "document-ocr:extract";
@@ -47,12 +48,6 @@ function extensionForMimeType(mimeType, fileName = "") {
   };
 
   return mimeExtensionMap[normalizedMime] || ".bin";
-}
-
-function sanitizeFileStem(fileName = "document") {
-  const stem = path.basename(String(fileName || "document"), path.extname(String(fileName || "document")));
-  const cleaned = stem.replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return cleaned || "document";
 }
 
 function getWindowsOcrScript() {
@@ -339,4 +334,3 @@ export function registerDocumentOcrIpc() {
     return extractDocumentOcr(payload);
   });
 }
-

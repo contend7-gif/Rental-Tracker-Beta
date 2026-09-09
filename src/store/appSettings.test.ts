@@ -103,6 +103,13 @@ test("monthly close snapshots and optional operations notifications are sanitize
   assert.equal(sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, operationsLeaseReviewDaysBefore: "bad" }).operationsLeaseReviewDaysBefore, 60);
 });
 
+test("monthly close preserves the review version across settings reloads", () => {
+  const record = { closedAt: "2026-08-31T12:00:00.000Z", signature: "close-1234abcd", issueCount: 0, reviewVersion: 2 };
+  const updated = sanitizeAppSettings({ ...DEFAULT_APP_SETTINGS, monthlyCloseRecords: { "2026-08::all": record } });
+  assert.deepEqual(updated.monthlyCloseRecords["2026-08::all"], record);
+  assert.deepEqual(sanitizeAppSettings(updated).monthlyCloseRecords, updated.monthlyCloseRecords);
+});
+
 test("operations follow-ups, reconciliations, and backup policy are sanitized", () => {
   const updated = sanitizeAppSettings({
     ...DEFAULT_APP_SETTINGS,

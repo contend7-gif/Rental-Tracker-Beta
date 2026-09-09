@@ -1,3 +1,5 @@
+import { buildTransactionSupportIndex, hasTransactionSupport } from "../../domain/transactionSupport.ts";
+
 const IMPROVEMENT_PATTERN = /\b(improvement|renovat|remodel|replace|replacement|roof|hvac|furnace|water heater|flooring|cabinet|addition|upgrade|capital)\b/i;
 const SERVICE_PERIOD_CATEGORIES = new Set(["Utilities", "Insurance"]);
 const UNCLEAR_CATEGORIES = new Set(["Other expenses", "Other income", "Uncategorized", "Other"]);
@@ -27,14 +29,6 @@ function transactionText(transaction) {
   ].filter(Boolean).join(" ");
 }
 
-function hasTransactionDocument(transaction, documents = []) {
-  return documents.some(
-    (document) =>
-      document.transactionId === transaction?.id ||
-      (Array.isArray(document.relatedTransactionIds) && document.relatedTransactionIds.includes(transaction?.id)),
-  );
-}
-
 function transactionHasLinkedAsset(transaction, assets = []) {
   return assets.some((asset) =>
     asset.sourceTransactionId === transaction?.id ||
@@ -44,7 +38,7 @@ function transactionHasLinkedAsset(transaction, assets = []) {
 
 export function getTransactionReviewIssues(transaction, context = {}) {
   if (!transaction || transaction.status === "void") return [];
-  const documents = context.documents || [];
+  const supportIndex = context.transactionSupportIndex || buildTransactionSupportIndex(context.documents);
   const isTaxRelevant = context.isTaxReviewRelevantTransaction?.(transaction) ?? transaction.type === "Expense";
   const issues = [];
 
@@ -52,8 +46,7 @@ export function getTransactionReviewIssues(transaction, context = {}) {
     isTaxRelevant &&
     transaction.type === "Expense" &&
     transaction.reviewOverrides?.missing_receipt !== "not_available" &&
-    !transaction.receiptName &&
-    !hasTransactionDocument(transaction, documents)
+    !hasTransactionSupport(transaction, supportIndex)
   ) {
     issues.push(issue("missing_receipt", "Missing receipt/document", "receiptName"));
   }
@@ -114,6 +107,7 @@ export function getTransactionTaxReadiness(transaction, context = {}) {
 }
 
 export function buildTransactionReviewInbox(transactions = [], context = {}) {
+  context = { ...context, transactionSupportIndex: buildTransactionSupportIndex(context.documents) };
   return transactions
     .map((transaction) => ({
       transaction,

@@ -9,7 +9,6 @@ import {
   leaseReminderToneClass,
 } from "../lib/appSupport.ts";
 import { documentNeedsIndexing, documentNeedsTags, documentSupportsAutomaticOcr, normalizeDocumentOcrStatus, normalizeExtractedDocumentText } from "../domain/documentIntelligence.ts";
-import { isTenantLedgerKindAllowedForTreatment, normalizeTenantLedgerAccountingTreatment, recommendedTenantLedgerAccountingTreatment, recommendedTenantLedgerKindForTreatment } from "../domain/tenantLedgerPosting.ts";
 import { getLeaseExpirationPill, leaseExpirationToneClass, shouldExpandNeedsReview } from "../store/dashboardContext.ts";
 import { LEASE_AUTOMATION_HELPER_TEXT } from "../store/appSettings.ts";
 import { useStableActions } from "../store/useStableActions.ts";

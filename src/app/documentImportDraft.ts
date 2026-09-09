@@ -27,7 +27,10 @@ type BuildDocumentImportFileDraftArgs = DocumentImportScope & {
 };
 
 export function hasDocumentImportContext(context?: DocumentImportContext | null): boolean {
-  return Boolean(context && Object.keys(context).length > 0);
+  // React/DOM button events also have a `type`, but are not import metadata.
+  if (!context || "preventDefault" in context || "nativeEvent" in context) return false;
+  return ["propertyId", "unit", "type", "tags", "linkType", "linkedId"]
+    .some((key) => Boolean(context[key as keyof DocumentImportContext]));
 }
 
 export function buildDocumentImportPickerDraft(

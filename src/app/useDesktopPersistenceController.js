@@ -229,6 +229,9 @@ export function useDesktopPersistenceController({
     },
   });
 
+  const snapshotBuilderRef = useRef(buildBackupSnapshot);
+  snapshotBuilderRef.current = buildBackupSnapshot;
+
   const getDesktopSaveQueue = (desktopPersistence) => {
     if (!desktopPersistence?.saveAppData) return null;
     if (!desktopSaveQueueRef.current) {
@@ -258,7 +261,7 @@ export function useDesktopPersistenceController({
     const saveQueue = getDesktopSaveQueue(desktopPersistence);
     if (!saveQueue) return { ok: true };
 
-    saveQueue.enqueue(buildBackupSnapshot());
+    saveQueue.enqueue(snapshotBuilderRef.current());
     const result = await saveQueue.flush();
     if (result?.ok === false) {
       const message = result.message || "SQLite save failed.";
@@ -1037,6 +1040,7 @@ export function useDesktopPersistenceController({
   }, [appSettings.backupIntervalDays, appSettings.backupRetentionCount, buildBackupSnapshot, hasAnyData, lastAutoBackupAt]);
 
   return {
+    flushCurrentDesktopSave,
     applyLeaseAutomation,
     autoBackupStatusLabel,
     checkForDesktopUpdates,

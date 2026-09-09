@@ -8,6 +8,7 @@ import type {
 import type { LeaseAutomationReminder } from "./leaseAutomation.ts";
 import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
 import { normalizeLeaseAgreementType } from "./leaseTerms.js";
+import { isValidIsoDate } from "./isoDate.ts";
 import type { OperationsFollowUpRecord } from "../store/appSettings.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -54,13 +55,6 @@ export type PlanningCalendarAction = {
 
 export type OperationsCalendarBucket = "attention" | "next7" | "next30" | "later";
 
-function validIsoDate(value: unknown): value is string {
-  const date = String(value || "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
-  const parsed = new Date(`${date}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
-}
-
 function diffDays(startIso: string, endIso: string) {
   const start = new Date(`${startIso}T00:00:00.000Z`);
   const end = new Date(`${endIso}T00:00:00.000Z`);
@@ -68,7 +62,7 @@ function diffDays(startIso: string, endIso: string) {
 }
 
 function shiftIsoDate(date: string, offsetDays: number) {
-  if (!validIsoDate(date)) return "";
+  if (!isValidIsoDate(date)) return "";
   const shifted = new Date(`${date}T00:00:00.000Z`);
   shifted.setUTCDate(shifted.getUTCDate() + offsetDays);
   return shifted.toISOString().slice(0, 10);
@@ -97,7 +91,7 @@ export function applyOperationsFollowUps(
     const record = records[item.id];
     if (!record) return [item];
     if ((record.status === "done" || record.status === "intentional") && !options.showHandled) return [];
-    if (record.status === "snoozed" && validIsoDate(record.snoozedUntil)) {
+    if (record.status === "snoozed" && isValidIsoDate(record.snoozedUntil)) {
       return [{ ...item, originalDate: record.originalDate || item.date, date: record.snoozedUntil, followUpStatus: record.status }];
     }
     return [{ ...item, originalDate: record.originalDate || item.date, followUpStatus: record.status }];
@@ -105,7 +99,7 @@ export function applyOperationsFollowUps(
 }
 
 function leaseReviewLeadDays(lease: Lease, configuredDays: number) {
-  if (!validIsoDate(lease.startDate) || !validIsoDate(lease.endDate)) return 0;
+  if (!isValidIsoDate(lease.startDate) || !isValidIsoDate(lease.endDate)) return 0;
   const termDays = diffDays(lease.startDate, lease.endDate);
   if (termDays <= 1 || configuredDays <= 0) return 0;
   return Math.min(configuredDays, Math.max(1, Math.floor(termDays / 3)));
@@ -147,7 +141,7 @@ export function buildOperationsCalendarItems(args: {
   const items: OperationsCalendarItem[] = [];
 
   (args.leaseAutomationReminders || []).forEach((reminder) => {
-    if (!validIsoDate(reminder.dueDate)) return;
+    if (!isValidIsoDate(reminder.dueDate)) return;
     items.push({
       id: `rent:${reminder.id}`,
       source: "rent",
@@ -166,7 +160,7 @@ export function buildOperationsCalendarItems(args: {
     if (!lease?.id) return;
     const tenantLabel = lease.tenantName || lease.unit || "Tenant";
     const unitLabel = lease.unit || "Shared";
-    if (validIsoDate(lease.startDate)) {
+    if (isValidIsoDate(lease.startDate)) {
       items.push({
         id: `lease-start:${lease.id}:${lease.startDate}`,
         source: "lease",
@@ -182,7 +176,7 @@ export function buildOperationsCalendarItems(args: {
       });
     }
 
-    if (validIsoDate(lease.actualEndDate)) {
+    if (isValidIsoDate(lease.actualEndDate)) {
       items.push({
         id: `lease-move-out:${lease.id}:${lease.actualEndDate}`,
         source: "lease",
@@ -200,7 +194,7 @@ export function buildOperationsCalendarItems(args: {
     }
 
     const agreementType = normalizeLeaseAgreementType(lease);
-    if (agreementType === "month_to_month" || !validIsoDate(lease.endDate)) return;
+    if (agreementType === "month_to_month" || !isValidIsoDate(lease.endDate)) return;
     if (lease.status === "Ended") {
       items.push({
         id: `lease-ended:${lease.id}:${lease.endDate}`,
@@ -220,7 +214,7 @@ export function buildOperationsCalendarItems(args: {
 
     const reviewLeadDays = leaseReviewLeadDays(lease, configuredLeaseReviewDays);
     const reviewDate = reviewLeadDays > 0 ? shiftIsoDate(lease.endDate, -reviewLeadDays) : "";
-    if (validIsoDate(reviewDate) && reviewDate > lease.startDate) {
+    if (isValidIsoDate(reviewDate) && reviewDate > lease.startDate) {
       items.push({
         id: `lease-review:${lease.id}:${reviewDate}`,
         source: "lease",
@@ -256,7 +250,7 @@ export function buildOperationsCalendarItems(args: {
 
   const inactiveWorkOrderStatuses = new Set(["Completed", "Closed", "Canceled"]);
   (args.workOrders || []).forEach((workOrder) => {
-    if (!workOrder?.id || inactiveWorkOrderStatuses.has(workOrder.status) || !validIsoDate(workOrder.dueDate)) return;
+    if (!workOrder?.id || inactiveWorkOrderStatuses.has(workOrder.status) || !isValidIsoDate(workOrder.dueDate)) return;
     items.push({
       id: `maintenance:${workOrder.id}:${workOrder.dueDate}`,
       source: "maintenance",
@@ -271,7 +265,7 @@ export function buildOperationsCalendarItems(args: {
   });
 
   (args.documents || []).forEach((document) => {
-    if (!document?.id || !validIsoDate(document.expiresOn)) return;
+    if (!document?.id || !isValidIsoDate(document.expiresOn)) return;
     items.push({
       id: `document:${document.id}:${document.expiresOn}`,
       source: "document",
@@ -286,7 +280,7 @@ export function buildOperationsCalendarItems(args: {
   });
 
   (args.recurringTemplates || []).forEach((template) => {
-    if (!template?.id || !template.active || !validIsoDate(template.nextDueDate)) return;
+    if (!template?.id || !template.active || !isValidIsoDate(template.nextDueDate)) return;
     items.push({
       id: `recurring:${template.id}:${template.nextDueDate}`,
       source: "recurring",
@@ -301,7 +295,7 @@ export function buildOperationsCalendarItems(args: {
   });
 
   (args.recurringExpenseChecks || []).forEach((check) => {
-    if (!check?.patternKey || !validIsoDate(check.reviewDate) || !validIsoDate(check.expectedDate)) return;
+    if (!check?.patternKey || !isValidIsoDate(check.reviewDate) || !isValidIsoDate(check.expectedDate)) return;
     items.push({
       id: `smart-check:${check.patternKey}:${check.expectedDate}`,
       source: "smart_check",
@@ -318,7 +312,7 @@ export function buildOperationsCalendarItems(args: {
   });
 
   (args.planningActionItems || []).forEach((action) => {
-    if (!action?.id || action.status === "done" || !validIsoDate(action.dueDate)) return;
+    if (!action?.id || action.status === "done" || !isValidIsoDate(action.dueDate)) return;
     items.push({
       id: `planning:${action.id}:${action.dueDate}`,
       source: "planning",
@@ -333,7 +327,7 @@ export function buildOperationsCalendarItems(args: {
   });
 
   (args.loans || []).forEach((loan) => {
-    if (!loan?.id || !validIsoDate(loan.nextPayment)) return;
+    if (!loan?.id || !isValidIsoDate(loan.nextPayment)) return;
     items.push({
       id: `loan:${loan.id}:${loan.nextPayment}`,
       source: "loan",
@@ -349,8 +343,8 @@ export function buildOperationsCalendarItems(args: {
   const backupToday = String(args.backup?.todayIso || "").slice(0, 10);
   const lastRecoverableDate = String(args.backup?.lastRecoverableBackupAt || "").slice(0, 10);
   const backupIntervalDays = Math.max(1, Math.min(30, Math.round(Number(args.backup?.intervalDays || 3))));
-  const backupDueDate = validIsoDate(lastRecoverableDate) ? shiftIsoDate(lastRecoverableDate, backupIntervalDays) : backupToday;
-  if (validIsoDate(backupDueDate)) {
+  const backupDueDate = isValidIsoDate(lastRecoverableDate) ? shiftIsoDate(lastRecoverableDate, backupIntervalDays) : backupToday;
+  if (isValidIsoDate(backupDueDate)) {
     items.push({
       id: `backup:recoverable:${backupDueDate}`,
       source: "backup",
@@ -381,7 +375,7 @@ export function selectOperationsCalendarItems(
 ) {
   const horizonDays = Math.max(7, Math.min(365, Number(args.horizonDays || 90)));
   return items.filter((item) => {
-    if (!validIsoDate(item.date) || !validIsoDate(args.todayIso)) return false;
+    if (!isValidIsoDate(item.date) || !isValidIsoDate(args.todayIso)) return false;
     if (args.propertyFilter && args.propertyFilter !== "all" && item.propertyId !== args.propertyFilter) return false;
     if (args.unitFilter && args.unitFilter !== "all" && item.unit && item.unit !== args.unitFilter) return false;
     if (args.sourceFilter && args.sourceFilter !== "all" && item.source !== args.sourceFilter) return false;

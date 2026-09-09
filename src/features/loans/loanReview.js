@@ -1,5 +1,6 @@
 import { deriveLoanBalanceFromPayments, loanIdsMatch } from "../../domain/loans.ts";
-import { toLocalIsoDate } from "../../lib/localDate.ts";
+import { coveredLoanPaymentMonths, getExpectedLoanPaymentMonths, getMissingLoanPaymentMonths } from "../../domain/loanPaymentCoverage.ts";
+export { getExpectedLoanPaymentMonths, getMissingLoanPaymentMonths };
 
 const ISSUE_LABELS = {
   missing_1098_review: "1098 review needed",
@@ -50,39 +51,6 @@ function selectedYear(yearFilter) {
   return String(yearFilter || new Date().getFullYear());
 }
 
-function monthKey(dateStr) {
-  return String(dateStr || "").slice(0, 7);
-}
-
-function addMonths(dateStr, monthsToAdd) {
-  const [year, month, day] = String(dateStr || "").split("-").map((part) => Number(part));
-  if (![year, month, day].every(Number.isFinite)) return "";
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCMonth(date.getUTCMonth() + monthsToAdd);
-  return date.toISOString().slice(0, 10);
-}
-
-function firstMortgageDueDateAfterOrigination(dateStr) {
-  const [year, month, day] = String(dateStr || "").slice(0, 10).split("-").map((part) => Number(part));
-  if (![year, month, day].every(Number.isFinite)) return "";
-  const date = new Date(Date.UTC(year, month - 1, 1));
-  date.setUTCMonth(date.getUTCMonth() + (day === 1 ? 1 : 2));
-  return date.toISOString().slice(0, 10);
-}
-
-function coveredPaymentMonths(paymentDate) {
-  const normalized = String(paymentDate || "").slice(0, 10);
-  const month = monthKey(normalized);
-  if (!month) return [];
-  const months = new Set([month]);
-  const day = Number(normalized.slice(8, 10));
-  if (Number.isFinite(day) && day >= 25) {
-    const nextMonth = monthKey(addMonths(`${month}-01`, 1));
-    if (nextMonth) months.add(nextMonth);
-  }
-  return Array.from(months);
-}
-
 function isMortgageReportingLoan(loan) {
   return ["Primary Mortgage", "Second Mortgage", "HELOC"].includes(String(loan?.loanType || "Primary Mortgage"));
 }
@@ -129,36 +97,11 @@ export function summarizeLoanPayments(loan, loanPayments = [], context = {}) {
       acc.escrow += money(payment.escrow);
       acc.pmi += money(payment.mortgageInsurance);
       acc.total += money(payment.totalPayment);
-      coveredPaymentMonths(payment.paymentDate).forEach((coveredMonth) => acc.recordedMonths.add(coveredMonth));
+      coveredLoanPaymentMonths(payment.paymentDate).forEach((coveredMonth) => acc.recordedMonths.add(coveredMonth));
       return acc;
     },
     { paymentCount: 0, interest: 0, deductibleInterest: 0, principal: 0, extraPrincipal: 0, escrow: 0, pmi: 0, total: 0, recordedMonths: new Set() },
   );
-}
-
-export function getExpectedLoanPaymentMonths(loan, context = {}) {
-  const year = selectedYear(context.yearFilter);
-  const todayIso = context.todayIso || toLocalIsoDate();
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year}-12-31`;
-  const cappedEnd = year === todayIso.slice(0, 4) ? todayIso : yearEnd;
-  const originatedOn = String(loan?.originatedOn || yearStart).slice(0, 10);
-  const firstDueDate = firstMortgageDueDateAfterOrigination(originatedOn) || originatedOn;
-  if (!loan || firstDueDate > cappedEnd) return [];
-
-  let cursor = firstDueDate > yearStart ? firstDueDate : yearStart;
-  cursor = `${cursor.slice(0, 7)}-01`;
-  const months = [];
-  while (cursor && cursor <= cappedEnd) {
-    months.push(cursor.slice(0, 7));
-    cursor = addMonths(cursor, 1);
-  }
-  return months;
-}
-
-export function getMissingLoanPaymentMonths(loan, loanPayments = [], context = {}) {
-  const summary = summarizeLoanPayments(loan, loanPayments, context);
-  return getExpectedLoanPaymentMonths(loan, context).filter((month) => !summary.recordedMonths.has(month));
 }
 
 function hasLoanDocument(loan, documents = []) {

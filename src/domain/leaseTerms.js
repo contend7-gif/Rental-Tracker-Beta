@@ -1,4 +1,5 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
+import { leaseCombinedRentTotal, leaseExtensionRentTotal } from "./leaseExtensions.ts";
 
 export const LEASE_DURATION_TYPES = ["Short-term", "Mid-term", "Long-term"];
 
@@ -81,7 +82,7 @@ export function leaseBillingAmount(lease) {
 }
 
 export function leaseMonthlyEquivalent(lease) {
-  const amount = leaseBillingAmount(lease);
+  const amount = normalizeLeaseBillingCadence(lease) === "full_term" ? leaseCombinedRentTotal(lease) : leaseBillingAmount(lease);
   const cadence = normalizeLeaseBillingCadence(lease);
   if (cadence === "monthly") return amount;
   if (cadence === "weekly") return Math.round((amount * 52 / 12) * 100) / 100;
@@ -118,12 +119,29 @@ export function leaseBillingCadenceLabel(lease) {
 
 export function leaseRentSummaryLabel(lease, currency = (value) => `$${Number(value || 0).toFixed(2)}`) {
   const amount = currency(leaseBillingAmount(lease));
+  const extensionTotal = leaseExtensionRentTotal(lease);
+  if (extensionTotal > 0) {
+    return `${amount} original + ${currency(extensionTotal)} extensions (${currency(leaseCombinedRentTotal(lease))} combined)`;
+  }
   const cadence = normalizeLeaseBillingCadence(lease);
   if (cadence === "full_term") return `${amount} full term`;
   if (cadence === "weekly") return `${amount} / week`;
   if (cadence === "biweekly") return `${amount} / 2 weeks`;
   if (cadence === "custom") return `${amount} / ${leaseBillingIntervalDays(lease)} days`;
   return `${amount} / month`;
+}
+
+export function leaseRentBreakdown(lease, currency = (value) => `$${Number(value || 0).toFixed(2)}`) {
+  const originalRent = leaseBillingAmount(lease);
+  const extensionRent = leaseExtensionRentTotal(lease);
+  return {
+    originalRent,
+    extensionRent,
+    combinedRent: leaseCombinedRentTotal(lease),
+    originalLabel: currency(originalRent),
+    extensionLabel: currency(extensionRent),
+    combinedLabel: currency(leaseCombinedRentTotal(lease)),
+  };
 }
 
 export function leaseTermSummaryLabel(lease) {

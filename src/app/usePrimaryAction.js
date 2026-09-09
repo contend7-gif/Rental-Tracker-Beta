@@ -37,7 +37,7 @@ export function usePrimaryAction({
         key: "document",
         label: "Document",
         detail: "Upload a receipt, lease, or supporting file.",
-        onClick: openDocumentImportPicker,
+        onClick: () => openDocumentImportPicker(),
         prefetchKey: "documentImport",
       },
       {

@@ -2,6 +2,15 @@ import { formatUnitLabel } from "../../domain/unitLabels.js";
 import { normalizeExtractedDocumentText } from "../../domain/documentIntelligence.ts";
 import { SUPPORTING_ONLY_TAG, getDocumentWorkflowStatus } from "./documentWorkflow.js";
 
+export function getDocumentPreviewKind(document) {
+  const mimeType = String(document?.mimeType || "").toLowerCase();
+  const name = String(document?.name || "").toLowerCase();
+  if (mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(name)) return "image";
+  if (mimeType === "application/pdf" || /\.pdf$/i.test(name)) return "pdf";
+  if (mimeType.startsWith("text/") || /\.(txt|csv|log)$/i.test(name)) return "text";
+  return "unsupported";
+}
+
 export function isSupportingOnlyDocument(document) {
   return Array.isArray(document?.tags) && document.tags.some((tag) => String(tag || "").trim().toLowerCase() === SUPPORTING_ONLY_TAG);
 }

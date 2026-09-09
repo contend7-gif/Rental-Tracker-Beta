@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from "react";
+import { buildTransactionSupportIndex } from "../domain/transactionSupport.ts";
 import { getScheduleELineIdForTransaction, scheduleELines } from "./accountingShared.js";
 import {
   buildTransactionReviewInbox,
@@ -67,6 +68,7 @@ export function useLedgerActivityWorkspaceController({
   const transactionReviewContext = useMemo(
     () => ({
       documents,
+      transactionSupportIndex: buildTransactionSupportIndex(documents),
       assets,
       isTaxReviewRelevantTransaction,
     }),

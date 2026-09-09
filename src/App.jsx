@@ -1,5 +1,6 @@
-import React, { Suspense, useState } from "react";
-import { currency, getRentalUsePctForDate, getRentalUsePctForRange, toPctDisplay } from "./domain/accounting.ts";
+import { usePlanningWorkspace } from "./app/usePlanningWorkspace.js";
+import React, { useState } from "react";
+import { currency, getRentalUsePctForDate, getRentalUsePctForRange } from "./domain/accounting.ts";
 import { adjustedAssetDepreciationForYear } from "./domain/assetDepreciation.ts";
 import {
   buildOwnerContactDefaults,
@@ -18,11 +19,9 @@ import {
   quarterStartIso,
   sanitizeFileNamePart,
 } from "./lib/appSupport.ts";
-import { buildOwnerMonthlyReport, buildOwnerPeriodReport, ownerMonthlyReportCsv, ownerStatementActivitySummary, ownerStatementCommunicationTxt, ownerStatementCsv, ownerStatementEmailBody, ownerStatementEmailSubject, scheduleEFriendlyCsv, statementDateRangeFromRows, summarizeOwnerMonthlyReport, tenantStatementCsv, tenantStatementSummary } from "./domain/reporting.ts";
 import { documentSupportsAutomaticOcr, inferDocumentTags, normalizeDocumentOcrStatus, normalizeExtractedDocumentText, suggestDocumentType } from "./domain/documentIntelligence.ts";
 import { activeProperties as getActiveProperties } from "./domain/propertyLifecycle.js";
 import { isTenantLedgerKindAllowedForTreatment, normalizeTenantLedgerAccountingTreatment, recommendedTenantLedgerAccountingTreatment, recommendedTenantLedgerKindForTreatment } from "./domain/tenantLedgerPosting.ts";
-import { getAssetReadiness, getAssetReviewIssues } from "./features/assets/assetReview.js";
 import { useRentalStore } from "./store/useRentalStore.ts";
 import { SETTINGS_SAVED_TEXT, useAppSettings } from "./store/appSettings.ts";
 import { useDashboardContext } from "./store/dashboardContext.ts";
@@ -30,7 +29,6 @@ import {
   ACCESS_ROLE_LABELS,
 } from "./app/accessControl.ts";
 import {
-  buildRentalDayAllocationWeights,
   categories,
   defaultLifeForAssetType,
   getScheduleELineIdForTransaction,
@@ -38,7 +36,6 @@ import {
   isTaxReviewRelevantTransaction,
 } from "./app/accountingShared.js";
 import { DEFAULT_DASHBOARD_YEAR } from "./app/appStorageKeys.js";
-import { daysBetween, formatDaysLeft } from "./app/dateHelpers.js";
 import {
   desktopDiagnosticEventClass,
   desktopDiagnosticPillClass,
@@ -49,7 +46,6 @@ import {
   canAttachToTransaction,
   documentLinkSuggestionKindLabel,
   documentTagSuggestionSourceLabel,
-  expenseSuggestionConfidenceLabel,
   expenseSuggestionReasonSummary,
   formatDocumentTags,
   parseDocumentTags,
@@ -60,13 +56,12 @@ import {
 import {
   createBlankDocumentImportDraft,
   createBlankForm,
-  createBlankWorkOrderDraft,
 } from "./app/draftFactories.js";
 import { formatPercentInput, formatUsPhone } from "./app/formatHelpers.js";
 import {
   leaseActualEndLabel,
 } from "./app/leaseShared.js";
-import { navGroups, navItems, viewDetails } from "./app/navigationShared.js";
+import { navGroups, viewDetails } from "./app/navigationShared.js";
 import {
   likelyNextViewsByView,
   prefetchDialog,
@@ -452,6 +447,7 @@ export default function App() {
     workOrders,
   });
   const {
+    flushCurrentDesktopSave,
     applyLeaseAutomation,
     autoBackupStatusLabel,
     checkForDesktopUpdates,
@@ -820,6 +816,10 @@ export default function App() {
     editingTenantLedgerEntryId,
     editingUsePeriodId,
     leaseDraft,
+    leaseExtensionDocument,
+    leaseExtensionDraft,
+    leaseExtensionPreview,
+    extensionPdfInputRef,
     leaseEditorMode,
     leaseTenantLedgerHeadline,
     leaseTenantLedgerRowById,
@@ -833,6 +833,12 @@ export default function App() {
     openLinkedTenantLedgerTransaction,
     openOccupancyEditor,
     openLeasePdfPicker,
+    openLeaseExtension,
+    closeLeaseExtension,
+    cancelLeaseExtension,
+    onLeaseExtensionPdfInputChange,
+    saveLeaseExtension,
+    setLeaseExtensionDraft,
     saveLease,
     saveTenantLedgerEntry,
     saveUnitOccupancyPeriod,
@@ -850,6 +856,7 @@ export default function App() {
     usePeriodDraft,
   } = useLeaseTenantLedgerController({
     actions,
+    persistExtension: () => flushCurrentDesktopSave(),
     appSettings,
     confirmDestructiveActions: appSettings.confirmDestructiveActions,
     currency,
@@ -1243,7 +1250,6 @@ export default function App() {
   } = useSetupChecklistActions({ appSettings, setSetting });
 
   const {
-    applyPlanningPreset,
     planningAssumptionAuditRows,
     planningCapitalMonthlyTarget,
     planningCapitalRunway,
@@ -1268,7 +1274,6 @@ export default function App() {
     planningNearTermCapitalTargets,
     planningNearTermReserveTarget,
     planningNextCapitalTarget,
-    planningProjection,
     planningPropertySnapshots,
     planningRecommendations,
     planningRecommendedMoves,
@@ -1276,9 +1281,7 @@ export default function App() {
     planningReserveGap,
     planningReserveSummary,
     planningRows,
-    planningScenarioEventInputs,
     planningScenarioIsDirty,
-    planningScenarioOverrideInputs,
     planningScopeLabel,
     planningScopeUnits,
     planningSummary,
@@ -1288,12 +1291,40 @@ export default function App() {
     planningUnitEconomicsRows,
     planningUnitFilterIgnored,
     planningUpcomingChanges,
-  } = usePlanningWorkspaceModel({
+    planningCapitalChartData,
+    planningDecisionDashboard,
+    planningOutcomeHighlights,
+    planningScenarioChartData,
+    planningScenarioComparisons,
+    planningScenarioComparisonsExtended,
+    planningScenarioDiffRows,
+    planningScenarioRange,
+    planningScenarioTimelineRows,
+    planningScenarioTimelineVisual,
+    planningSensitivityRows,
+    dashboardPlanningWatch,
+    planningMemoText,
+    planningOverviewJumpCards,
+    planningReviewInbox,
+    planningSubtabGuide,
+    copyPlanningMemo,
+    exportPlanningMemoPdf,
+    exportPlanningMemoText,
+    exportPlanningReport,
+    printPlanningMemo,
+  } = usePlanningWorkspace({
     activeTx,
+    addAuditEntry,
+    appSettings,
     assets,
+    desktopStatementPdfApi,
+    draftPlanningManualProjectFromTarget,
     formatPropertyLabel,
+    getPlanningTurnoverInput,
+    isHistoricalDashboard,
     leases,
     loans,
+    planningActionItems,
     planningActiveScenario,
     planningAssumptions,
     planningBaselineScenario,
@@ -1307,33 +1338,9 @@ export default function App() {
     planningScenarioNameDraft,
     planningScenarioNotesDraft,
     planningScenarioOverrides,
+    planningSubtab,
     planningTriggers,
     planningTurnoverInputs,
-    properties,
-    propertyFilter,
-    setPlanningAssumptions,
-    todayIso,
-    unitFilter,
-    units,
-    usePeriods,
-  });
-  const {
-    applyPlanningRecommendedMove,
-    applyPlanningScenarioTemplate,
-    openPlanningReviewInboxItem,
-  } = usePlanningWorkspaceActions({
-    currency,
-    draftPlanningManualProjectFromTarget,
-    getPlanningTurnoverInput,
-    planningAssumptions,
-    planningCapitalMonthlyTarget,
-    planningDecisionComparison,
-    planningMilestones,
-    planningNextCapitalTarget,
-    planningRecommendedMoves,
-    planningRentStrategy,
-    planningTurnoverPlanner,
-    planningUnitEconomicsRows,
     properties,
     propertyFilter,
     resetPlanningEventDraft,
@@ -1344,131 +1351,13 @@ export default function App() {
     setPlanningScenarioEvents,
     setPlanningSubtab,
     todayIso,
-  });
-  const {
-    planningCapitalChartData,
-    planningDecisionDashboard,
-    planningOutcomeHighlights,
-    planningScenarioChartData,
-    planningScenarioComparisons,
-    planningScenarioComparisonsExtended,
-    planningScenarioDiffRows,
-    planningScenarioRange,
-    planningScenarioTimelineRows,
-    planningScenarioTimelineVisual,
-    planningSensitivityRows,
-  } = usePlanningWorkspaceAnalytics({
-    activeTx,
-    currency,
-    formatPropertyLabel,
-    isPlanningActive: view === "planning",
-    leases,
-    loans,
-    planningActiveScenario,
-    planningAssumptions,
-    planningBaselineScenario,
-    planningCapitalTargetsMerged,
-    planningCapitalTimeline,
-    planningDataConfidence,
-    planningDebtPayoffPlan,
-    planningForecastOptionInputs,
-    planningForecastOptions,
-    planningGoals,
-    planningHealthSummary,
-    planningHorizonMonths,
-    planningMilestones,
-    planningProjection,
-    planningRecommendedMoves,
-    planningRentStrategies,
-    planningRows,
-    planningScenarioEvents,
-    planningScenarioNotesDraft,
-    planningScenarioOverrides,
-    planningScopeLabel,
-    planningSummary,
-    planningTurnoverInputs,
-    properties,
-    propertyFilter,
-    todayIso,
+    unitFilter,
     units,
     usePeriods,
-  });
-  const {
-    dashboardPlanningWatch,
-    planningMemoHtml,
-    planningMemoText,
-    planningOpenActionItems,
-    planningOverviewJumpCards,
-    planningReviewInbox,
-    planningSubtabGuide,
-  } = usePlanningWorkspaceNarrative({
-    appSettings,
-    currency,
-    formatPropertyLabel,
-    isPlanningActive: view === "planning",
-    isHistoricalDashboard,
-    planningActionItems,
-    planningActiveScenario,
-    planningAssumptions,
-    planningAssumptionAuditRows,
-    planningBaselineScenario,
-    planningCapitalMonthlyTarget,
-    planningCapitalTargetsMerged,
-    planningDataConfidence,
-    planningDecisionDashboard,
-    planningExitPlan,
-    planningGoalStatus,
-    planningGoals,
-    planningHealthSummary,
-    planningHorizonDisplayMetrics,
-    planningHorizonMonths,
-    planningHorizonShortLabel,
-    planningManualProjects,
-    planningMilestones,
-    planningNextCapitalTarget,
-    planningRecommendedMoves,
-    planningRecommendations,
-    planningReserveGap,
-    planningRentStrategyPricedUnitCount: planningRentStrategy.summary.pricedUnitCount,
-    planningRows,
-    planningScenarioComparisonsExtended,
-    planningScenarioDiffRows,
-    planningScenarioEvents,
-    planningScenarioIsDirty,
-    planningScenarioNotesDraft,
-    planningScenarioOverrides,
-    planningScopeLabel,
-    planningSubtab,
-    planningSummary,
-    planningTriggerAlerts,
-    planningTriggers,
-    planningForecastOptions,
-    todayIso,
-  });
-  const {
-    copyPlanningMemo,
-    exportPlanningMemoPdf,
-    exportPlanningMemoText,
-    exportPlanningReport,
-    printPlanningMemo,
-  } = usePlanningReportActions({
-    addAuditEntry,
-    copyTextToClipboard,
-    desktopStatementPdfApi,
-    downloadTextAsFile,
-    planningAssumptions,
-    planningMemoHtml,
-    planningMemoText,
-    planningReserveSummary,
-    planningRows,
-    planningScopeLabel,
-    planningSummary,
-    printHtmlDocument,
-    propertyFilter,
-    sanitizeFileNamePart,
-    setNotice,
+    view,
     yearFilter,
   });
+
   const {
     carryoverInputValue,
     carryoverScope,
@@ -2593,6 +2482,10 @@ export default function App() {
     isTaxReviewRelevantTransaction,
     isTenantLedgerKindAllowedForTreatment,
     leaseDraft,
+    leaseExtensionDocument,
+    leaseExtensionDraft,
+    leaseExtensionPreview,
+    extensionPdfInputRef,
     leaseEditorMode,
     leasePdfInputRef,
     leaseReminderKindLabel,
@@ -2608,6 +2501,7 @@ export default function App() {
     markTransactionCapitalImprovement,
     normalizeTenantLedgerAccountingTreatment,
     onLeasePdfInputChange,
+    onLeaseExtensionPdfInputChange,
     onTransactionInlineAttachmentChange,
     openAssetSourceTransaction,
     openAssetSourceWorkOrder,
@@ -2616,6 +2510,11 @@ export default function App() {
     createExpenseTransactionsFromUtilitySections,
     openExpenseDraftFromUtilitySection,
     openLeasePdfPicker,
+    openLeaseExtension,
+    closeLeaseExtension,
+    cancelLeaseExtension,
+    saveLeaseExtension,
+    setLeaseExtensionDraft,
     openLinkedTenantLedgerTransaction,
     openTransactionInlineAttachmentPicker,
     ownerContactDefaults,
@@ -2709,8 +2608,6 @@ export default function App() {
     workOrders,
     yearFilter,
   };
-
-
 
   return (
     <div className={`rt-app-shell min-h-screen p-3 sm:p-4 ${appSettings.theme === "dark" ? "theme-dark bg-slate-950 text-slate-100" : "theme-light bg-slate-100 text-slate-900"}`}>

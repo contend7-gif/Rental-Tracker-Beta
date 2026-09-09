@@ -31,13 +31,16 @@ export type DocumentAnalysisResult = {
 export type DocumentAnalysisResultById = Record<string, DocumentAnalysisResult>;
 
 function analyzeDocument(context: InferDocumentTagsArgs): DocumentAnalysisResult {
-  return {
+  const prepared = {
     utilitySections: inferDocumentUtilitySections(context),
-    tagSuggestions: inferDocumentTagSuggestions(context),
-    linkSuggestions: inferDocumentLinkSuggestions(context),
-    expenseSuggestion: inferDocumentExpenseSuggestion(context),
-    workOrderSuggestion: inferDocumentWorkOrderSuggestion(context),
     extractedFields: inferDocumentExtractedFields(context),
+  };
+  return {
+    ...prepared,
+    tagSuggestions: inferDocumentTagSuggestions(context),
+    linkSuggestions: inferDocumentLinkSuggestions(context, prepared),
+    expenseSuggestion: inferDocumentExpenseSuggestion(context, prepared),
+    workOrderSuggestion: inferDocumentWorkOrderSuggestion(context, prepared),
   };
 }
 

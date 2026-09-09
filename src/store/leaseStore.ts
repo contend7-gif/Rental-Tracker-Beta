@@ -8,6 +8,7 @@ import {
   normalizeLeaseBillingCadence,
   normalizeLeaseDurationType,
 } from "../domain/leaseTerms.js";
+import { normalizeLeaseExtensions } from "../domain/leaseExtensions.ts";
 import type { AppendActivityLog } from "./activityStore.ts";
 
 type StateSetter<T> = (updater: T[] | ((previous: T[]) => T[])) => void;
@@ -64,6 +65,17 @@ export function normalizeLease(lease: Lease): Lease {
     lateFeeType: normalizeLeaseLateFeeType(lease.lateFeeType),
     lateFeeValue: Number.isFinite(lateFeeValue) ? Math.max(0, lateFeeValue) : 50,
     autoLateFeeEnabled: lease.autoLateFeeEnabled === true,
+    originalTerm: lease.originalTerm
+      ? {
+          startDate: String(lease.originalTerm.startDate || "").slice(0, 10),
+          endDate: String(lease.originalTerm.endDate || "").slice(0, 10),
+          actualEndDate: String(lease.originalTerm.actualEndDate || "").slice(0, 10) || undefined,
+          rentAmount: Number.isFinite(Number(lease.originalTerm.rentAmount)) ? Math.max(0, Number(lease.originalTerm.rentAmount)) : 0,
+          billingCadence: lease.originalTerm.billingCadence,
+          recordedAt: String(lease.originalTerm.recordedAt || new Date().toISOString()),
+        }
+      : undefined,
+    extensions: normalizeLeaseExtensions(lease.extensions),
   };
   return {
     ...baseLease,

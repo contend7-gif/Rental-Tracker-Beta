@@ -1,4 +1,5 @@
 import type {
+  DocumentItem,
   Lease,
   Loan,
   LoanPayment,
@@ -7,6 +8,8 @@ import type {
   WorkOrder,
 } from "../models.ts";
 import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
+import { getMissingLoanPaymentMonths } from "./loanPaymentCoverage.ts";
+import { buildTransactionSupportIndex, hasTransactionSupport } from "./transactionSupport.ts";
 
 export type MonthlyCloseIssueKind =
   | "bank_match"
@@ -75,6 +78,16 @@ function stableSignature(parts: string[]) {
   return `close-${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+function snapshotRecords(records: unknown[]) {
+  const serialize = (value: unknown): string => {
+    if (value == null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+    if (Array.isArray(value)) return `[${value.map(serialize).join(",")}]`;
+    return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${serialize(value[key])}`).join(",")}}`;
+  };
+  return records.map(serialize).sort().join("|");
+}
+
 function rentEntryAmount(entry: TenantLedgerEntry, transactionByLedgerEntryId: Map<string, Transaction>) {
   const memo = String(entry.memo || "").toLowerCase();
   const linkedTransaction = transactionByLedgerEntryId.get(entry.id);
@@ -97,6 +110,7 @@ export function buildMonthlyCloseReview(args: {
   todayIso: string;
   propertyFilter?: string;
   transactions?: Transaction[];
+  documents?: DocumentItem[];
   leases?: Lease[];
   tenantLedgerEntries?: TenantLedgerEntry[];
   recurringExpenseChecks?: RecurringExpenseCheck[];
@@ -131,9 +145,10 @@ export function buildMonthlyCloseReview(args: {
     });
   }
 
+  const supportedTransactionIds = buildTransactionSupportIndex(args.documents);
   const missingSupport = monthTransactions.filter((transaction) => (
     transaction.type === "Expense"
-    && !String(transaction.receiptName || "").trim()
+    && !hasTransactionSupport(transaction, supportedTransactionIds)
     && transaction.reviewOverrides?.missing_receipt !== "not_available"
   ));
   if (missingSupport.length > 0) {
@@ -156,7 +171,7 @@ export function buildMonthlyCloseReview(args: {
   const rentByLease = new Map<string, { charged: number; paid: number }>();
   const monthRentTotals = { charged: 0, paid: 0 };
   (args.tenantLedgerEntries || []).forEach((entry) => {
-    if (!leaseIds.has(entry.leaseId) || entry.date > monthEnd) return;
+    if (entry.voidedAt || !leaseIds.has(entry.leaseId) || entry.date > monthEnd) return;
     const amount = rentEntryAmount(entry, transactionByLedgerEntryId);
     if (inMonth(entry.date, monthStart, monthEnd)) {
       monthRentTotals.charged += amount.charged;
@@ -195,15 +210,13 @@ export function buildMonthlyCloseReview(args: {
     });
   }
 
-  const loanIdsWithPayments = new Set((args.loanPayments || [])
-    .filter((payment) => inMonth(payment.paymentDate, monthStart, monthEnd))
-    .map((payment) => payment.loanId));
   const monthIsDue = monthStart <= args.todayIso;
   const missingLoanPayments = monthIsDue ? (args.loans || []).filter((loan) => (
     inScope(loan.propertyId, propertyFilter)
-    && loan.originatedOn <= monthEnd
     && Number(loan.scheduledPI || 0) + Number(loan.scheduledEscrow || 0) + Number(loan.scheduledMortgageInsurance || 0) > 0
-    && !loanIdsWithPayments.has(loan.id)
+    && getMissingLoanPaymentMonths(loan, args.loanPayments, {
+      yearFilter: args.month.slice(0, 4), todayIso: args.todayIso,
+    }).includes(args.month)
   )) : [];
   if (missingLoanPayments.length > 0) {
     issues.push({
@@ -244,13 +257,27 @@ export function buildMonthlyCloseReview(args: {
     });
   }
 
+  const income = money(monthTransactions.filter((transaction) => transaction.type === "Income").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0));
+  const expenses = money(monthTransactions.filter((transaction) => transaction.type === "Expense").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0));
+  const monthTransactionIds = new Set(monthTransactions.map((transaction) => transaction.id));
+  const scopedLoans = (args.loans || []).filter((loan) => inScope(loan.propertyId, propertyFilter) && loan.originatedOn <= monthEnd);
+  const scopedLoanIds = new Set(scopedLoans.map((loan) => String(loan.id)));
   const signature = stableSignature([
     args.month,
     propertyFilter,
     ...issues.map((issue) => `${issue.id}:${issue.count}`),
-    `tx:${monthTransactions.length}`,
-    `income:${money(monthTransactions.filter((transaction) => transaction.type === "Income").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0))}`,
-    `expense:${money(monthTransactions.filter((transaction) => transaction.type === "Expense").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0))}`,
+    snapshotRecords(monthTransactions),
+    snapshotRecords((args.leases || []).filter((lease) => leaseIds.has(lease.id))),
+    snapshotRecords((args.tenantLedgerEntries || []).filter((entry) => leaseIds.has(entry.leaseId) && entry.date <= monthEnd)),
+    snapshotRecords(scopedLoans),
+    snapshotRecords((args.loanPayments || []).filter((payment) => scopedLoanIds.has(String(payment.loanId)) && payment.paymentDate <= monthEnd)),
+    snapshotRecords(smartChecks),
+    snapshotRecords(unbilledMaintenance),
+    // Preview loading is transient. Only supporting-document metadata belongs in a close snapshot.
+    snapshotRecords((args.documents || []).filter((document) => (
+      monthTransactionIds.has(document.transactionId)
+      || document.relatedTransactionIds?.some((id) => monthTransactionIds.has(id))
+    )).map(({ id, name, type, transactionId, relatedTransactionIds }) => ({ id, name, type, transactionId, relatedTransactionIds }))),
   ]);
 
   return {
@@ -261,8 +288,8 @@ export function buildMonthlyCloseReview(args: {
     signature,
     summary: {
       transactionCount: monthTransactions.length,
-      income: money(monthTransactions.filter((transaction) => transaction.type === "Income").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)),
-      expenses: money(monthTransactions.filter((transaction) => transaction.type === "Expense").reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0)),
+      income,
+      expenses,
       rentCharged: money(monthRentTotals.charged),
       rentPaid: money(monthRentTotals.paid),
     },

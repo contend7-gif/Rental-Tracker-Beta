@@ -5,7 +5,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { AlertTriangle, ArrowLeftRight, Banknote, FileSearch, Filter, ReceiptText, Repeat2, Upload, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Banknote, FileSearch, Filter, Repeat2, Upload, WalletCards } from "lucide-react";
 import { canRunSafeBulkReview } from "../shared/auditBadges.js";
 import { ResponsiveTableFrame } from "../shared/uiHelpers.jsx";
 import {

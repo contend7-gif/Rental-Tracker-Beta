@@ -2,6 +2,30 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildMonthlyCloseReview, monthBounds } from "./monthlyClose.ts";
 
+test("monthly close recognizes direct and shared document links as expense support", () => {
+  const review = buildMonthlyCloseReview({
+    month: "2026-08", todayIso: "2026-09-05",
+    transactions: ["direct", "shared", "missing"].map((id) => ({
+      id, date: "2026-08-10", type: "Expense", amount: 20, status: "active", receiptName: "",
+    })) as never[],
+    documents: [{ id: "receipt", transactionId: "direct", relatedTransactionIds: ["shared"] }] as never[],
+  });
+  assert.equal(review?.issues.find((issue) => issue.kind === "missing_support")?.count, 1);
+});
+
+test("monthly close uses the same early-payment and first-due rules as Loans", () => {
+  const loans = [
+    { id: "paid", originatedOn: "2025-01-01", scheduledPI: 100 },
+    { id: "new", originatedOn: "2026-07-15", scheduledPI: 100 },
+    { id: "missing", originatedOn: "2025-01-01", scheduledPI: 100 },
+  ] as never[];
+  const review = buildMonthlyCloseReview({
+    month: "2026-08", todayIso: "2026-09-05", loans,
+    loanPayments: [{ loanId: "paid", paymentDate: "2026-07-31" }] as never[],
+  });
+  assert.equal(review?.issues.find((issue) => issue.kind === "loan_payment")?.count, 1);
+});
+
 test("month bounds handle leap years and reject invalid months", () => {
   assert.deepEqual(monthBounds("2028-02"), { monthStart: "2028-02-01", monthEnd: "2028-02-29" });
   assert.equal(monthBounds("2028-13"), null);
@@ -56,3 +80,25 @@ test("monthly close is ready when reviewed records have no gaps", () => {
   assert.match(review.signature, /^close-[0-9a-f]{8}$/);
 });
 
+test("close snapshots detect record edits even when counts and totals stay unchanged", () => {
+  const base = {
+    month: "2026-08", todayIso: "2026-09-05", propertyFilter: "p1",
+    transactions: [{ id: "t1", propertyId: "p1", date: "2026-08-01", type: "Expense", amount: 100, category: "Repairs", status: "active", receiptName: "receipt.pdf" }],
+    loans: [{ id: "l1", propertyId: "p1", originatedOn: "2025-01-01", scheduledPI: 100 }],
+    loanPayments: [{ id: "lp1", loanId: "l1", paymentDate: "2026-08-01", interest: 60, principal: 40, totalPayment: 100 }],
+  };
+  const review = (args = base) => buildMonthlyCloseReview(args as never)!;
+  assert.notEqual(review().signature, review({ ...base, transactions: [{ ...base.transactions[0], category: "Supplies" }] }).signature);
+  assert.notEqual(review().signature, review({ ...base, loanPayments: [{ ...base.loanPayments[0], interest: 50, principal: 50 }] }).signature);
+  assert.equal(review().signature, review({ ...base, transactions: [...base.transactions, { ...base.transactions[0], id: "other", propertyId: "p2" }] }).signature);
+});
+
+test("close signatures ignore record ordering and document preview hydration", () => {
+  const base = { month: "2026-08", todayIso: "2026-09-05",
+    transactions: ["a", "b"].map(id => ({ id, date: "2026-08-01", type: "Expense", amount: 10, status: "active" })),
+    documents: [{ id: "doc", transactionId: "a", name: "Receipt", dataUrl: "" }],
+  };
+  const first = buildMonthlyCloseReview(base as never)!;
+  const hydrated = buildMonthlyCloseReview({ ...base, transactions: [...base.transactions].reverse(), documents: [{ ...base.documents[0], dataUrl: "data:preview" }] } as never)!;
+  assert.equal(first.signature, hydrated.signature);
+});

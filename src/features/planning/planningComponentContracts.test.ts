@@ -76,13 +76,14 @@ test("rent planning labels owner-occupied target rent as hypothetical", () => {
 });
 
 test("planning surfaces use shared unit labels and signed rent wording", () => {
-  const domainSource = readFileSync(new URL("../../domain/planning.ts", import.meta.url), "utf8");
+  const domainSource = readFileSync(new URL("../../domain/planning/portfolio.ts", import.meta.url), "utf8");
+  const recommendationSource = readFileSync(new URL("../../domain/planning/review.ts", import.meta.url), "utf8");
   const overviewSource = readFileSync(new URL("./PlanningOverviewTab.jsx", import.meta.url), "utf8");
   const sharedSource = readFileSync(new URL("./PlanningSharedPanels.jsx", import.meta.url), "utf8");
   const rentSource = readFileSync(new URL("./PlanningRentTab.jsx", import.meta.url), "utf8");
 
   assert.match(domainSource, /formatUnitLabel\(lease\.unit\)/, "Planning milestones should not prepend Unit manually");
-  assert.match(domainSource, /Prepare for \$\{formatUnitLabel\(turnoverCandidate\.unit\)\} turnover/, "Turnover recommendations should use stable-plan wording and clean unit labels");
+  assert.match(recommendationSource, /Prepare for \$\{formatUnitLabel\(turnoverCandidate\.unit\)\} turnover/, "Turnover recommendations should use stable-plan wording and clean unit labels");
   assert.match(overviewSource, /Signed rent roll now/, "Overview should distinguish signed rent from modeled rent");
   assert.match(overviewSource, /Change vs current:/, "Current vs planned delta should be explicitly labeled");
   assert.match(sharedSource, /Signed current rent roll/, "Detailed metrics should distinguish signed current rent");

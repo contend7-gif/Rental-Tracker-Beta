@@ -92,7 +92,7 @@ function isRelevantLease(lease, yearFilter) {
 export function getTenantLedgerReviewIssues(lease, entries = [], context = {}) {
   if (!lease) return [];
   const todayIso = context.todayIso || toLocalIsoDate();
-  const leaseEntries = entries.filter((entry) => entry.leaseId === lease.id);
+  const leaseEntries = entries.filter((entry) => !entry.voidedAt && entry.leaseId === lease.id);
   const summary = buildTenantLedgerSummary(leaseEntries);
   const summaryRowById = Object.fromEntries(summary.rows.map((row) => [row.id, row]));
   const ended = isLeaseEnded(lease, todayIso);

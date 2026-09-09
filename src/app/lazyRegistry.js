@@ -38,6 +38,7 @@ export const SettingsWorkspace = lazyNamed(loadSettingsWorkspace, "SettingsWorks
 const loadAssetEditorDialog = () => import("../features/assets/AssetEditorDialog.jsx");
 const loadDocumentDialogs = () => import("../features/documents/DocumentDialogs.jsx");
 const loadLeaseEditorDialog = () => import("../features/properties/LeaseEditorDialog.jsx");
+const loadLeaseExtensionDialog = () => import("../features/properties/LeaseExtensionDialog.jsx");
 const loadTransactionDialogs = () => import("../features/transactions/TransactionDialogs.jsx");
 const loadCommonDialogs = () => import("../features/shared/CommonDialogs.jsx");
 const loadEditorDialogs = () => import("../features/shared/EditorDialogs.jsx");
@@ -46,6 +47,7 @@ export const AssetEditorDialog = lazyNamed(loadAssetEditorDialog, "AssetEditorDi
 export const DocumentImportDialog = lazyNamed(loadDocumentDialogs, "DocumentImportDialog");
 export const DocumentPreviewDialog = lazyNamed(loadDocumentDialogs, "DocumentPreviewDialog");
 export const LeaseEditorDialog = lazyNamed(loadLeaseEditorDialog, "LeaseEditorDialog");
+export const LeaseExtensionDialog = lazyNamed(loadLeaseExtensionDialog, "LeaseExtensionDialog");
 export const BankImportReviewDialog = lazyNamed(loadTransactionDialogs, "BankImportReviewDialog");
 export const DeleteTransactionDialog = lazyNamed(loadTransactionDialogs, "DeleteTransactionDialog");
 export const TaxPrintDialog = lazyNamed(loadTransactionDialogs, "TaxPrintDialog");
@@ -86,6 +88,7 @@ const dialogPrefetchLoaders = {
   documentImport: ["document-dialogs", loadDocumentDialogs],
   documentPreview: ["document-dialogs", loadDocumentDialogs],
   leaseEditor: ["lease-editor", loadLeaseEditorDialog],
+  leaseExtension: ["lease-extension", loadLeaseExtensionDialog],
   leaseValidation: ["common-dialogs", loadCommonDialogs],
   loanEditor: ["editor-dialogs", loadEditorDialogs],
   propertyQuickAdd: ["editor-dialogs", loadEditorDialogs],

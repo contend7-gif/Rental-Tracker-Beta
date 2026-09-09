@@ -588,7 +588,7 @@ export function DocumentsWorkspace({
             size="sm"
             variant="secondary"
             className="w-full sm:w-auto"
-            onClick={openDocumentImportPicker}
+            onClick={() => openDocumentImportPicker()}
             onMouseEnter={prefetchDocumentImportDialog}
             onFocus={prefetchDocumentImportDialog}
             onTouchStart={prefetchDocumentImportDialog}
@@ -684,7 +684,7 @@ export function DocumentsWorkspace({
                 size="sm"
                 variant="secondary"
                 className="w-full sm:w-auto"
-                onClick={openDocumentImportPicker}
+                onClick={() => openDocumentImportPicker()}
                 onMouseEnter={prefetchDocumentImportDialog}
                 onFocus={prefetchDocumentImportDialog}
                 onTouchStart={prefetchDocumentImportDialog}

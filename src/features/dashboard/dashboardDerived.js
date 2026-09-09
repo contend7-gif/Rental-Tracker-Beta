@@ -108,7 +108,7 @@ export function deriveRentCollectionSummary({
   );
   const scopedLeaseIds = new Set(scopedLeases.map((lease) => lease.id));
   const rentChargesByLease = tenantLedgerEntries.reduce((charges, entry) => {
-    if (!scopedLeaseIds.has(entry?.leaseId)) return charges;
+    if (entry?.voidedAt || entry?.leaseExtensionId || !scopedLeaseIds.has(entry?.leaseId)) return charges;
     const isAutomatedRent = String(entry?.automationKey || "").startsWith("auto-rent:")
       || String(entry?.memo || "").toLowerCase().startsWith("auto rent charge (");
     if (entry?.kind !== "charge" || (entry?.accountingTreatment !== "rent_income" && !isAutomatedRent)) return charges;
@@ -116,10 +116,13 @@ export function deriveRentCollectionSummary({
     charges.set(entry.leaseId, (charges.get(entry.leaseId) || 0) + money(entry.amount));
     return charges;
   }, new Map());
-  const expectedForLease = (lease) => rentChargesByLease.has(lease.id)
+  const expectedOriginalForLease = (lease) => rentChargesByLease.has(lease.id)
     ? rentChargesByLease.get(lease.id)
     : dueDatesForYear(lease, year, effectiveAsOfDate)
       .reduce((sum, dueDate) => sum + money(proratedRentForMonth30Day(lease, dueDate) ?? lease.monthlyRent), 0);
+  const expectedForLease = (lease) => expectedOriginalForLease(lease) + (lease.extensions || [])
+    .filter((extension) => !extension.canceledAt && extension.startDate.startsWith(year) && extension.startDate <= effectiveAsOfDate)
+    .reduce((sum, extension) => sum + money(extension.rentAmount), 0);
   const expectedYtd = scopedLeases.reduce(
     (sum, lease) => sum + expectedForLease(lease),
     0,

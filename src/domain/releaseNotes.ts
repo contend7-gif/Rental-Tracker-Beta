@@ -8,6 +8,20 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.0",
+    releaseDate: "2026-09-09",
+    title: "Guided lease extensions and desktop reliability",
+    summary: "Record fixed-term lease extensions with clear rent totals, payment coverage, signed documents, and a preview that confirms the desktop save.",
+    changes: [
+      "Extend prepaid fixed-term leases while preserving original terms, repeated extensions, correction history, and optional signed PDFs with a departure time.",
+      "Track unpaid, partial, and multiple received payments with their actual dates; confirm existing entries before linking them to avoid duplicates.",
+      "Preview charges, receipts, balance, and combined rent; retries keep stable links, and cancellation preserves actual payments as tenant credit until refunded.",
+      "Planning uses combined rent and the extended duration; expected departure remains separate from actual move-out and overlapping tenants require review.",
+      "Fix document upload types and unknown AI amounts, reduce repeated document analysis, and keep monthly-close snapshots accurate after edits and restarts.",
+      "Split planning and document workflows into smaller modules and share date, occupancy, receipt-support, and loan-payment calculations where their rules match.",
+    ],
+  },
+  {
     version: "1.8.0",
     releaseDate: "2026-09-03",
     title: "Follow-through, statement reconciliation, and verified backups",

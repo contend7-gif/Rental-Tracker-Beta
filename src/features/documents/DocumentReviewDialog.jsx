@@ -19,14 +19,7 @@ import {
 } from "./documentPresentation.js";
 import { sortDocumentAttachOptions } from "./documentWorkflow.js";
 
-function getDocumentPreviewKind(document) {
-  const mimeType = String(document?.mimeType || "").toLowerCase();
-  const name = String(document?.name || "").toLowerCase();
-  if (mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(name)) return "image";
-  if (mimeType === "application/pdf" || /\.pdf$/i.test(name)) return "pdf";
-  if (mimeType.startsWith("text/") || /\.(txt|csv|log)$/i.test(name)) return "text";
-  return "unsupported";
-}
+import { getDocumentPreviewKind } from "./documentPresentation.js";
 
 function DocumentInlinePreview({ document, hasIndexedText, openDocumentPreview }) {
   const previewKind = getDocumentPreviewKind(document);

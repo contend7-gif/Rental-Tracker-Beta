@@ -53,7 +53,7 @@ export function isAutomatedRentChargeEntry(entry: Pick<TenantLedgerEntry, "id" |
 }
 
 function isManualRentChargeEntryForDueDate(entry: TenantLedgerEntry, leaseId: string, dueDate: string) {
-  if (!entry || entry.leaseId !== leaseId) return false;
+  if (!entry || entry.voidedAt || entry.leaseExtensionId || entry.leaseId !== leaseId) return false;
   if (entry.kind !== "charge") return false;
   if (String(entry.date || "") !== dueDate) return false;
   if (isAutomatedRentChargeEntry(entry)) return false;

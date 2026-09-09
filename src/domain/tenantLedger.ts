@@ -64,11 +64,12 @@ export function compareTenantLedgerEntries(a: TenantLedgerEntry, b: TenantLedger
 }
 
 export function buildTenantLedgerSummary(entries: TenantLedgerEntry[]): TenantLedgerSummary {
-  const sorted = [...entries].sort(compareTenantLedgerEntries);
-  const openCharges: Array<{ entryId: string; remaining: number }> = [];
-  const unappliedCredits: Array<{ entryId: string; remaining: number }> = [];
+  const sorted = entries.filter((entry) => !entry.voidedAt).sort(compareTenantLedgerEntries);
+  const openCharges: Array<{ entryId: string; remaining: number; extensionId?: string }> = [];
+  const unappliedCredits: Array<{ entryId: string; remaining: number; extensionId?: string }> = [];
   const chargeBalanceById: Record<string, number> = {};
   const rows: TenantLedgerRow[] = [];
+  const chargedExtensions = new Set(sorted.filter((entry) => entry.kind === "charge" && entry.leaseExtensionId).map((entry) => entry.leaseExtensionId));
 
   let runningBalance = 0;
 
@@ -77,13 +78,14 @@ export function buildTenantLedgerSummary(entries: TenantLedgerEntry[]): TenantLe
     const balanceDelta = tenantLedgerBalanceSignedAmount(entry);
     const allocations: TenantLedgerAllocation[] = [];
     let unappliedAmount = 0;
+    const extensionId = entry.leaseExtensionId && chargedExtensions.has(entry.leaseExtensionId) ? entry.leaseExtensionId : undefined;
 
     if (balanceDelta > 0) {
       let remainingCharge = balanceDelta;
 
       for (let idx = 0; idx < unappliedCredits.length && remainingCharge > 0; idx += 1) {
         const credit = unappliedCredits[idx];
-        if (!credit || credit.remaining <= 0) continue;
+        if (!credit || credit.remaining <= 0 || (credit.extensionId && credit.extensionId !== extensionId)) continue;
 
         const applied = Math.min(credit.remaining, remainingCharge);
         credit.remaining -= applied;
@@ -92,13 +94,13 @@ export function buildTenantLedgerSummary(entries: TenantLedgerEntry[]): TenantLe
 
       chargeBalanceById[entry.id] = remainingCharge;
       if (remainingCharge > 0) {
-        openCharges.push({ entryId: entry.id, remaining: remainingCharge });
+        openCharges.push({ entryId: entry.id, remaining: remainingCharge, extensionId });
       }
     } else if (balanceDelta < 0) {
       let toAllocate = Math.abs(balanceDelta);
       for (let idx = 0; idx < openCharges.length && toAllocate > 0; idx += 1) {
         const charge = openCharges[idx];
-        if (!charge || charge.remaining <= 0) continue;
+        if (!charge || charge.remaining <= 0 || (extensionId && charge.extensionId !== extensionId)) continue;
 
         const applied = Math.min(charge.remaining, toAllocate);
         charge.remaining -= applied;
@@ -109,7 +111,7 @@ export function buildTenantLedgerSummary(entries: TenantLedgerEntry[]): TenantLe
       }
       unappliedAmount = toAllocate;
       if (unappliedAmount > 0) {
-        unappliedCredits.push({ entryId: entry.id, remaining: unappliedAmount });
+        unappliedCredits.push({ entryId: entry.id, remaining: unappliedAmount, extensionId });
       }
     }
 

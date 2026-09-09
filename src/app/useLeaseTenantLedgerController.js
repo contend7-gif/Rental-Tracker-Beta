@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { buildTenantLedgerSummary, compareTenantLedgerEntries } from "../domain/tenantLedger.ts";
 import {
   defaultTenantLedgerPostingDescription,
@@ -23,6 +24,7 @@ import {
   normalizeLeaseBillingCadence,
   normalizeLeaseDurationType,
 } from "../domain/leaseTerms.js";
+import { leaseExtensionPreviousEndDate } from "../domain/leaseExtensionWorkflow.ts";
 
 const FAR_FUTURE_DATE = "9999-12-31";
 
@@ -52,6 +54,7 @@ function createBlankUsePeriodDraft(todayIso) {
 
 export function useLeaseTenantLedgerController({
   actions,
+  persistExtension,
   appSettings,
   confirmDestructiveActions,
   currency,
@@ -76,6 +79,9 @@ export function useLeaseTenantLedgerController({
   const [editingUsePeriodId, setEditingUsePeriodId] = useState("");
   const [usePeriodDraft, setUsePeriodDraft] = useState(() => createBlankUsePeriodDraft(todayIso));
   const [leaseValidationDialog, setLeaseValidationDialog] = useState({ open: false, message: "" });
+  const [leaseExtensionDraft, setLeaseExtensionDraft] = useState(null);
+  const [leaseExtensionDocument, setLeaseExtensionDocument] = useState(null);
+  const extensionPdfInputRef = useRef(null);
   const [editingTenantLedgerEntryId, setEditingTenantLedgerEntryId] = useState("");
   const [tenantLedgerDraft, setTenantLedgerDraft] = useState(() => createBlankTenantLedgerDraft());
   const [leaseTenantLedgerSort, setLeaseTenantLedgerSort] = useState("date_desc");
@@ -144,6 +150,10 @@ export function useLeaseTenantLedgerController({
     if (!leaseDraft?.id) return [];
     return leaseAutomationReminders.filter((reminder) => reminder.leaseId === leaseDraft.id);
   }, [leaseAutomationReminders, leaseDraft]);
+  const leaseExtensionPreview = useMemo(() => {
+    if (!leaseDraft || !leaseExtensionDraft) return null;
+    return actions.previewLeaseExtension(leaseDraft.id, leaseExtensionDraft);
+  }, [actions, leaseDraft, leaseExtensionDraft]);
 
   const resetTenantLedgerEditor = (leaseLike = null) => {
     const defaultAmount = leaseLike ? String(Math.max(0, Number(leaseLike.monthlyRent || 0))) : "";
@@ -593,6 +603,119 @@ export function useLeaseTenantLedgerController({
     setLeaseValidationDialog({ open: false, message: "" });
     resetTenantLedgerEditor(null);
     if (leasePdfInputRef?.current) leasePdfInputRef.current.value = "";
+    setLeaseExtensionDraft(null);
+    setLeaseExtensionDocument(null);
+    if (extensionPdfInputRef.current) extensionPdfInputRef.current.value = "";
+  };
+
+  const openLeaseExtension = (lease = leaseDraft, extension = null) => {
+    if (!lease?.id) return;
+    if (!leases.some((item) => item.id === lease.id)) { setNotice("Save the original lease before extending it."); return; }
+    const startDate = extension?.startDate || leaseExtensionPreviousEndDate(lease);
+    setLeaseExtensionDraft({
+      id: extension?.id || crypto.randomUUID(),
+      originalEndDate: lease.originalTerm?.endDate || lease.endDate,
+      reuseExistingEntries: false,
+      startDate,
+      endDate: extension?.endDate || startDate,
+      endTime: extension?.endTime || "",
+      rentAmount: extension ? String(extension.rentAmount) : "",
+      amountPaid: extension ? String(extension.amountPaid) : "",
+      paymentReceivedDate: extension?.paymentReceivedDate || "",
+      signedDate: extension?.signedDate || "",
+      notes: extension?.notes || "",
+    });
+    setLeaseExtensionDocument(null);
+    prefetchDialog("leaseExtension");
+  };
+
+  const closeLeaseExtension = () => {
+    setLeaseExtensionDraft(null);
+    setLeaseExtensionDocument(null);
+    if (extensionPdfInputRef.current) extensionPdfInputRef.current.value = "";
+  };
+
+  const extensionSavingRef = useRef(false);
+  const saveLeaseExtension = async () => {
+    if (extensionSavingRef.current) return;
+    if (!leaseDraft?.id || !leaseExtensionDraft) return;
+    if (!requirePermission("create_edit_records", "This access profile cannot save lease extensions.")) return;
+    const document = leaseExtensionDocument
+      ? {
+          id: leaseExtensionDocument.id,
+          propertyId: leaseDraft.propertyId,
+          unit: leaseDraft.unit,
+          leaseId: leaseDraft.id,
+          leaseExtensionId: leaseExtensionPreview?.extension?.id,
+          name: leaseExtensionDocument.name,
+          type: "Lease extension",
+          mimeType: leaseExtensionDocument.type || "application/pdf",
+          uploadedAt: new Date().toISOString(),
+          dataUrl: leaseExtensionDocument.dataUrl,
+          tags: inferDocumentTags({ document: { name: leaseExtensionDocument.name, type: "Lease extension", tags: [] }, lease: leaseDraft }),
+        }
+      : undefined;
+    extensionSavingRef.current = true;
+    let result;
+    flushSync(() => { result = actions.applyLeaseExtension(leaseDraft.id, leaseExtensionDraft, document); });
+    if (!result?.ok) {
+      extensionSavingRef.current = false;
+      setNotice(result?.message || "Extension could not be saved.");
+      return;
+    }
+    setLeaseDraft(result.lease);
+    try {
+      await persistExtension?.();
+    } catch (error) {
+      setNotice(`Extension is pending on this screen. SQLite save failed; retry Save extension: ${error.message}`);
+      return;
+    } finally { extensionSavingRef.current = false; }
+    setNotice(`Lease extension saved for ${leaseDraft.tenantName || leaseDraft.unit}.`);
+    closeLeaseExtension();
+  };
+
+  const onLeaseExtensionPdfInputChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.type && file.type !== "application/pdf") {
+      setNotice("Only PDF files are supported for lease extensions.");
+      event.target.value = "";
+      return;
+    }
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setLeaseExtensionDocument({ id: crypto.randomUUID(), name: file.name, type: file.type || "application/pdf", dataUrl });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not read extension PDF.");
+    }
+    event.target.value = "";
+  };
+
+  const cancelLeaseExtension = (extension) => {
+    if (!leaseDraft?.id || !extension?.id) return;
+    if (!requirePermission("create_edit_records", "This access profile cannot cancel lease extensions.")) return;
+    const runCancel = async () => {
+      let result;
+      flushSync(() => { result = actions.cancelLeaseExtension(leaseDraft.id, extension.id); });
+      if (!result?.ok) {
+        setNotice(result?.message || "Extension could not be canceled.");
+        return;
+      }
+      setLeaseDraft(result.lease);
+      try { await persistExtension?.(); }
+      catch (error) { setNotice(`Cancellation is pending. SQLite save failed: ${error.message}`); return; }
+      setNotice("Lease extension canceled. The charge is voided; any money received remains as tenant credit until you record a refund.");
+    };
+    if (!confirmDestructiveActions) {
+      runCancel();
+      return;
+    }
+    openConfirmDialog({
+      title: "Cancel lease extension?",
+      message: `Cancel the ${extension.startDate} to ${extension.endDate} extension? The rent charge will be voided. Any payment remains as tenant credit; cancellation does not record a refund.`,
+      confirmLabel: "Cancel extension",
+      onConfirm: runCancel,
+    });
   };
 
   const confirmAndDeleteLease = () => {
@@ -635,6 +758,15 @@ export function useLeaseTenantLedgerController({
       return;
     }
     const normalizedActualEndDate = (leaseDraft.actualEndDate || "").trim();
+    if (normalizedActualEndDate > todayIso) {
+      setNotice("Actual move-out cannot be in the future. Use the expected lease end date instead.");
+      return;
+    }
+    const storedLease = leases.find((item) => item.id === leaseDraft.id);
+    if (storedLease?.originalTerm && (leaseDraft.startDate !== storedLease.startDate || leaseDraft.endDate !== storedLease.endDate || rentAmount !== storedLease.rentAmount || billingCadence !== storedLease.billingCadence)) {
+      setNotice("This lease has recorded extensions. Use Extend lease to correct its extension dates or rent; the original agreement stays preserved.");
+      return;
+    }
     const leaseWithTerms = {
       ...leaseDraft,
       rentAmount,
@@ -786,6 +918,7 @@ export function useLeaseTenantLedgerController({
   return {
     clearTenantLedgerEntryDraft,
     closeLeaseEditor,
+    closeLeaseExtension,
     confirmAndDeleteLease,
     confirmAndDeleteTenantLedgerEntry,
     confirmAndDeleteUsePeriod,
@@ -793,6 +926,9 @@ export function useLeaseTenantLedgerController({
     editingTenantLedgerEntryId,
     editingUsePeriodId,
     leaseDraft,
+    leaseExtensionDocument,
+    leaseExtensionPreview,
+    leaseExtensionDraft,
     leaseEditorMode,
     leaseTenantLedgerHeadline,
     leaseTenantLedgerRowById,
@@ -800,14 +936,20 @@ export function useLeaseTenantLedgerController({
     leaseTenantLedgerSummary,
     leaseValidationDialog,
     openLease,
+    openLeaseExtension,
     openLeaseForUnit,
     onLeasePdfInputChange,
+    onLeaseExtensionPdfInputChange,
     openNewLeaseForUnit,
     openLinkedTenantLedgerTransaction,
     openOccupancyEditor,
     openLeasePdfPicker,
+    extensionPdfInputRef,
+    cancelLeaseExtension,
     saveTenantLedgerEntry,
     saveLease,
+    saveLeaseExtension,
+    setLeaseExtensionDraft,
     saveUnitOccupancyPeriod,
     selectedLeaseAutomationReminders,
     selectedLeaseDocuments,

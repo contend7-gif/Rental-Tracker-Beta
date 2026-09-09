@@ -59,7 +59,9 @@ export function normalizeDocumentAiAnalysis(value: unknown): DocumentAiAnalysis 
   const summary = sanitizeLongText(analysis.summary, 1500);
   if (!summary) return undefined;
 
-  const totalAmount = Number(analysis.totalAmount);
+  const totalAmount = typeof analysis.totalAmount === "number"
+    || (typeof analysis.totalAmount === "string" && analysis.totalAmount.trim() !== "")
+    ? Number(analysis.totalAmount) : NaN;
   const normalized: DocumentAiAnalysis = {
     summary,
     actionItems: sanitizeActionItems(analysis.actionItems),

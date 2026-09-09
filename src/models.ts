@@ -157,6 +157,7 @@ export type Transaction = {
   servicePeriodEnd?: string;
   rentPeriod?: string;
   rentLeaseId?: string;
+  rentLeaseExtensionId?: string;
   deMinimisTreatment?: "auto" | "yes" | "no";
   deMinimisCandidate?: boolean;
   deMinimisApplied?: boolean;
@@ -317,6 +318,42 @@ export type Lease = {
   lateFeeType?: "flat" | "percent";
   lateFeeValue?: number;
   autoLateFeeEnabled?: boolean;
+  originalTerm?: LeaseOriginalTerm;
+  extensions?: LeaseExtension[];
+  extensionRevisions?: { extension: LeaseExtension; ledgerEntries: TenantLedgerEntry[]; transactions: Transaction[]; recordedAt: string }[];
+};
+
+export type LeaseOriginalTerm = {
+  startDate: string;
+  endDate: string;
+  actualEndDate?: string;
+  rentAmount: number;
+  billingCadence?: Lease["billingCadence"];
+  recordedAt: string;
+};
+
+export type LeaseExtensionPaymentStatus = "unpaid" | "partially_paid" | "paid";
+
+export type LeaseExtension = {
+  id: string;
+  startDate: string;
+  endDate: string;
+  endTime?: string;
+  rentAmount: number;
+  amountPaid: number;
+  paymentStatus: LeaseExtensionPaymentStatus;
+  paymentReceivedDate?: string;
+  signedDate?: string;
+  documentIds?: string[];
+  chargeEntryId?: string;
+  paymentEntryId?: string;
+  chargeTransactionId?: string;
+  paymentTransactionId?: string;
+  canceledAt?: string;
+  correctionOfExtensionId?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 };
 export type TenantLedgerEntryKind = "charge" | "payment" | "credit" | "refund" | "adjustment";
 export type TenantLedgerAccountingTreatment =
@@ -331,6 +368,7 @@ export type TenantLedgerAccountingTreatment =
 export type TenantLedgerEntry = {
   id: string;
   leaseId: string;
+  leaseExtensionId?: string;
   date: string;
   kind: TenantLedgerEntryKind;
   amount: number;
@@ -342,6 +380,10 @@ export type TenantLedgerEntry = {
   reviewNotes?: string;
   linkedWorkOrderId?: string;
   linkedDocumentIds?: string[];
+  coverageStartDate?: string;
+  coverageEndDate?: string;
+  paymentReceivedDate?: string;
+  voidedAt?: string;
   automationKey?: string;
   createdAt: string;
 };
@@ -449,6 +491,7 @@ export type DocumentItem = {
   name: string;
   type: string;
   leaseId?: string;
+  leaseExtensionId?: string;
   transactionId?: string;
   relatedTransactionIds?: string[];
   workOrderId?: string;

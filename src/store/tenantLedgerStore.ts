@@ -25,6 +25,7 @@ export function normalizeTenantLedgerEntry(entry: TenantLedgerEntry): TenantLedg
       ? (Number.isFinite(rawAmount) ? rawAmount : 0)
       : Math.abs(Number.isFinite(rawAmount) ? rawAmount : 0);
   const transactionId = String(entry.transactionId || "").trim();
+  const leaseExtensionId = String(entry.leaseExtensionId || "").trim();
   const linkedWorkOrderId = String(entry.linkedWorkOrderId || "").trim();
   const automationKey = String(entry.automationKey || "").trim();
 
@@ -32,6 +33,7 @@ export function normalizeTenantLedgerEntry(entry: TenantLedgerEntry): TenantLedg
     ...entry,
     id: String(entry.id || `tle-${Date.now()}`),
     leaseId: String(entry.leaseId || "").trim(),
+    leaseExtensionId: leaseExtensionId || undefined,
     date: String(entry.date || toLocalIsoDate()).slice(0, 10),
     kind: normalizedKind,
     amount,
@@ -43,6 +45,10 @@ export function normalizeTenantLedgerEntry(entry: TenantLedgerEntry): TenantLedg
     reviewNotes: String(entry.reviewNotes || "").trim(),
     linkedWorkOrderId: linkedWorkOrderId || undefined,
     linkedDocumentIds: normalizeStringArray(entry.linkedDocumentIds),
+    coverageStartDate: String(entry.coverageStartDate || "").trim() || undefined,
+    coverageEndDate: String(entry.coverageEndDate || "").trim() || undefined,
+    paymentReceivedDate: String(entry.paymentReceivedDate || "").trim() || undefined,
+    voidedAt: String(entry.voidedAt || "").trim() || undefined,
     automationKey: automationKey || undefined,
     createdAt: String(entry.createdAt || new Date().toISOString()),
   };

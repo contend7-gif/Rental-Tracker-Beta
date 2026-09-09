@@ -16,6 +16,7 @@ async function launchDesktopApp(profilePath) {
   const rendererErrors = [];
   const electronApp = await electron.launch({
     executablePath,
+    args: ["--disable-gpu"],
     env: {
       ...process.env,
       ELECTRON_DISABLE_SECURITY_WARNINGS: "true",
@@ -61,6 +62,110 @@ test("packaged desktop supports the core Documents workflow", async () => {
     await plumbingCard.getByRole("button", { name: "Review details", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Example Plumbing receipt", exact: true })).toBeVisible();
     await expect(page.getByText("Extracted fields", { exact: true })).toBeVisible();
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("document upload buttons save a document type rather than the click event", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-import-type-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    // Keep this metadata regression independent of installed OCR software.
+    await electronApp.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler("document-ocr:extract");
+      ipcMain.handle("document-ocr:extract", () => ({ ok: false, reason: "unsupported", error: "OCR disabled in import metadata test." }));
+    });
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    for (const [index, button] of ["Upload document", "Upload bill"].entries()) {
+      const chooserPromise = page.waitForEvent("filechooser");
+      await page.getByRole("button", { name: button, exact: true }).click();
+      const chooser = await chooserPromise;
+      await chooser.setFiles({
+        name: `example-import-${index}.png`, mimeType: "image/png",
+        buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
+      });
+      await expect(page.getByRole("heading", { name: "Add bill from document", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Save upload only", exact: true }).click();
+      await expect.poll(async () => page.evaluate(async (name) => {
+        const saved = await window.desktopPersistence.loadAppData();
+        return saved.backup?.data?.documents?.find((document) => document.name === name)?.type;
+      }, `example-import-${index}.png`)).toBe("Scanned Image");
+    }
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("desktop AI response normalization preserves unknown amounts and explicit zero", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-ai-amount-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    for (const totalAmount of [null, "", false, [], 0, "0", "425.32"]) {
+      // Stub the transport in this disposable process; no key or network request is used.
+      await electronApp.evaluate((_electron, amount) => {
+        globalThis.fetch = async () => ({
+          ok: true,
+          json: async () => ({ output_text: JSON.stringify({ summary: "Example document", totalAmount: amount }) }),
+        });
+      }, totalAmount);
+      const response = await page.evaluate(async () => window.desktopDocumentAi.analyze({
+        apiKey: "fictional-test-key",
+        context: { document: { extractedText: "Fictional document for amount handling test." } },
+      }));
+      expect(response.ok).toBe(true);
+      expect(response.analysis.totalAmount).toBe(
+        totalAmount === 0 || totalAmount === "0" ? 0 : totalAmount === "425.32" ? 425.32 : undefined,
+      );
+    }
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("monthly close remains closed after a packaged-app restart", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-close-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await run.page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await run.page.getByRole("button", { name: "Monthly Close", exact: true }).click();
+    await run.page.getByRole("button", { name: /^Close (month|with open checks)$/ }).click();
+    await expect(run.page.getByRole("button", { name: "Reopen month", exact: true })).toBeVisible();
+    await expect.poll(async () => run.page.evaluate(async () => {
+      const saved = await window.desktopPersistence.loadAppData();
+      return Object.values(saved.backup?.settings?.monthlyCloseRecords || {}).some((record) => record.reviewVersion === 2);
+    })).toBe(true);
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await run.page.getByRole("button", { name: "Calendar", exact: true }).click();
+    await run.page.getByRole("button", { name: "Monthly Close", exact: true }).click();
+    await expect(run.page.getByRole("button", { name: "Reopen month", exact: true })).toBeVisible();
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close().catch(() => {});
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("packaged planning coordination supports the primary planning views", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-planning-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    await page.getByRole("button", { name: "Planning", exact: true }).click();
+    await expect(page.getByText("Signed rent roll now", { exact: true })).toBeVisible();
+    for (const name of ["Forecast", "Capital", "Rent", "Action plan", "Overview"]) {
+      const tab = page.getByRole("button", { name, exact: true });
+      await tab.click();
+      await expect(tab).toHaveAttribute("aria-pressed", "true");
+    }
+    await expect(page.getByText("Signed rent roll now", { exact: true })).toBeVisible();
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -379,6 +484,84 @@ test("packaged desktop creates an encrypted verified restore point", async () =>
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+
+test("guided lease extension survives SQLite restart with linked payment and cancellation credit", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-extension-"));
+  let run = await launchDesktopApp(profilePath);
+  const openExtension = async () => {
+    await run.page.getByRole("button", { name: "Leases", exact: true }).click();
+    await run.page.getByRole("button", { name: /History & coverage/i }).click();
+    await run.page.getByRole("button", { name: /Extension Test Tenant/ }).click();
+    await run.page.getByRole("button", { name: "Extend lease", exact: true }).click();
+  };
+  try {
+    await expect(run.page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await run.page.evaluate(async () => {
+      const saved = await window.desktopPersistence.loadAppData();
+      const backup = saved.backup;
+      const unit = backup.data.units.find((item) => item.name !== "Shared");
+      backup.data.leases = [{ id: "extension-test-lease", propertyId: unit.propertyId, unit: unit.name, tenantName: "Extension Test Tenant", startDate: "2026-08-12", endDate: "2026-09-11", actualEndDate: "", monthlyRent: 1550, rentAmount: 1550, rentalType: "Mid-term", agreementType: "fixed_term", billingCadence: "full_term", status: "Active", utilitiesIncluded: false, monthToMonthAfterTerm: false, notes: "" }];
+      backup.data.tenantLedgerEntries = [];
+      backup.data.transactions = [];
+      backup.settings.leaseAutomationEnabled = false;
+      backup.settings.confirmDestructiveActions = false;
+      const result = await window.desktopPersistence.saveAppData(backup);
+      if (result.ok === false) throw new Error(result.message);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await openExtension();
+    await run.page.getByLabel("Extension ends", { exact: true }).fill("2026-09-18");
+    await run.page.getByLabel("Expected departure time (optional)").fill("12:00");
+    await run.page.getByLabel("Additional fixed-term rent").fill("350");
+    await run.page.getByLabel("Total amount received", { exact: true }).fill("100");
+    await run.page.getByLabel("Actual payment-received date").fill("2026-09-08");
+    await expect(run.page.getByText("Payment status: partially paid", { exact: true })).toBeVisible();
+    await expect(run.page.getByText("Combined lease rent: $1,900.00", { exact: true })).toBeVisible();
+    await run.page.locator('input[type="file"][accept="application/pdf"]').last().setInputFiles({ name: "extension-test.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4\n%%EOF") });
+    await expect(run.page.getByRole("button", { name: "extension-test.pdf", exact: true })).toBeVisible();
+    await run.electronApp.evaluate(({ ipcMain }) => {
+      globalThis.extensionTestSaveHandler = ipcMain._invokeHandlers.get("persistence:save-app-data");
+      ipcMain.removeHandler("persistence:save-app-data");
+      ipcMain.handle("persistence:save-app-data", () => ({ ok: false, message: "Simulated isolated save failure" }));
+    });
+    await run.page.getByRole("button", { name: "Save extension", exact: true }).click();
+    await expect(run.page.getByText(/Extension is pending on this screen/)).toBeVisible();
+    expect(await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.leases.find((item) => item.id === "extension-test-lease").extensions?.length || 0)).toBe(0);
+    await run.electronApp.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler("persistence:save-app-data");
+      ipcMain.handle("persistence:save-app-data", globalThis.extensionTestSaveHandler);
+      delete globalThis.extensionTestSaveHandler;
+    });
+    await run.page.getByRole("button", { name: "Save extension", exact: true }).click();
+    await expect(run.page.getByRole("heading", { name: /^Extend lease/ })).toHaveCount(0);
+    const saved = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    const lease = saved.leases.find((item) => item.id === "extension-test-lease");
+    expect(lease.endDate).toBe("2026-09-18");
+    expect(lease.actualEndDate).toBe("");
+    expect(lease.originalTerm.endDate).toBe("2026-09-11");
+    expect(lease.extensions[0].endTime).toBe("12:00");
+    expect(saved.tenantLedgerEntries.filter((item) => item.leaseExtensionId === lease.extensions[0].id)).toHaveLength(2);
+    expect(saved.transactions.filter((item) => item.rentLeaseExtensionId === lease.extensions[0].id)).toHaveLength(1);
+    expect(saved.documents.find((item) => item.id === lease.extensions[0].documentIds[0]).leaseExtensionId).toBe(lease.extensions[0].id);
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await openExtension();
+    await expect(run.page.getByText(/2026-09-18 at 12:00/)).toBeVisible();
+    await run.page.getByRole("button", { name: "Cancel", exact: true }).first().click();
+    await expect.poll(async () => run.page.evaluate(async () => {
+      const data = (await window.desktopPersistence.loadAppData()).backup.data;
+      const lease = data.leases.find((item) => item.id === "extension-test-lease");
+      return { end: lease.endDate, canceled: Boolean(lease.extensions[0].canceledAt), activeCash: data.transactions.filter((item) => item.rentLeaseId === lease.id && item.status === "active").reduce((sum, item) => sum + item.amount, 0) };
+    })).toEqual({ end: "2026-09-11", canceled: true, activeCash: 100 });
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });

@@ -96,6 +96,7 @@ function normalizeDocumentOcrFieldOverrides(value: DocumentItem["ocrFieldOverrid
 
 export function normalizeDocument(document: DocumentItem): DocumentItem {
   const leaseId = String(document.leaseId || "").trim();
+  const leaseExtensionId = String(document.leaseExtensionId || "").trim();
   const transactionId = String(document.transactionId || "").trim();
   const relatedTransactionIds = Array.isArray(document.relatedTransactionIds)
     ? [...new Set(document.relatedTransactionIds.map((item) => String(item || "").trim()).filter(Boolean).filter((item) => item !== transactionId))]
@@ -123,6 +124,7 @@ export function normalizeDocument(document: DocumentItem): DocumentItem {
     name: String(document.name || "").trim(),
     type: String(document.type || "").trim(),
     leaseId: leaseId || undefined,
+    leaseExtensionId: leaseExtensionId || undefined,
     transactionId: transactionId || undefined,
     relatedTransactionIds: relatedTransactionIds.length > 0 ? relatedTransactionIds : undefined,
     workOrderId: workOrderId || undefined,

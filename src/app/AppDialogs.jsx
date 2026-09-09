@@ -9,6 +9,7 @@ import {
   DocumentImportDialog,
   DocumentPreviewDialog,
   LeaseEditorDialog,
+  LeaseExtensionDialog,
   LeaseValidationDialog,
   LoanEditorDialog,
   PropertyQuickAddDialog,
@@ -93,6 +94,9 @@ export function AppDialogs(props) {
         <LeaseEditorDialog
           {...leaseDialogs.editor}
         />
+      )}
+      {Boolean(leaseDialogs.extension?.open) && (
+        <LeaseExtensionDialog {...leaseDialogs.extension} />
       )}
       {Boolean(leaseValidationDialog) && (
         <LeaseValidationDialog
