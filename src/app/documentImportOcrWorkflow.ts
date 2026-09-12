@@ -35,25 +35,25 @@ export async function runDocumentImportOcrWorkflow({
 
   if (!documentSupportsAutomaticOcr(draft.name, draft.mimeType)) {
     setBusy(false);
-    setMessage("Automatic OCR currently supports PDFs and common image files.");
+    setMessage("Automatic reading supports PDFs, JPG, PNG, WebP, BMP, GIF and TIFF. For HEIC photos, export as JPG and try again. You can still save this file or enter an expense manually.");
     return;
   }
 
   if (!automaticDocumentOcrAvailable) {
     setBusy(false);
-    setMessage("Automatic OCR runs when you open the Windows desktop app.");
+    setMessage("Automatic reading is available in the Windows desktop app. You can still save this file or enter an expense manually.");
     return;
   }
 
   setBusy(true);
-  setMessage("Running automatic OCR...");
+  setMessage("Reading text on this computer. Large files can take up to two minutes.");
 
   try {
     const result = await runAutomaticDocumentOcr(draft);
     if (requestIdRef.current !== requestId) return;
 
     if (!result.ok) {
-      setMessage(result.message || "Automatic OCR could not start.");
+      setMessage("We could not read this file. Try reading again, save the document, or enter the expense manually.");
       return;
     }
 
@@ -66,8 +66,8 @@ export async function runDocumentImportOcrWorkflow({
         tags: formatTags(getSuggestedTags(previous, normalizedText)),
       });
       setMessage(result.truncated
-        ? `Automatic OCR extracted text from the first ${result.processedPages} pages. Review before saving.`
-        : "Automatic OCR extracted searchable text. Review before saving.");
+        ? `Read the first ${result.processedPages} pages only. Check the original for any remaining pages before entering amounts.`
+        : "Found searchable text. Check the amount, date and vendor against the original before recording an expense.");
       return;
     }
 
@@ -75,11 +75,10 @@ export async function runDocumentImportOcrWorkflow({
       ...previous,
       ocrStatus: "pending",
     });
-    setMessage("Automatic OCR ran, but no readable text was found. You can still save this as pending OCR.");
+    setMessage("We found no readable text. Try a brighter, upright photo cropped around the receipt, or enter the expense manually. You can still save this file.");
   } catch (error) {
     if (requestIdRef.current !== requestId) return;
-    const message = error instanceof Error ? error.message : String(error || "Automatic OCR failed.");
-    setMessage(`Automatic OCR failed: ${message}`);
+    setMessage("We could not read this file. Try a JPG or PNG photo, retry reading, or enter the expense manually. Your selected file is still here.");
   } finally {
     if (requestIdRef.current === requestId) setBusy(false);
   }

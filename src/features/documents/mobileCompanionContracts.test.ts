@@ -34,7 +34,7 @@ test("maintenance captures receive a work-order-oriented desktop review", () => 
 
   assert.match(inbox, /submission\.kind === "maintenance"/);
   assert.match(dialogs, /Review maintenance capture/);
-  assert.match(dialogs, /Confirm work order/);
+  assert.match(dialogs, /Review work order/);
 });
 
 test("Mobile Inbox syncs only the desktop-built property catalog", () => {

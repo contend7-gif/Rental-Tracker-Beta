@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.1",
+    releaseDate: "2026-09-12",
+    title: "Simpler document uploads and better receipt reading",
+    summary: "Preview the original beside the details found, then save the document or review an editable expense draft in one clear upload screen.",
+    changes: [
+      "Replace the multi-step upload wizard with an original-file preview, vendor, date, total, property, and unit choices; keep advanced details out of the way.",
+      "Read embedded PDF text locally before using OCR, and preserve receipt rows when reading large or rotated photos.",
+      "Improve receipt totals and purchase dates, utility vendor recognition, service-address matching, and separate amounts for multi-unit bills.",
+      "Offer clear reading progress, retry, and manual entry when text cannot be read; saving a document never silently links a suggested transaction.",
+      "Keep expense creation reviewable: open an editable draft, leave unknown dates blank, and require an explicit choice before attaching an existing record.",
+    ],
+  },
+  {
     version: "1.9.0",
     releaseDate: "2026-09-09",
     title: "Guided lease extensions and desktop reliability",

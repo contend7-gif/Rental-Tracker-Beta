@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { makeTextPdf } from "../scripts/fixtures/pdfFixture.mjs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -87,8 +88,8 @@ test("document upload buttons save a document type rather than the click event",
         name: `example-import-${index}.png`, mimeType: "image/png",
         buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
       });
-      await expect(page.getByRole("heading", { name: "Add bill from document", exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "Save upload only", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Add document", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Save document only", exact: true }).click();
       await expect.poll(async () => page.evaluate(async (name) => {
         const saved = await window.desktopPersistence.loadAppData();
         return saved.backup?.data?.documents?.find((document) => document.name === name)?.type;
@@ -562,6 +563,122 @@ test("guided lease extension survives SQLite restart with linked payment and can
     expect(run.rendererErrors).toEqual([]);
   } finally {
     await run.electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+
+test("receipt import reads an oversized photo locally and preserves receipt lines", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-large-receipt-"));
+  const { electronApp, page } = await launchDesktopApp(profilePath);
+  try {
+    const result = await page.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 2400;
+      canvas.height = 6000;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "white";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "black";
+      ctx.font = "100px Arial";
+      ["SAMPLE MARKET", "09/11/2026"].forEach((line, i) => ctx.fillText(line, 160, 300 + i * 200));
+      ["ITEM ONE", "ITEM TWO", "SUBTOTAL", "TAX", "TOTAL", "VISA CREDIT TEND"].forEach((line, i) => ctx.fillText(line, 160, 900 + i * 200));
+      ["10.00", "14.00", "24.00", "1.20", "25.20", "25.20"].forEach((line, i) => ctx.fillText(line, 1800, 900 + i * 200));
+      const dataUrl = canvas.toDataURL("image/png");
+      return { ...(await window.desktopDocumentOcr.extract({ name: "large-receipt.png", mimeType: "image/png", dataUrl })), dataUrl };
+    });
+    expect(result.ok).toBe(true);
+    expect(result.text).toMatch(/SAMPLE MARKET/i);
+    expect(result.text).toMatch(/TOTAL\s+25\.20/i);
+    expect(result.text.split("\n").length).toBeGreaterThanOrEqual(4);
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload document", exact: true }).click();
+    await (await chooserPromise).setFiles({ name: "large-receipt.png", mimeType: "image/png", buffer: Buffer.from(result.dataUrl.split(",")[1], "base64") });
+    await expect(page.getByText("Ready to review", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review expense", exact: true })).toBeEnabled();
+    await page.screenshot({ path: path.join(rootDir, "output/playwright/receipt-import-success.png") });
+    await page.getByRole("button", { name: "Review expense", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Save transaction and attach document", exact: true })).toBeVisible();
+    await expect(page.locator('input[value="25.20"], input[value="25.2"]').first()).toBeVisible();
+
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("failed receipt reading offers manual entry without posting a transaction", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-manual-receipt-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    await electronApp.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler("document-ocr:extract");
+      ipcMain.handle("document-ocr:extract", () => { throw new Error("Simulated unreadable photo"); });
+    });
+    const original = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload document", exact: true }).click();
+    await (await chooserPromise).setFiles({ name: "unreadable-receipt.png", mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64") });
+    await expect(page.getByText(/Your selected file is still here/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save document only", exact: true })).toBeEnabled();
+    await page.screenshot({ path: path.join(rootDir, "output/playwright/receipt-import-review.png") });
+    await page.getByRole("button", { name: "Enter expense manually", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Add document", exact: true })).toHaveCount(0);
+    await expect.poll(async () => page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.documents.length)).toBe(original.documents.length + 1);
+    const saved = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    expect(saved.transactions.length).toBe(original.transactions.length);
+    expect(saved.documents.find((doc) => doc.name === "unreadable-receipt.png").transactionId || "").toBe("");
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+
+test("saving a receipt only never applies a suggested transaction link", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-receipt-link-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    await electronApp.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler("document-ocr:extract");
+      ipcMain.handle("document-ocr:extract", () => ({ ok: true, text: "Example Plumbing Co.\nReceipt\n04/12/2026\nSink repair\nTOTAL 385.00" }));
+    });
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    for (const [index, action] of ["Save document only", "Save and attach to this transaction"].entries()) {
+      const chooserPromise = page.waitForEvent("filechooser");
+      await page.getByRole("button", { name: "Upload document", exact: true }).click();
+      const name = `plumbing-match-${index}.png`;
+      await (await chooserPromise).setFiles({ name, mimeType: "image/png", buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64") });
+      await expect(page.getByText("Possible existing transaction", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: action, exact: true }).click();
+      await expect.poll(async () => page.evaluate(async (fileName) => {
+        const data = (await window.desktopPersistence.loadAppData()).backup.data;
+        const doc = data.documents.find((item) => item.name === fileName);
+        return doc ? (doc.transactionId || "unlinked") : "missing";
+      }, name)).toBe(index === 0 ? "unlinked" : "demo-repair-expense");
+    }
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+
+test("packaged reader extracts embedded PDF text before OCR", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-native-pdf-"));
+  const { electronApp, page } = await launchDesktopApp(profilePath);
+  try {
+    const pdf = makeTextPdf([[{ text: "Sample utility statement", y: 720 }, { text: "Statement Date 04/17/2026", y: 680 }, { text: "Amount Due", y: 640 }, { text: "40.00", x: 450, y: 640 }]]);
+    const result = await page.evaluate(async (dataUrl) => window.desktopDocumentOcr.extract({ name: "sample-bill.pdf", mimeType: "application/pdf", dataUrl }), `data:application/pdf;base64,${pdf.toString("base64")}`);
+    expect(result.engine).toBe("pdf-text");
+    expect(result.text).toMatch(/Amount Due 40\.00/);
+    expect(result.processedPages).toBe(1);
+  } finally {
+    await electronApp.close();
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });

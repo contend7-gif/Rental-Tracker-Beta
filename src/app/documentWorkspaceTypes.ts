@@ -7,6 +7,7 @@ export type SilentOptions = { silent?: boolean };
 export type UnlinkOptions = SilentOptions & { relatedTransactionId?: string };
 
 export type SaveImportedDocumentOptions = {
+  linkSuggestion?: { kind: string; id: string };
   reviewUtilitySection?: unknown;
   createUtilitySectionTransactions?: boolean;
   reviewExpenseDraft?: boolean;

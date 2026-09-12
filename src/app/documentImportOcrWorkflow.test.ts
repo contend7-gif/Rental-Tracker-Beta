@@ -69,5 +69,24 @@ test("stale import OCR results cannot overwrite a newer request", async () => {
   await runDocumentImportOcrWorkflow(state.args);
   assert.equal(state.getDraft().extractedText, "");
   assert.deepEqual(state.busy, [true]);
-  assert.deepEqual(state.messages, ["Running automatic OCR..."]);
+  assert.deepEqual(state.messages, ["Reading text on this computer. Large files can take up to two minutes."]);
+});
+
+test("reader errors preserve the selected file and offer manual recovery", async () => {
+  const state = dependencies({ runAutomaticDocumentOcr: async () => { throw new Error("decoder failed"); } });
+  await runDocumentImportOcrWorkflow(state.args);
+  assert.equal(state.getDraft().dataUrl, "data:pdf");
+  assert.deepEqual(state.busy, [true, false]);
+  assert.match(state.messages.at(-1) || "", /enter the expense manually/);
+});
+
+test("saving or cancelling during reading invalidates late results", async () => {
+  let finish: (result: { ok: boolean; text: string }) => void = () => {};
+  const state = dependencies({ runAutomaticDocumentOcr: () => new Promise((resolve) => { finish = resolve; }) });
+  const running = runDocumentImportOcrWorkflow(state.args);
+  state.requestIdRef.current += 1;
+  finish({ ok: true, text: "late receipt total" });
+  await running;
+  assert.equal(state.getDraft().extractedText, "");
+  assert.equal(state.messages.length, 1);
 });

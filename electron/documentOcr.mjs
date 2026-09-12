@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { sanitizeFileStem } from "./fileStore.mjs";
+import { extractPdfText } from "./pdfText.mjs";
 
 const DOCUMENT_OCR_SUPPORTED_CHANNEL = "document-ocr:supported";
 const DOCUMENT_OCR_EXTRACT_CHANNEL = "document-ocr:extract";
@@ -115,10 +116,18 @@ function getWindowsOcrScript() {
     "  try {",
     "    $stream = Await-Operation ($file.OpenAsync([Windows.Storage.FileAccessMode]::Read)) ([Windows.Storage.Streams.IRandomAccessStream])",
     "    $decoder = Await-Operation ([Windows.Graphics.Imaging.BitmapDecoder]::CreateAsync($stream)) ([Windows.Graphics.Imaging.BitmapDecoder])",
+    "    $transform = [Windows.Graphics.Imaging.BitmapTransform]::new()",
+    "    $limit = [Windows.Media.Ocr.OcrEngine]::MaxImageDimension",
+    "    $scale = [Math]::Min(1.0, $limit / [double][Math]::Max($decoder.PixelWidth, $decoder.PixelHeight))",
+    "    $transform.ScaledWidth = [uint32][Math]::Max(1, [Math]::Floor($decoder.PixelWidth * $scale))",
+    "    $transform.ScaledHeight = [uint32][Math]::Max(1, [Math]::Floor($decoder.PixelHeight * $scale))",
     "    return Await-Operation (",
     "      $decoder.GetSoftwareBitmapAsync(",
     "        [Windows.Graphics.Imaging.BitmapPixelFormat]::Bgra8,",
-    "        [Windows.Graphics.Imaging.BitmapAlphaMode]::Premultiplied",
+    "        [Windows.Graphics.Imaging.BitmapAlphaMode]::Premultiplied,",
+    "        $transform,",
+    "        [Windows.Graphics.Imaging.ExifOrientationMode]::RespectExifOrientation,",
+    "        [Windows.Graphics.Imaging.ColorManagementMode]::DoNotColorManage",
     "      )",
     "    ) ([Windows.Graphics.Imaging.SoftwareBitmap])",
     "  } finally {",
@@ -128,12 +137,27 @@ function getWindowsOcrScript() {
     "",
     "function Get-OcrTextFromSoftwareBitmap([Windows.Graphics.Imaging.SoftwareBitmap]$softwareBitmap, $ocrEngine) {",
     "  $result = Await-Operation ($ocrEngine.RecognizeAsync($softwareBitmap)) ([Windows.Media.Ocr.OcrResult])",
-    "  return Normalize-OcrText([string]$result.Text)",
+    // Windows sometimes returns entire columns before the receipt header.
+    // Rebuild visual rows so labels stay next to their amounts.
+    "  $words = @($result.Lines | ForEach-Object { $_.Words } | Sort-Object @{ Expression = { $_.BoundingRect.Y + $_.BoundingRect.Height / 2 } }, @{ Expression = { $_.BoundingRect.X } })",
+    "  $rows = New-Object System.Collections.Generic.List[object]",
+    "  foreach ($word in $words) {",
+    "    $box = $word.BoundingRect",
+    "    $center = $box.Y + $box.Height / 2",
+    "    $row = if ($rows.Count -gt 0) { $rows[$rows.Count - 1] } else { $null }",
+    "    if ($null -eq $row -or [Math]::Abs($center - $row.Center) -gt [Math]::Min($box.Height, $row.Height) * 0.6) {",
+    "      $row = [pscustomobject]@{ Center = $center; Height = $box.Height; Words = (New-Object System.Collections.Generic.List[object]) }",
+    "      $rows.Add($row)",
+    "    }",
+    "    $row.Words.Add($word)",
+    "  }",
+    "  $lines = @($rows | ForEach-Object { ($_.Words | Sort-Object { $_.BoundingRect.X } | ForEach-Object { $_.Text }) -join ' ' })",
+    "  return Normalize-OcrText($lines -join \"`n\")",
     "}",
     "",
     "function Get-ImageDocumentText([string]$inputPath, $ocrEngine) {",
     "  $softwareBitmap = Get-SoftwareBitmapFromStorageFile $inputPath",
-    "  return Get-OcrTextFromSoftwareBitmap $softwareBitmap $ocrEngine",
+    "  try { return Get-OcrTextFromSoftwareBitmap $softwareBitmap $ocrEngine } finally { $softwareBitmap.Dispose() }",
     "}",
     "",
     "function Get-PdfDocumentText([string]$inputPath, [int]$pageLimit, $ocrEngine) {",
@@ -317,6 +341,14 @@ async function extractDocumentOcr(payload) {
 
   const { tempPath } = await writeTempDocument(payload);
   try {
+    if (path.extname(tempPath).toLowerCase() === ".pdf") {
+      try {
+        const nativeText = await extractPdfText(await fs.readFile(tempPath), OCR_MAX_PDF_PAGES);
+        if (nativeText) return nativeText;
+      } catch {
+        // Encrypted, scanned or malformed text layers still get the OCR path.
+      }
+    }
     return await runPowershellOcr(tempPath);
   } finally {
     await fs.rm(tempPath, { force: true }).catch(() => {});

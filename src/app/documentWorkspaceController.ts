@@ -355,13 +355,8 @@ export function createDocumentWorkspaceController({
     }
 
     const extractedText = normalizeExtractedDocumentText(documentImportDraft.extractedText);
-    const autoLinkSuggestion =
-      documentImportDraft.linkType === "none" &&
-      !options.reviewUtilitySection &&
-      !options.reviewExpenseDraft &&
-      !options.reviewWorkOrderDraft
-        ? getDocumentImportLinkSuggestions?.(documentImportDraft, extractedText).find((suggestion: any) => suggestion.confidence === "high") || null
-        : null;
+    // Linking is an explicit choice, never a side effect of saving a file.
+    const autoLinkSuggestion = options.linkSuggestion || null;
     const effectiveLinkType = autoLinkSuggestion
       ? (autoLinkSuggestion.kind === "workOrder" ? "workOrder" : autoLinkSuggestion.kind)
       : documentImportDraft.linkType;
@@ -411,8 +406,14 @@ export function createDocumentWorkspaceController({
       createExpenseTransactionsFromUtilitySections(importedDocument, getDocumentUtilitySections(importedDocument));
       return;
     }
-    if (options.reviewExpenseDraft && documentImportExpenseSuggestion) {
-      openExpenseDraftFromDocument(importedDocument, documentImportExpenseSuggestion);
+    if (options.reviewExpenseDraft) {
+      openExpenseDraftFromDocument(importedDocument, documentImportExpenseSuggestion || {
+        propertyId: importedDocument.propertyId,
+        unit: importedDocument.unit,
+        description: importedDocument.name,
+        confidence: "low",
+        reasons: [],
+      });
       return;
     }
     if (options.reviewWorkOrderDraft && documentImportWorkOrderSuggestion) {
@@ -422,7 +423,7 @@ export function createDocumentWorkspaceController({
     if (autoLinkSuggestion) {
       setNotice(`Imported ${name} and linked the suggested ${documentLinkSuggestionKindLabel(autoLinkSuggestion.kind).toLowerCase()}.`);
     } else {
-      setNotice(ocrStatus === "completed" ? `Imported ${name} with searchable text.` : `Imported ${name}. OCR is queued.`);
+      setNotice(ocrStatus === "completed" ? `Saved ${name} with searchable text.` : `Saved ${name}. You can retry reading it from Documents.`);
     }
   };
 
@@ -474,7 +475,7 @@ export function createDocumentWorkspaceController({
     const nextQueueRecord = getNextExpenseQueueRecord(doc.id);
     const baseDraft = {
       ...createBlankForm(nextPropertyId, nextUnit),
-      date: suggestion.date || todayIso,
+      date: suggestion.date || "",
       propertyId: nextPropertyId,
       unit: nextUnit,
       type: "Expense",
@@ -501,7 +502,7 @@ export function createDocumentWorkspaceController({
         }
       : baseDraft;
     const prefilledFields = [
-      "date",
+      suggestion.date ? "date" : "",
       "propertyId",
       "unit",
       "type",

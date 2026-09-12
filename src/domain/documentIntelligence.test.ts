@@ -1207,3 +1207,63 @@ test("confirmed OCR field overrides take precedence in extracted fields and expe
   assert.equal(suggestion?.servicePeriodStart, "2026-06-18");
   assert.equal(suggestion?.servicePeriodEnd, "2026-07-17");
 });
+
+
+test("retail screenshots become expense drafts without a receipt filename or dollar symbol", () => {
+  const document = { name: "image.png", type: "Scanned Image", propertyId: "p1", unit: "Shared", extractedText: "Sample Market\nSUBTOTAL 20.00\nTAX 1.00\nTOTAL 21.00\nVISA CREDIT TEND 21.00\nVISA **** 1234\n# ITEMS SOLD 12\n08/11/26" };
+  const suggestion = inferDocumentExpenseSuggestion({ document });
+  assert.equal(suggestion?.vendor, "Sample Market");
+  assert.equal(suggestion?.unit, "Shared");
+  assert.equal(suggestion?.amount, 21);
+  assert.equal(suggestion?.date, "2026-08-11");
+});
+
+test("missing receipt amounts are not replaced by card digits or dates", () => {
+  const fields = inferDocumentExtractedFields({ document: { name: "receipt.png", type: "Receipt", extractedText: "Sample Market\nVISA * 7 679\n08/11/26\n12 : 04 : 41" } });
+  assert.equal(fields?.totalAmount, undefined);
+});
+
+
+test("internet billing evidence outranks insurance language in service terms", () => {
+  const suggestion = inferDocumentExpenseSuggestion({document:{name:"bill.pdf",type:"Scanned PDF",propertyId:"p1",extractedText:"ACCOUNT NUMBER STATEMENT DATE\nSpectrum 12345 Apr 17, 2026\nSAMPLEVILLE, WI 53000\nSpectrum Internet Total $40.00\nService from Apr 17 - May 16\nService terms: insurance coverage policy"}});
+  assert.equal(suggestion?.vendor,"Spectrum");
+  assert.equal(suggestion?.category,"Utilities");
+  assert.equal(suggestion?.amount,40);
+});
+
+test("receipt purchase timestamp outranks its earlier return deadline", () => {
+  const fields = inferDocumentExtractedFields({document:{name:"Market Receipt.pdf",type:"Scanned PDF",extractedText:"SAMPLEVILLE\n10 SAMPLE ST\nSAMPLEVILLE, WI 53000\nNot valid for rebate submissions\nAllowable returns after\n11/09/26\nTotal $118.21\nPayment Method(s) Used:\nVisa - 1234 $118.21\n71178 04 1059 08/11/26 12:32 PM 3147"}});
+  assert.equal(fields?.invoiceDate,"2026-08-11");
+  assert.equal(fields?.vendorName,"Market");
+  assert.ok(fields?.sources.includes("name"));
+});
+
+test("utility issuer evidence outranks page and customer labels", () => {
+  const fields = inferDocumentExtractedFields({document:{name:"bill.pdf",type:"Scanned PDF",extractedText:"Page 1 of 3\nCustomer Name SAMPLE PERSON\nSAMPLEVILLE, WI 53000\nAmount Due $30.00\nSample Energies\nPO Box 100"}});
+  assert.equal(fields?.vendorName,"Sample Energies");
+});
+
+
+test("explicit utility unit totals outrank later line charges and retain the bill date", () => {
+  const args = {document:{name:"utility.pdf",type:"Scanned PDF",propertyId:"p1",extractedText:"Sample Utilities\nBilling Date: 7/31/2026\nAccount # 000000\n101 Sample Ave\nAmount Due $70.00\nTotal For: 101 Sample Ave 30.00\nCustomer Charge 13.00\nWater 7.76\nTotal For: 102 Sample Ave 40.00"},property:{id:"p1",name:"Duplex",address:"101-102 Sample Ave"},candidateUnits:[{propertyId:"p1",name:"101"},{propertyId:"p1",name:"102"}]};
+  const sections = inferDocumentUtilitySections(args).filter((section) => !section.external);
+  assert.equal(sections.find((section) => section.unit === "101")?.amount,30);
+  assert.equal(sections.find((section) => section.unit === "102")?.amount,40);
+  assert.ok(sections.every((section) => section.date === "2026-07-31"));
+});
+
+
+test("utility payment coupons do not turn a mailing address into a second service unit", () => {
+  const args = {document:{name:"gas.pdf",type:"Scanned PDF",propertyId:"p1",extractedText:"Sample Energies\nBill Date: 07/15/2026\nService Address 102 Sample Ave\nAmount Due $16.60\nGas Service Total $16.60\nPlease return this portion with your payment\nCUSTOMER PERSON\n101 Sample Ave\nAmount Due $16.60\nPayment date 08/06/2026"},property:{id:"p1",name:"Duplex",address:"101-102 Sample Ave"},candidateUnits:[{propertyId:"p1",name:"101"},{propertyId:"p1",name:"102"}]};
+  const sections = inferDocumentUtilitySections(args).filter((section) => !section.external);
+  assert.equal(sections.length,1);
+  assert.equal(sections[0].unit,"102");
+  assert.equal(sections[0].amount,16.6);
+  assert.equal(sections[0].date,"2026-07-15");
+  assert.ok(inferDocumentExpenseSuggestion(args));
+});
+
+
+test("unreadable receipts do not fabricate an expense from their filename", () => {
+  assert.equal(inferDocumentExpenseSuggestion({document:{name:"unreadable-receipt.png",type:"Receipt",propertyId:"p1",extractedText:""}}),null);
+});

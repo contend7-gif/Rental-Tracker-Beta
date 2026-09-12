@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -18,6 +19,8 @@ import { formatDocumentUnitLabel } from "./documentPresentation.js";
 import { getDocumentPreviewKind } from "./documentPresentation.js";
 
 function DocumentFilePreview({ document, openDocumentExternally }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  useEffect(() => setImageFailed(false), [document?.dataUrl]);
   const previewKind = getDocumentPreviewKind(document);
   const hasPreviewSource = Boolean(document?.dataUrl);
 
@@ -31,12 +34,14 @@ function DocumentFilePreview({ document, openDocumentExternally }) {
   }
 
   if (previewKind === "image") {
+    if (imageFailed) return <div className="mt-3 rounded-lg border bg-slate-50 p-4 text-sm text-slate-600">This photo cannot be previewed. Export it as JPG or PNG for preview and automatic reading. You can still save the original file.</div>;
     return (
       <div className="mt-3 flex max-h-[70vh] min-h-[18rem] items-center justify-center overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
         <img
           src={document.dataUrl}
           alt={document.name || "Document preview"}
           className="max-h-[66vh] max-w-full object-contain"
+          onError={() => setImageFailed(true)}
         />
       </div>
     );
@@ -56,24 +61,9 @@ function DocumentFilePreview({ document, openDocumentExternally }) {
     <div className="mt-3 flex min-h-[18rem] flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 text-center">
       <div className="text-sm font-medium text-slate-800">Preview this file externally</div>
       <div className="mt-1 max-w-md text-sm text-slate-500">This file type is not supported in the inline preview.</div>
-      <Button className="mt-3" variant="secondary" onClick={() => void openDocumentExternally(document)}>
+      {openDocumentExternally ? <Button className="mt-3" variant="secondary" onClick={() => void openDocumentExternally(document)}>
         Open externally
-      </Button>
-    </div>
-  );
-}
-
-function WizardStep({ number, title, state = "pending" }) {
-  const stateClass =
-    state === "complete"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : state === "active"
-        ? "border-blue-200 bg-blue-50 text-blue-800"
-        : "border-slate-200 bg-slate-50 text-slate-500";
-  return (
-    <div className={`flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-xs ${stateClass}`}>
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-current text-[11px] font-semibold">{number}</span>
-      <span className="truncate font-medium">{title}</span>
+      </Button> : null}
     </div>
   );
 }
@@ -109,176 +99,81 @@ export function DocumentImportDialog({
   workOrderSuggestionConfidenceLabel,
   workOrders,
 }) {
-  const hasFile = Boolean(documentImportDraft?.dataUrl);
-  const hasText = Boolean(normalizeExtractedDocumentText(documentImportDraft?.extractedText || ""));
-  const hasExpenseDraft = Boolean(documentImportExpenseSuggestion);
-  const hasWorkOrderDraft = Boolean(documentImportWorkOrderSuggestion);
-  const importTags = String(documentImportDraft?.tags || "").toLowerCase().split(",").map((tag) => tag.trim());
-  const isPropertyDocumentImport = importTags.includes("property");
-  const isMaintenanceDocumentImport = importTags.includes("maintenance");
-  const bestTransactionLinkSuggestion = documentImportLinkSuggestions.find((suggestion) => suggestion.kind === "transaction" && suggestion.confidence === "high") || null;
-  const readyUtilitySectionCount = documentImportUtilitySections.filter((section) => (
-    !section.external &&
-    section.propertyId &&
-    section.amount != null &&
-    section.date
-  )).length;
-  const readyToFinish = hasExpenseDraft || hasWorkOrderDraft || documentImportDraft.linkType !== "none" || hasText;
-  const nextActionLabel = bestTransactionLinkSuggestion
-    ? "Link matched transaction"
-    : readyUtilitySectionCount > 1
-      ? "Create related utility transactions"
-    : hasExpenseDraft
-    ? "Save transaction and attach document"
-    : hasWorkOrderDraft
-      ? "Save and review work order draft"
-      : documentImportLinkSuggestions[0]
-        ? "Apply suggested link or save upload"
-        : isPropertyDocumentImport
-          ? "Save property document"
-          : "Save upload only";
-
+  const hasText = Boolean(normalizeExtractedDocumentText(documentImportDraft.extractedText));
+  const bestMatch = documentImportLinkSuggestions.find((item) => item.kind === "transaction" && item.confidence === "high");
+  const canRead = automaticDocumentOcrAvailable && documentSupportsAutomaticOcr(documentImportDraft.name, documentImportDraft.mimeType);
+  const canSave = Boolean(documentImportDraft.dataUrl && documentImportDraft.name.trim() && documentImportDraft.propertyId);
+  const hasLink = documentImportDraft.linkType !== "none";
+  const saveDisabled = !canSave || (hasLink && !documentImportDraft.linkedId);
+  const tags = String(documentImportDraft.tags || "").toLowerCase().split(",").map((tag) => tag.trim());
+  const supportingFile = tags.includes("property");
+  const maintenanceCapture = tags.includes("maintenance");
+  const multipleUtilityUnits = documentImportUtilitySections.filter((section) => !section.external && section.propertyId).length > 1;
   return (
     <Dialog open={documentImportDialogOpen} onOpenChange={onOpenChange}>
-      <DialogContent className={dialogContentXlClass}>
-        <DialogHeader>
-          <DialogTitle>{isPropertyDocumentImport ? "Add property document" : isMaintenanceDocumentImport ? "Review maintenance capture" : "Add bill from document"}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
-          <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-900">{isPropertyDocumentImport ? "Property document intake" : isMaintenanceDocumentImport ? "Guided maintenance intake" : "Guided bill entry"}</div>
-                <div className="mt-1 text-xs text-slate-600">
-                  {isPropertyDocumentImport
-                    ? "Upload closing, deed, appraisal, insurance, inspection, or refinance support directly into this property's vault."
-                    : isMaintenanceDocumentImport
-                      ? "Review the mobile photo and issue details, then create or link a work order before saving the document."
-                    : "Upload, review the OCR draft, save the transaction, and attach the document in one path."}
-                </div>
-              </div>
-              <Badge variant="outline" className="bg-white">{nextActionLabel}</Badge>
-            </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-4">
-              <WizardStep number="1" title="Upload" state={hasFile ? "complete" : "active"} />
-              <WizardStep number="2" title={isMaintenanceDocumentImport ? "Issue details" : "OCR draft"} state={hasText ? "complete" : hasFile ? "active" : "pending"} />
-              <WizardStep number="3" title={isMaintenanceDocumentImport ? "Confirm work order" : "Confirm transaction"} state={hasExpenseDraft || hasWorkOrderDraft ? "complete" : hasText ? "active" : "pending"} />
-              <WizardStep number="4" title="Save + attach" state={readyToFinish ? "active" : "pending"} />
-            </div>
+      <DialogContent className={`${dialogContentXlClass} max-h-[92vh] overflow-y-auto`}>
+        <DialogHeader><DialogTitle>{maintenanceCapture ? "Review maintenance capture" : "Add document"}</DialogTitle></DialogHeader>
+        <p className="mt-1 text-sm text-slate-600">Check the file, choose where it belongs, then save it or review an expense.</p>
+        <div className="mt-4 grid gap-5 lg:grid-cols-2">
+          <div className="min-w-0">
+            <div className="break-words text-sm font-medium text-slate-800">{documentImportDraft.name}</div>
+            <DocumentFilePreview document={documentImportDraft} />
           </div>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <Badge variant="secondary">Step 1</Badge>
-              <h3 className="text-sm font-semibold text-slate-900">File and basic context</h3>
+          <div className="min-w-0 space-y-4">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3" role="status" aria-live="polite">
+              <div className="text-sm font-semibold">{documentImportOcrBusy ? "Reading your document…" : hasText ? "Ready to review" : "File ready — details need your review"}</div>
+              <p className="mt-1 text-sm text-slate-600">{documentImportOcrMessage || "Your file is ready. You can save it even if automatic reading is unavailable."}</p>
+              {!documentImportOcrBusy && canRead ? <Button className="mt-2" size="sm" variant="secondary" onClick={() => void applyAutomaticOcrToImportDraft(documentImportDraft)}>Try reading again</Button> : null}
+              {documentImportOcrBusy ? <p className="mt-2 text-xs text-slate-500">You can save the file now or enter the expense yourself without waiting.</p> : null}
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {field("File name", <Input value={documentImportDraft.name} onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, name: e.target.value }))} />)}
-              {field("Document type", <Input value={documentImportDraft.type} onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, type: e.target.value }))} />)}
-              {field(
-                "Property",
-                <Select value={documentImportDraft.propertyId} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, propertyId: value, unit: "Shared" }))}>
-                  <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
-                  <SelectContent>
-                    {properties.map((property) => <SelectItem key={`import-property-${property.id}`} value={property.id}>{property.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>,
-              )}
-              {field(
-                "Unit",
-                <Select value={documentImportDraft.unit || "Shared"} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, unit: value, unitScopeOverride: true }))}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {field("Property", <Select value={documentImportDraft.propertyId} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, propertyId: value, unit: "Shared", linkType: "none", linkedId: "" }))}>
+                <SelectTrigger><SelectValue placeholder="Select property" /></SelectTrigger>
+                <SelectContent>{properties.map((property) => <SelectItem key={property.id} value={property.id}>{property.name}</SelectItem>)}</SelectContent>
+              </Select>)}
+              {field("Unit", <Select value={documentImportDraft.unit || "Shared"} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, unit: value, unitScopeOverride: true }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{documentImportUnitOptions.map((unit) => <SelectItem key={unit} value={unit}>{unit}</SelectItem>)}</SelectContent>
+              </Select>)}
+            </div>
+            {documentImportExtractedFields && hasText ? <div className="rounded-lg border p-3">
+              <h3 className="text-sm font-semibold">Details found — check against the original</h3>
+              <dl className="mt-3 grid gap-3 text-sm">
+                <div className="flex justify-between gap-3"><dt className="text-slate-500">Vendor</dt><dd className="text-right font-medium">{documentImportExtractedFields.vendorName || "Enter vendor in the draft"}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-slate-500">Date</dt><dd className="text-right font-medium">{documentImportExtractedFields.invoiceDate || "Choose date in the draft"}</dd></div>
+                <div className="flex justify-between gap-3"><dt className="text-slate-500">Total</dt><dd className="text-right text-lg font-semibold">{documentImportExtractedFields.totalAmount != null ? currency(documentImportExtractedFields.totalAmount) : "Enter amount in the draft"}</dd></div>
+              </dl>
+            </div> : null}
+            {documentImportWorkOrderSuggestion ? <div className="rounded-lg border border-slate-200 p-3">
+              <h3 className="text-sm font-semibold">{documentImportWorkOrderSuggestion.title}</h3>
+              <p className="mt-1 text-sm text-slate-600">{documentImportWorkOrderSuggestion.description}</p>
+            </div> : null}
+            {bestMatch && !hasLink ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <h3 className="text-sm font-semibold">Possible existing transaction</h3>
+              <p className="mt-1 text-sm">{bestMatch.label}</p>
+              <p className="mt-1 text-xs text-slate-600">Check this match to avoid recording the expense twice.</p>
+              <Button className="mt-2" variant="secondary" disabled={saveDisabled || documentImportOcrBusy} onClick={() => saveImportedDocument({ linkSuggestion: bestMatch })}>Save and attach to this transaction</Button>
+            </div> : null}
+            {documentImportUtilitySections.length > 0 ? <details className="rounded-lg border p-3" open={multipleUtilityUnits}>
+              <summary className="cursor-pointer text-sm font-medium">Review utility sections ({documentImportUtilitySections.length})</summary>
+              {multipleUtilityUnits ? <p className="mt-2 text-sm text-slate-600">This bill covers multiple units. Review each unit amount below before recording expenses.</p> : null}
+              <DocumentUtilitySectionsPanel sections={documentImportUtilitySections} className="mt-2" currency={currency}
+                onReviewSection={(section) => saveImportedDocument({ reviewUtilitySection: section })} />
+            </details> : null}
+            <details className="rounded-lg border p-3">
+              <summary className="cursor-pointer text-sm font-medium">Attach to an existing record</summary>
+              <div className="mt-3 space-y-3">
+                {field("Record type", <Select value={documentImportDraft.linkType} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, linkType: value, linkedId: "" }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {documentImportUnitOptions.map((unitName) => <SelectItem key={`import-unit-${unitName}`} value={unitName}>{unitName}</SelectItem>)}
-                  </SelectContent>
-                </Select>,
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-slate-50/80 p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <Badge variant="secondary">Step 2</Badge>
-              <h3 className="text-sm font-semibold text-slate-900">Extract text</h3>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {field(
-                "OCR status",
-                <Select value={documentImportDraft.ocrStatus} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, ocrStatus: value }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENT_OCR_STATUS_OPTIONS.map((option) => <SelectItem key={`ocr-status-${option.value}`} value={option.value}>{option.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>,
-              )}
-              <div className="flex items-end">
-                <Button
-                  variant="secondary"
-                  onClick={() => void applyAutomaticOcrToImportDraft(documentImportDraft)}
-                  disabled={documentImportOcrBusy || !documentSupportsAutomaticOcr(documentImportDraft.name, documentImportDraft.mimeType) || !automaticDocumentOcrAvailable}
-                >
-                  {documentImportOcrBusy ? "Running OCR..." : "Run OCR"}
-                </Button>
-              </div>
-            </div>
-            <div className="mt-3 rounded-md border border-slate-200 bg-white p-3 text-xs text-slate-600">
-              <div className="font-medium text-slate-700">
-                {documentImportOcrBusy
-                  ? "Automatic OCR is running now."
-                  : (documentImportOcrMessage || (automaticDocumentOcrAvailable
-                    ? "Supported PDFs and images can be OCRed automatically before you save."
-                    : "Automatic OCR runs in the Windows desktop app. In the browser, you can still save this as pending OCR."))}
-              </div>
-              <div className="mt-1">
-                {documentImportDraft.extractedText
-                  ? `${normalizeExtractedDocumentText(documentImportDraft.extractedText).slice(0, 220)}${normalizeExtractedDocumentText(documentImportDraft.extractedText).length > 220 ? "..." : ""}`
-                  : "No extracted text yet."}
-              </div>
-            </div>
-            <details className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-              <summary className="cursor-pointer text-sm font-medium text-slate-900">Manual text editor</summary>
-              <Label className="mt-3 block">Extracted text</Label>
-              <textarea
-                className="mt-1 h-32 w-full rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-700"
-                value={documentImportDraft.extractedText}
-                onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, extractedText: e.target.value, ocrStatus: e.target.value.trim() ? "completed" : (prev.ocrStatus === "not_needed" ? "not_needed" : "pending") }))}
-                placeholder="Automatic OCR will populate this for supported PDFs/images. You can also paste text manually."
-              />
-            </details>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <Badge variant="secondary">Step 3</Badge>
-              <h3 className="text-sm font-semibold text-slate-900">Decide next step</h3>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              {field(
-                "Recommended action",
-                <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  {nextActionLabel}
-                </div>,
-              )}
-              {field(
-                "Link record",
-                <Select value={documentImportDraft.linkType} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, linkType: value, linkedId: "" }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="lease">Lease</SelectItem>
-                    <SelectItem value="transaction">Transaction</SelectItem>
-                    <SelectItem value="workOrder">Work order</SelectItem>
-                  </SelectContent>
-                </Select>,
-              )}
-            </div>
+                  <SelectContent><SelectItem value="none">No attachment</SelectItem><SelectItem value="lease">Lease</SelectItem><SelectItem value="transaction">Transaction</SelectItem><SelectItem value="workOrder">Work order</SelectItem></SelectContent>
+                </Select>)}
           {documentImportDraft.linkType === "lease" ? field(
             "Lease",
             <Select value={documentImportDraft.linkedId || "__none__"} onValueChange={(value) => setDocumentImportDraft((prev) => ({ ...prev, linkedId: value === "__none__" ? "" : value }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">No lease link</SelectItem>
-                {leases.map((lease) => <SelectItem key={`import-lease-${lease.id}`} value={lease.id}>{`${lease.tenantName || "Tenant"} | ${(propertyNameById[lease.propertyId] || lease.propertyId)} | ${formatDocumentUnitLabel(lease.unit)}`}</SelectItem>)}
+                {leases.filter((lease) => lease.propertyId === documentImportDraft.propertyId).map((lease) => <SelectItem key={`import-lease-${lease.id}`} value={lease.id}>{`${lease.tenantName || "Tenant"} | ${(propertyNameById[lease.propertyId] || lease.propertyId)} | ${formatDocumentUnitLabel(lease.unit)}`}</SelectItem>)}
               </SelectContent>
             </Select>,
           ) : documentImportDraft.linkType === "transaction" ? field(
@@ -296,135 +191,34 @@ export function DocumentImportDialog({
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">No work order link</SelectItem>
-                {workOrders.map((workOrder) => <SelectItem key={`import-workorder-${workOrder.id}`} value={workOrder.id}>{`${workOrder.title} | ${(propertyNameById[workOrder.propertyId] || workOrder.propertyId)} | ${formatDocumentUnitLabel(workOrder.unit)}`}</SelectItem>)}
+                {workOrders.filter((workOrder) => workOrder.propertyId === documentImportDraft.propertyId).map((workOrder) => <SelectItem key={`import-workorder-${workOrder.id}`} value={workOrder.id}>{`${workOrder.title} | ${(propertyNameById[workOrder.propertyId] || workOrder.propertyId)} | ${formatDocumentUnitLabel(workOrder.unit)}`}</SelectItem>)}
               </SelectContent>
             </Select>,
           ) : field("Linked record", <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">Save as a general document or choose a linked record type above.</div>)}
-          <div className="mt-3 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <div>
-              <span className="font-medium text-slate-700">Suggested tags:</span>{" "}
-              {documentImportSuggestedTags.length > 0
-                ? documentImportSuggestedTags.map((suggestion) => `#${suggestion.tag} (${documentTagSuggestionSourceLabel(suggestion)})`).join(", ")
-                : "No suggestions yet."}
-            </div>
-            {documentImportLinkSuggestions.length > 0 && (
-              <div>
-                <div className="font-medium text-slate-700">Suggested links</div>
-                {bestTransactionLinkSuggestion ? (
-                  <div className="mt-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-900">
-                    Best match is an existing transaction. Save the upload and link it instead of creating another ledger entry.
-                  </div>
-                ) : null}
-                <div className="mt-2 space-y-2">
-                  {documentImportLinkSuggestions.slice(0, 3).map((suggestion) => (
-                    <div key={`import-${suggestion.kind}-${suggestion.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-slate-200 bg-white px-2 py-1.5">
-                      <div>
-                        <div>{documentLinkSuggestionKindLabel(suggestion.kind)}: {suggestion.label}</div>
-                        <div className="text-[10px] text-slate-500">{suggestion.confidence === "high" ? "High confidence" : "Possible match"} | {documentTagSuggestionSourceLabel(suggestion)}</div>
-                      </div>
-                      <Button size="sm" variant="secondary" className="h-7" onClick={() => applyDocumentImportLinkSuggestion(suggestion)}>
-                        Apply link
-                      </Button>
-                    </div>
-                  ))}
-                </div>
               </div>
-            )}
-            {documentImportExtractedFields && (
-              <div>
-                <div className="font-medium text-slate-700">Extracted fields after OCR</div>
-                <DocumentExtractedFieldsPanel fields={documentImportExtractedFields} className="mt-2" currency={currency} />
-              </div>
-            )}
-            {documentImportUtilitySections.length > 0 && (
-              <div>
-                <div className="font-medium text-slate-700">Detected utility sections</div>
-                <div className="mt-1 text-slate-600">
-                  {documentImportUtilitySections.length > 1
-                    ? "This OCR text looks like multiple utility sections in one document. Create related transactions for matched sections, or review a single section first."
-                    : "One utility section was detected from OCR text."}
-                </div>
-                <DocumentUtilitySectionsPanel
-                  sections={documentImportUtilitySections}
-                  className="mt-2"
-                  currency={currency}
-                  onCreateReadySections={bestTransactionLinkSuggestion ? null : () => saveImportedDocument({ createUtilitySectionTransactions: true })}
-                  onReviewSection={(section) => saveImportedDocument({ reviewUtilitySection: section })}
-                />
-              </div>
-            )}
-            {documentImportExpenseSuggestion && (
-              <div>
-                <div className="font-medium text-slate-700">Suggested expense draft after import</div>
-                <div className="mt-1 text-slate-600">
-                  {documentImportExpenseSuggestion.confidence === "high" ? "High confidence" : "Review suggested fields"} | {documentImportExpenseSuggestion.category}
-                  {documentImportExpenseSuggestion.amount != null ? ` | ${currency(documentImportExpenseSuggestion.amount)}` : ""}
-                  {documentImportExpenseSuggestion.date ? ` | ${documentImportExpenseSuggestion.date}` : ""}
-                </div>
-                <div className="mt-1 text-slate-600">
-                  {documentImportExpenseSuggestion.vendor ? `Vendor: ${documentImportExpenseSuggestion.vendor}` : "Vendor not confidently detected yet."}
-                  {documentImportExpenseSuggestion.invoiceRef ? ` | Ref: ${documentImportExpenseSuggestion.invoiceRef}` : ""}
-                  {documentImportExpenseSuggestion.servicePeriodStart && documentImportExpenseSuggestion.servicePeriodEnd ? ` | Period ${documentImportExpenseSuggestion.servicePeriodStart} to ${documentImportExpenseSuggestion.servicePeriodEnd}` : ""}
-                </div>
-                <div className="mt-1 text-slate-600">{documentImportExpenseSuggestion.description}</div>
-                {bestTransactionLinkSuggestion ? (
-                  <div className="mt-1 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-amber-900">
-                    Possible duplicate: {bestTransactionLinkSuggestion.label}. Use the matched transaction link unless this bill should create a separate transaction.
-                  </div>
-                ) : (
-                  <div className="mt-1 rounded border border-blue-100 bg-blue-50/70 px-2 py-1 text-blue-800">Next step: review the transaction draft, then save transaction and attach document. The file will not need a second manual attach.</div>
-                )}
-              </div>
-            )}
-            {documentImportWorkOrderSuggestion && (
-              <div>
-                <div className="font-medium text-slate-700">Suggested work order draft after import</div>
-                <div className="mt-1 text-slate-600">
-                  {workOrderSuggestionConfidenceLabel(documentImportWorkOrderSuggestion.confidence)} | {documentImportWorkOrderSuggestion.title}
-                  {documentImportWorkOrderSuggestion.unit ? ` | ${formatDocumentUnitLabel(documentImportWorkOrderSuggestion.unit)}` : ""}
-                  {documentImportWorkOrderSuggestion.estimatedCost != null ? ` | ${currency(documentImportWorkOrderSuggestion.estimatedCost)}` : ""}
-                </div>
-                <div className="mt-1 text-slate-600">
-                  {documentImportWorkOrderSuggestion.vendor ? `Vendor: ${documentImportWorkOrderSuggestion.vendor}` : "Vendor not confidently detected yet."}
-                  {documentImportWorkOrderSuggestion.reportedOn ? ` | Reported: ${documentImportWorkOrderSuggestion.reportedOn}` : ""}
-                  {documentImportWorkOrderSuggestion.priority ? ` | Priority: ${documentImportWorkOrderSuggestion.priority}` : ""}
-                </div>
-                <div className="mt-1 text-slate-600">{documentImportWorkOrderSuggestion.description}</div>
-              </div>
-            )}
-            </div>
-            <details className="mt-3 rounded-md border border-slate-200 bg-white p-3">
-              <summary className="cursor-pointer text-sm font-medium text-slate-900">Tag editor</summary>
-              <Label className="mt-3 block">Tags</Label>
-              <Input className="mt-1" value={documentImportDraft.tags} onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, tags: e.target.value }))} placeholder="scan, invoice, vendor" />
             </details>
-          </section>
+            <details className="rounded-lg border p-3">
+              <summary className="cursor-pointer text-sm font-medium">File details and extracted text</summary>
+              <div className="mt-3 space-y-3">
+                {field("File name", <Input value={documentImportDraft.name} onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, name: e.target.value }))} />)}
+                {field("Document type", <Input value={documentImportDraft.type} onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, type: e.target.value }))} />)}
+                {field("Tags", <Input value={documentImportDraft.tags} onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, tags: e.target.value }))} />)}
+                <Label htmlFor="import-extracted-text">Extracted text</Label>
+                <textarea id="import-extracted-text" className="h-32 w-full rounded-md border p-2 text-sm" value={documentImportDraft.extractedText} disabled={documentImportOcrBusy}
+                  onChange={(e) => setDocumentImportDraft((prev) => ({ ...prev, extractedText: e.target.value, ocrStatus: e.target.value.trim() ? "completed" : "pending" }))} />
+              </div>
+            </details>
+          </div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {bestTransactionLinkSuggestion ? (
-            <Button onClick={saveImportedDocument} disabled={documentImportOcrBusy}>
-              Save upload and link matched transaction
-            </Button>
-          ) : null}
-          {!bestTransactionLinkSuggestion && readyUtilitySectionCount > 1 ? (
-            <Button onClick={() => saveImportedDocument({ createUtilitySectionTransactions: true })} disabled={documentImportOcrBusy}>
-              Save and create related utility transactions
-            </Button>
-          ) : null}
-          {documentImportExpenseSuggestion ? (
-            <Button variant={bestTransactionLinkSuggestion || readyUtilitySectionCount > 1 ? "secondary" : undefined} onClick={() => saveImportedDocument({ reviewExpenseDraft: true })} disabled={documentImportOcrBusy}>
-              Save transaction and attach document
-            </Button>
-          ) : null}
-          {documentImportWorkOrderSuggestion ? (
-            <Button variant={bestTransactionLinkSuggestion || documentImportExpenseSuggestion ? "secondary" : undefined} onClick={() => saveImportedDocument({ reviewWorkOrderDraft: true })} disabled={documentImportOcrBusy}>
-              Save and review work order draft
-            </Button>
-          ) : null}
-          <Button variant={bestTransactionLinkSuggestion || documentImportExpenseSuggestion || documentImportWorkOrderSuggestion ? "secondary" : undefined} onClick={saveImportedDocument} disabled={documentImportOcrBusy}>
-            {isPropertyDocumentImport ? "Save property document" : "Save upload only"}
-          </Button>
-          <Button variant="secondary" onClick={closeDocumentImportDialog}>Cancel</Button>
+        <div className="sticky bottom-0 mt-4 border-t bg-white pt-3">
+          <p className="mb-2 text-xs text-slate-600">{hasLink ? "The file will be attached to the record you selected." : "Saving the document does not add a transaction. Review expense opens an editable draft with this file attached."}</p>
+          {!canSave ? <p className="mb-2 text-sm text-amber-800">Choose a property and keep a file name before saving.</p> : null}
+          <div className="flex flex-wrap gap-2">
+            {!supportingFile && !hasLink && !multipleUtilityUnits && (!maintenanceCapture || documentImportExpenseSuggestion) ? <Button disabled={saveDisabled} onClick={() => saveImportedDocument({ reviewExpenseDraft: true })}>{documentImportExpenseSuggestion ? "Review expense" : "Enter expense manually"}</Button> : null}
+            {documentImportWorkOrderSuggestion && !hasLink ? <Button variant="secondary" disabled={saveDisabled} onClick={() => saveImportedDocument({ reviewWorkOrderDraft: true })}>Review work order</Button> : null}
+            <Button variant={supportingFile || hasLink ? undefined : "secondary"} disabled={saveDisabled} onClick={() => saveImportedDocument()}>{hasLink ? "Save and attach document" : "Save document only"}</Button>
+            <Button variant="secondary" onClick={closeDocumentImportDialog}>Cancel</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

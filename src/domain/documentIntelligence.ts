@@ -266,7 +266,7 @@ function extractPossibleUnits(text: string, knownUnits: string[] = []) {
     /\bapt\.?\s*#?\s*([a-z0-9-]{1,12})\b/gi,
     /\bapartment\s*#?\s*([a-z0-9-]{1,12})\b/gi,
     /\bsuite\s*#?\s*([a-z0-9-]{1,12})\b/gi,
-    /(?:^|\s)#\s*([a-z0-9-]{1,12})(?=\b)/gi,
+    /(?:^|\s)#\s*([0-9][a-z0-9-]{0,11}|[a-z])(?=\b)/gi,
   ];
 
   patterns.forEach((pattern) => {
@@ -417,6 +417,8 @@ function looksLikeOcrVendorLine(value: string) {
   if (!line) return false;
   const searchLine = normalizeSearchText(line);
   if (!/[a-z]/i.test(line)) return false;
+  if (/\b(?:page|customer name|service address|congratulations|welcome|thank you)\b/i.test(line)) return false;
+  if (/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/.test(line)) return false;
   if (parseDateText(line) || pickAddressLine(line) || pickVendorPhone(line) || pickVendorEmail(line)) return false;
   if (/\$|(?:^|\s)-?\d+\.\d{2}\b/.test(line)) return false;
   if (/\b(?:invoice|receipt|statement|bill|estimate|account|acct|date|time|store|phone|tel|fax|cashier|register|terminal|auth|approval|subtotal|total|amount|balance|tax|visa|mastercard|discover|amex|debit|credit|card|change|qty|sku|upc|barcode|thank you)\b/i.test(line)) return false;
@@ -426,11 +428,24 @@ function looksLikeOcrVendorLine(value: string) {
 }
 
 function pickOcrVendorName(text: string) {
+  const normalized = normalizeLooseOcrText(text);
+  // Prefer identifiable bill issuers over mailing addresses and customer labels.
+  if (/\bspectrum\b/i.test(normalized) && /\bspectrum\s+internet\b/i.test(normalized)) return "Spectrum";
+  const energyIssuer = normalized.match(/^([a-z]{2,30}(?:[ \t]+[a-z]{2,30}){0,2}[ \t]+energies)[ \t]*$/im);
+  if (energyIssuer) return energyIssuer[1].trim();
+  const utilityDomain = normalized.match(/\b([a-z]+)utilities\.(?:org|com)\b/i);
+  if (utilityDomain) return `${utilityDomain[1][0].toUpperCase()}${utilityDomain[1].slice(1).toLowerCase()} Utilities`;
   const lines = normalizeExtractedDocumentText(text)
     .split("\n")
     .map((line) => cleanOcrVendorLine(line))
     .filter(Boolean);
-  const candidate = lines.slice(0, 12).find((line) => looksLikeOcrVendorLine(line));
+  const bodyStart = lines.findIndex((line) => /\b(?:not valid|allowable returns|subtotal|qty|sku)\b/i.test(line));
+  const headerLines = lines.slice(0, bodyStart >= 0 ? Math.min(bodyStart, 12) : 12);
+  const candidate = headerLines.find((line) => {
+    // A standalone city repeated in the postal address is not a merchant.
+    if (lines.some((other) => other !== line && other.toLowerCase().startsWith(`${line.toLowerCase()},`))) return false;
+    return looksLikeOcrVendorLine(line);
+  });
   return candidate || "";
 }
 
@@ -630,7 +645,8 @@ function pickBestExpenseAmount(text: string) {
 
 function parseReceiptLineAmount(value: string) {
   if (/-\s*(?:\$|\busd\b)?\s*[0-9]/i.test(String(value || ""))) return undefined;
-  const match = String(value || "").match(/(?:\$|\busd\b)?\s*([0-9]{1,4}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]{1,4})\b(?!\s*%)/i);
+  // Card endings, dates and item counts are not monetary amounts.
+  const match = String(value || "").match(/(?:\$|\busd\b)?\s*\b([0-9]{1,4}(?:,[0-9]{3})*\.[0-9]{2})\b(?!\s*%)/i);
   if (!match) return undefined;
   const amount = parseCurrencyAmount(match[1]);
   if (amount == null || amount > 20000) return undefined;
@@ -769,6 +785,15 @@ function pickFirstNonMeterReadDateLine(text: string) {
 }
 
 function pickBestExpenseDate(text: string) {
+  // Retail receipts often print their return deadline before the purchase timestamp.
+  if (/\b(?:receipt|visa|mastercard|tender|payment method)\b/i.test(text)) {
+    const timestampLine = normalizeLooseOcrText(text).split("\n").find((line) =>
+      /\b\d{1,2}\s*:\s*\d{2}\b/.test(line) && /\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/.test(line) &&
+      !/\b(?:return|refund|expire|valid until)\b/i.test(line),
+    );
+    const timestampDate = parseDateText(timestampLine || "");
+    if (timestampDate) return timestampDate;
+  }
   const labeledPatterns = [
     /\b(?:bill(?:ing)? date|invoice date|statement date|transaction date|purchase date|receipt date|order date|date issued|issued on|completed on)\b\s*[:#-]?\s*([^\n]+)/i,
     /\b(?:due date|payment due|pay by|due on|balance due by)\b\s*[:#-]?\s*([^\n]+)/i,
@@ -860,6 +885,8 @@ function pickTotalForSectionAmount(text: string, address: string) {
   const rawText = String(text || "");
   const anchorMatch = rawText.match(new RegExp(`total\\W+for\\W*:??\\W*${addressPattern}`, "i"));
   if (!anchorMatch || typeof anchorMatch.index !== "number") return undefined;
+  const directAmount = rawText.slice(anchorMatch.index + anchorMatch[0].length).match(/^\s*\$?\s*([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})\b/);
+  if (directAmount) return parseCurrencyAmount(directAmount[1]);
   const tail = rawText.slice(Math.max(0, anchorMatch.index), Math.min(rawText.length, anchorMatch.index + 1200));
   const chargeRuns = [...tail.matchAll(/\bcharge\b((?:\s+-?\d+\.\d{2,3}){2,16})/gi)];
   for (let index = chargeRuns.length - 1; index >= 0; index -= 1) {
@@ -941,6 +968,8 @@ function looksLikeUtilityOfficeAnchorContext(text: string, index: number) {
     context.includes("return this portion") ||
     context.includes("amount enclosed") ||
     context.includes("quick pay option") ||
+    context.includes("do not send payments to this address") ||
+    context.includes("please send payment to") ||
     context.includes("keep this top portion for your records") ||
     context.includes("please share any changes above")
   );
@@ -952,7 +981,8 @@ function findAddressAnchors(text: string) {
     const address = String(match[0] || "").trim();
     const index = match.index || 0;
     if (!address) continue;
-    if (looksLikeUtilityOfficeAnchorContext(text, match.index || 0)) continue;
+    const explicitServiceAddress = /service\s+address\s*:?\s*$/i.test(text.slice(Math.max(0, index - 40), index));
+    if (!explicitServiceAddress && looksLikeUtilityOfficeAnchorContext(text, match.index || 0)) continue;
     const duplicateNearby = found.some(
       (existing) => normalizeSearchText(existing.address) === normalizeSearchText(address) && Math.abs(existing.index - index) < 80,
     );
@@ -1043,11 +1073,18 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
   const combinedText = `${document.name || ""}\n${document.type || ""}\n${extractedText}`.toLowerCase();
   if (!extractedText || !looksUtilityDocument(combinedText)) return [];
 
-  const addressAnchors = findAddressAnchors(extractedText);
+  let addressAnchors = findAddressAnchors(extractedText);
+  // Explicit service locations outrank customer/remittance addresses on coupons.
+  const serviceAddresses = [...extractedText.matchAll(new RegExp(`\\bservice\\s+address\\s*:?\\s*(${ADDRESS_PATTERN.source})`, "gi"))]
+    .map((match) => normalizeAddressForMatch(match[1]));
+  if (serviceAddresses.length && !/\btotal\s+for\b/i.test(extractedText)) {
+    addressAnchors = addressAnchors.filter((anchor) => serviceAddresses.includes(normalizeAddressForMatch(anchor.address)));
+  }
   if (addressAnchors.length === 0) return [];
 
   const extractedSearchText = normalizeSearchText(normalizeLooseOcrText(extractedText));
   const { vendorName, matchedVendorId } = inferVendorContext({
+    documentName: document.name,
     extractedSearchText,
     extractedText,
     vendor: args.vendor,
@@ -1074,6 +1111,7 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
     const date =
       pickLabeledDate(sectionText, /\b(?:bill(?:ing)? date|statement date|invoice date|date issued)\b\s*[:#-]?\s*([^\n]+)/i) ||
       pickLabeledDate(headerContext, /\b(?:bill(?:ing)? date|statement date|invoice date|date issued)\b\s*[:#-]?\s*([^\n]+)/i) ||
+      (totalForAmount != null ? pickLabeledDate(extractedText, /\b(?:bill(?:ing)? date|statement date|invoice date|date issued)\b\s*[:#-]?\s*([^\n]+)/i) : "") ||
       pickBestExpenseDate(sectionText);
     const accountRef = pickAccountReference(sectionText) || pickAccountReference(headerContext);
     const unit = inferSectionUnit(args, sectionText, anchor.address, propertyId);
@@ -1127,6 +1165,13 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
 
   return deduped
     .filter((section) => !section.external || utilitySectionHasSignal(section))
+    .filter((section, _, collection) => section.amount != null || !collection.some((candidate) =>
+      candidate !== section && candidate.amount != null &&
+      candidate.propertyId === section.propertyId && candidate.unit === section.unit &&
+      normalizeAddressForMatch(candidate.address) === normalizeAddressForMatch(section.address) &&
+      (!candidate.date || !section.date || candidate.date === section.date) &&
+      (!candidate.accountRef || !section.accountRef || candidate.accountRef === section.accountRef),
+    ))
     .filter((section, _, collection) => {
       if (section.external || utilitySectionHasBoundarySignal(section)) return true;
       const sectionStreetWords = extractAddressStreetWords(section.address);
@@ -1167,6 +1212,7 @@ function inferExpenseCategory(text: string, vendorDefaultCategory: unknown = "",
   const normalizedDefault = String(vendorDefaultCategory || "").trim();
   if (normalizedDefault) return normalizedDefault;
   if (workOrder) return "Repairs";
+  if (/\b(?:internet|broadband|wifi|wi-fi)\b/.test(text) && /\b(?:service from|monthly charges|auto pay amount|internet total|internet.*total)\b/.test(text)) return "Utilities";
   if (/\bproperty tax\b|\bassessor\b|\bcounty tax\b|\btax bill\b/.test(text)) return "Taxes";
   if (/\binsurance\b|\bpremium\b|\bpolicy\b|\bcoverage\b/.test(text)) return "Insurance";
   if (/\butility\b|\bwater\b|\bsewer\b|\belectric\b|\belectricity\b|\bgas service\b|\btrash\b|\brecycling\b/.test(text)) return "Utilities";
@@ -1209,6 +1255,7 @@ function buildExpenseDescription(args: {
 function inferVendorContext(args: {
   extractedSearchText: string;
   extractedText?: string;
+  documentName?: string;
   vendor?: InferDocumentTagsArgs["vendor"];
   transaction?: InferDocumentTagsArgs["transaction"];
   candidateVendors?: InferDocumentTagsArgs["candidateVendors"];
@@ -1240,6 +1287,13 @@ function inferVendorContext(args: {
     vendorSource = "ocr";
     matchedVendorId = "";
   }
+  if (!vendorName && args.extractedText?.trim()) {
+    const filenameVendor = String(args.documentName || "").match(/^([a-z][a-z &'.-]{1,39})[ _-]+(?:receipt|invoice)\b/i)?.[1]?.trim();
+    if (filenameVendor && !/\b(?:unknown|image|scan|scanned|document|example|test)\b/i.test(filenameVendor)) {
+      vendorName = filenameVendor;
+      vendorSource = "name";
+    }
+  }
 
   return {
     vendorName,
@@ -1267,6 +1321,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
     vendorPhone: contextualVendorPhone,
     vendorEmail: contextualVendorEmail,
   } = inferVendorContext({
+    documentName: document.name,
     extractedSearchText,
     extractedText,
     vendor,
@@ -1331,7 +1386,7 @@ export function inferDocumentExtractedFields(args: InferDocumentTagsArgs): Docum
     sources.add("context");
   }
   const reasons = uniqueReasons([
-    correctedVendorName ? `Vendor was corrected as ${correctedVendorName}.` : resolvedVendorName ? (matchedVendorId ? `Vendor matched saved vendor ${resolvedVendorName}.` : `Vendor came from ${vendorSource === "context" ? "linked context" : "OCR text"}.`) : "",
+    correctedVendorName ? `Vendor was corrected as ${correctedVendorName}.` : resolvedVendorName ? (matchedVendorId ? `Vendor matched saved vendor ${resolvedVendorName}.` : `Vendor came from ${vendorSource === "context" ? "linked context" : vendorSource === "name" ? "the file name" : "document text"}.`) : "",
     resolvedTotalAmount != null ? (Number.isFinite(correctedTotalAmount) ? "Total amount was corrected." : "Total amount was selected from amount/total due text.") : "",
     invoiceDate ? "Invoice date was selected from bill, invoice, or statement date text." : "",
     dueDate ? "Due date was selected from due/payment date text." : "",
@@ -1456,7 +1511,8 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs, prep
 
   const looksExpenseLike =
     /\binvoice\b|\breceipt\b|\bestimate\b|\bbill\b|\btotal due\b|\bamount due\b|\bpayment due\b|\bpremium\b|\bproperty tax\b|\butility\b|\brepair\b|\bmaintenance\b/.test(combinedText) ||
-    /\$[0-9]/.test(extractedText);
+    /\$[0-9]/.test(extractedText) ||
+    (/\b(?:subtotal|total)\b/i.test(extractedText) && /\b(?:visa|mastercard|debit|credit|tender|cashier)\b/i.test(extractedText));
 
   if (supportOnlyDocument && !transaction && !workOrder) return null;
   if (!looksExpenseLike && !transaction && !workOrder) return null;
@@ -1472,6 +1528,7 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs, prep
     vendorSource,
     matchedVendorId,
   } = inferVendorContext({
+    documentName: document.name,
     extractedSearchText,
     extractedText,
     vendor,
@@ -1574,6 +1631,7 @@ export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs, pr
     vendorSource,
     matchedVendorId,
   } = inferVendorContext({
+    documentName: document.name,
     extractedSearchText,
     extractedText,
     vendor,
