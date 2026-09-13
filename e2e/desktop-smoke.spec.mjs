@@ -240,11 +240,17 @@ test("packaged desktop separates Work Queue records from tax cross-checks", asyn
   try {
     await page.getByRole("button", { name: "Work Queue", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Work Queue", exact: true })).toBeVisible();
-    await expect(page.getByText(/records need attention$/i)).toBeVisible();
+    await expect(page.getByRole("heading", { name: /tasks? to work through/i })).toBeVisible();
     await expect(page.getByText(/Tax Center has \d+ cross-check/i)).toBeVisible();
-    await expect(page.getByText("Workflow:", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /All records/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Tax cross-checks/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Selected task", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /All tasks/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open Tax Overview", exact: true })).toBeVisible();
+    await page.getByLabel("Find a task").fill("no-matching-task-xyz");
+    await expect(page.getByText("No tasks match these filters", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Reset filters", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Selected task", exact: true })).toBeVisible();
+    await page.getByLabel("Priority", { exact: true }).selectOption("medium");
+    await expect(page.getByRole("region", { name: "Open tasks", exact: true }).getByText("Review first", { exact: true })).toHaveCount(0);
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -679,6 +685,68 @@ test("packaged reader extracts embedded PDF text before OCR", async () => {
     expect(result.processedPages).toBe(1);
   } finally {
     await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("Work Queue reaches every task and confirms a reviewed service-period correction", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-work-queue-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await expect(run.page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const propertyId = backup.data.properties[0].id;
+      backup.data.transactions = Array.from({ length: 25 }, (_, index) => ({
+        id: `queue-test-${index}`, status: "active", propertyId, unit: "Shared", date: "2026-08-15", type: "Expense", category: "Utilities",
+        vendor: `Queue utility ${String(index).padStart(2, "0")}`, description: "Monthly utility bill", amount: 80,
+        receiptName: "example-support.pdf", taxChecked: true, reconciled: true,
+        servicePeriodStart: "", servicePeriodEnd: "", ownerUsePctOverride: false,
+      }));
+      backup.settings.leaseAutomationEnabled = false;
+      const saved = await window.desktopPersistence.saveAppData(backup);
+      if (saved.ok === false) throw new Error(saved.message);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    const { page } = run;
+    const loaded = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions);
+    expect(loaded.filter((t) => t.id.startsWith("queue-test-")).length).toBe(25);
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await page.getByPlaceholder("Search", { exact: true }).fill("unrelated-ledger-search");
+    await page.getByRole("button", { name: "Work Queue", exact: true }).click();
+    await page.getByRole("button", { name: /^Transactions \(/ }).click();
+    const list = page.getByRole("region", { name: "Open tasks", exact: true });
+    const detail = page.getByRole("region", { name: "Selected task", exact: true });
+    await expect(list.getByRole("button", { name: /Queue utility/ })).toHaveCount(20);
+    await page.getByRole("button", { name: /Show more tasks/ }).click();
+    await expect(list.getByRole("button", { name: /Queue utility/ })).toHaveCount(25);
+    await page.getByLabel("Find a task").fill("Queue utility 24");
+    await expect(list.getByRole("button", { name: /Queue utility/ })).toHaveCount(1);
+    await detail.getByRole("button", { name: "Set service period", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Monthly utility bill", exact: true })).toBeVisible();
+    const storedDate = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.find((t) => t.id === "queue-test-24").servicePeriodStart);
+    expect(storedDate || "").toBe("");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(list.getByRole("button", { name: /Queue utility 24/ })).toBeVisible();
+    await detail.getByText("Other actions", { exact: true }).click();
+    await detail.getByRole("button", { name: "Use transaction date as service period", exact: true }).click();
+    await expect(page.getByText(/both the start and end/)).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(list.getByRole("button", { name: /Queue utility 24/ })).toBeVisible();
+    await detail.getByRole("button", { name: "Use transaction date as service period", exact: true }).click();
+    await page.getByRole("button", { name: "Use this date", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Queue utility 24: updated" })).toBeVisible();
+    await expect(detail.getByRole("button", { name: "Review tax", exact: true })).toBeVisible();
+    await detail.getByRole("button", { name: "Mark reviewed", exact: true }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Queue utility 24: no open checks remain" })).toBeVisible();
+    await expect(page.getByText("No tasks match these filters", { exact: true })).toBeVisible();
+    await expect.poll(async () => page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.find((t) => t.id === "queue-test-24").servicePeriodStart)).toBe("2026-08-15");
+    await page.getByLabel("Find a task").fill("");
+    await page.screenshot({ path: "output/playwright/work-queue-revamp.png", fullPage: true });
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close().catch(() => {});
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });

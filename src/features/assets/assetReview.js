@@ -101,6 +101,7 @@ function isVoidTransaction(transaction) {
 export function isCapitalImprovementTransactionCandidate(transaction) {
   if (!transaction || isVoidTransaction(transaction) || transaction.type !== "Expense") return false;
   if (transaction.capitalImprovement === true || transaction.capitalImprovement === "Yes") return true;
+  if (["repair_confirmed", "ignore"].includes(transaction.reviewOverrides?.possible_improvement)) return false;
   return IMPROVEMENT_PATTERN.test(transactionText(transaction));
 }
 

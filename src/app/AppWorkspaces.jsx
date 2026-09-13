@@ -1,4 +1,5 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useMemo } from "react";
+import { buildTransactionReviewInbox } from "../features/transactions/transactionReview.js";
 import { currency, toPctDisplay } from "../domain/accounting.ts";
 import { adjustedAssetDepreciationForYear } from "../domain/assetDepreciation.ts";
 import {
@@ -610,9 +611,18 @@ export function AppWorkspaces(props) {
   const formattingProps = { currency, formatUsPhone, toPctDisplay };
   const ledgerWorkspaceContract = buildLedgerWorkspaceContract(props, { bankImportMatchRuleOptions });
   const ledgerWorkspaceProps = flattenWorkspaceContract(ledgerWorkspaceContract);
+  // Work Queue has its own search. A search left in Transactions must not hide its tasks.
+  const workQueueTransactions = useMemo(() => view !== "review" ? [] : buildTransactionReviewInbox(
+    (props.activeTx || []).filter((transaction) =>
+      String(transaction.date || "").startsWith(props.yearFilter)
+      && (props.propertyFilter === "all" || transaction.propertyId === props.propertyFilter)
+      && (props.unitFilter === "all" || transaction.unit === props.unitFilter)),
+    { documents: props.documents, assets: props.assets, isTaxReviewRelevantTransaction: props.isTaxReviewRelevantTransaction },
+  ), [view, props.activeTx, props.yearFilter, props.propertyFilter, props.unitFilter, props.documents, props.assets, props.isTaxReviewRelevantTransaction]);
   const reviewWorkspaceProps = {
     currency,
     ...pickProps(props, REVIEW_WORKSPACE_PROP_KEYS),
+    transactionReviewInbox: workQueueTransactions,
     actions,
     markLoanYearReviewed: actions.markLoanYearReviewed,
     updateLoanYearEndReview: actions.updateLoanYearEndReview,
@@ -697,6 +707,7 @@ export function AppWorkspaces(props) {
       )}
       {view === "review" && (
         <ReviewCenterWorkspace
+          key={`${props.propertyFilter}|${props.unitFilter}|${props.yearFilter}`}
           {...reviewWorkspaceProps}
         />
       )}

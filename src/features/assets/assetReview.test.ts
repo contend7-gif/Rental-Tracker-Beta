@@ -169,3 +169,9 @@ describe("asset review helpers", () => {
     assert.equal(draft.sourceTransactionId, "t1");
   });
 });
+
+it("confirmed repair decisions stop asset suggestions until explicitly capitalized", () => {
+  const transaction = { ...baseTransaction, capitalImprovement: false, reviewOverrides: { possible_improvement: "repair_confirmed" } };
+  assert.equal(buildCapitalImprovementTransactionCandidates({ transactions: [transaction] }).length, 0);
+  assert.equal(buildCapitalImprovementTransactionCandidates({ transactions: [{ ...transaction, capitalImprovement: true }] }).length, 1);
+});

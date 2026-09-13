@@ -1,3 +1,37 @@
+export function transactionReviewPriority(issues = []) {
+  const keys = new Set(issues.map((issue) => issue.key));
+  if (["capital_improvement_needs_asset", "possible_improvement", "unclear_category", "unreconciled_import"].some((key) => keys.has(key))) return "high";
+  if (keys.size === 1 && keys.has("tax_open")) return "low";
+  return "medium";
+}
+
+export function mergeReviewTransactionIssues(transactions = [], candidates = []) {
+  const candidatesById = new Map(candidates.map((record) => [record.transaction?.id, record]));
+  return transactions.map((record) => {
+    const candidate = record.transaction?.id && candidatesById.get(record.transaction.id);
+    if (!candidate) return record;
+    const issues = new Map();
+    const aliases = { capital_transaction_without_asset: "capital_improvement_needs_asset", possible_improvement_without_asset: "possible_improvement", de_minimis_candidate_needs_decision: "de_minimis_review" };
+    [...(record.issues || []), ...(candidate.issues || [])].forEach((issue) => {
+      const key = aliases[issue.key] || issue.key || issue.label;
+      if (!issues.has(key)) issues.set(key, { ...issue, key });
+    });
+    return { ...record, issues: [...issues.values()] };
+  });
+}
+
+export function filterWorkQueue(items = [], { section = "all", priority = "all", query = "" } = {}) {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return sortReviewItems(items.filter((item) => {
+    if (item.sectionKey === "tax") return false;
+    if (section !== "all" && item.sectionKey !== section) return false;
+    if (priority !== "all" && item.urgency !== priority) return false;
+    const searchable = [item.title, item.subtitle, item.what, item.why, ...(item.issueLabels || []),
+      ...(item.memberItems || []).flatMap((member) => [member.title, member.subtitle, member.what])].join(" ").toLowerCase();
+    return terms.every((term) => searchable.includes(term));
+  }));
+}
+
 export function reviewItemUrgencyRank(item) {
   const urgency = item?.urgency || "normal";
   if (urgency === "critical") return 4;

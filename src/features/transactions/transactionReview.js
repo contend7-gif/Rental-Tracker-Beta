@@ -76,7 +76,7 @@ export function getTransactionReviewIssues(transaction, context = {}) {
   }
 
   if (transaction.type === "Expense" && transaction.capitalImprovement && !transactionHasLinkedAsset(transaction, context.assets || [])) {
-    issues.push(issue("capital_improvement_needs_asset", "capitalImprovement"));
+    issues.push(issue("capital_improvement_needs_asset", "Capital improvement needs an asset", "capitalImprovement"));
   }
 
   if (transaction.ownerUsePctOverride) {

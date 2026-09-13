@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { filterWorkQueue, mergeReviewTransactionIssues, transactionReviewPriority } from "./reviewCenterPresentation.js";
 import { groupRelatedReviewItems, isGroupedReviewItem, sortReviewSeriesMembers, splitDoFirstItems, summarizeIssueLabels, summarizeReviewSections, visibleReviewItemsForSection } from "./reviewCenterPresentation.js";
 
 const reviewItems = [
@@ -9,6 +10,33 @@ const reviewItems = [
   { key: "low-doc", sectionKey: "documents", title: "Safe document suggestion", urgency: "low" },
   { key: "critical-bill", sectionKey: "documents", title: "Bill draft", urgency: "critical" },
 ];
+
+test("Work Queue reserves review-first for accounting decisions, not ordinary missing paperwork", () => {
+  assert.equal(transactionReviewPriority([{ key: "missing_service_period" }, { key: "missing_receipt" }]), "medium");
+  assert.equal(transactionReviewPriority([{ key: "tax_open" }]), "low");
+  assert.equal(transactionReviewPriority([{ key: "unclear_category" }]), "high");
+  assert.equal(transactionReviewPriority([{ key: "unreconciled_import" }]), "high");
+});
+
+test("Work Queue search reaches all records and searches members of a recurring group", () => {
+  const items = Array.from({ length: 35 }, (_, index) => ({ key: String(index), title: `Vendor ${index}`, sectionKey: "transactions", urgency: "medium" }));
+  assert.equal(filterWorkQueue(items).length, 35);
+  assert.equal(filterWorkQueue(items, { query: "vendor 34" })[0].key, "34");
+  const grouped = [{ key: "series", title: "Utilities", sectionKey: "transactions", urgency: "medium", memberItems: [{ subtitle: "Oak Duplex 2026-06-15" }] }];
+  assert.equal(filterWorkQueue(grouped, { query: "oak 06-15", section: "transactions", priority: "medium" }).length, 1);
+  assert.equal(filterWorkQueue(grouped, { priority: "high" }).length, 0);
+  assert.equal(filterWorkQueue([{ key: "tax", sectionKey: "tax" }]).length, 0);
+});
+
+test("Work Queue combines equivalent asset checks on the exact transaction without losing other issues", () => {
+  const source = [{ transaction: { id: "a" }, issues: [{ key: "capital_improvement_needs_asset", label: "Needs asset" }, { key: "missing_receipt" }] }];
+  const result = mergeReviewTransactionIssues(source, [
+    { transaction: { id: "a" }, issues: [{ key: "capital_transaction_without_asset" }, { key: "de_minimis_candidate_needs_decision" }] },
+    { transaction: { id: "b" }, issues: [{ key: "possible_improvement_without_asset" }] },
+  ]);
+  assert.deepEqual(result[0].issues.map((issue) => issue.key), ["capital_improvement_needs_asset", "missing_receipt", "de_minimis_review"]);
+  assert.equal(source[0].issues.length, 2);
+});
 
 test("Review Center summarizes open and clear sections", () => {
   const summary = summarizeReviewSections([

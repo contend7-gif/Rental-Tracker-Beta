@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.2",
+    releaseDate: "2026-09-12",
+    title: "A clearer Work Queue",
+    summary: "Work through a searchable task list with focused review details, clearer priorities, and feedback when source-record checks are resolved.",
+    changes: [
+      "Find tasks by vendor, property, date, or issue; filter by area and priority, and reach every task with Show more.",
+      "Replace crowded action cards with a task list and focused review pane; keep tax cross-checks separate from task counts.",
+      "Combine duplicate transaction and asset checks, keep recurring groups within their property and unit, and reserve higher priority for accounting decisions and missing records.",
+      "Review service periods before applying dates, keep remaining checks visible after corrections, and show completion only when no open checks remain in the queue.",
+      "Prevent searches left in Transactions from hiding Work Queue tasks, and stop asset suggestions from returning after an expense is confirmed as a repair.",
+    ],
+  },
+  {
     version: "1.9.1",
     releaseDate: "2026-09-12",
     title: "Simpler document uploads and better receipt reading",
