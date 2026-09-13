@@ -1,11 +1,12 @@
 import type { UsePeriod } from "../models.ts";
 import { toLocalIsoDate } from "../lib/localDate.ts";
 import type { AppendActivityLog } from "./activityStore.ts";
+import { rentalUsePctFromUsePeriod } from "../domain/usePeriodRentalUse.ts";
 
 type StateSetter<T> = (updater: T[] | ((previous: T[]) => T[])) => void;
 
 export function normalizeUsePeriod(period: UsePeriod): UsePeriod {
-  const rentalUsePct = Number(period.rentalUsePct);
+  const rentalUsePct = rentalUsePctFromUsePeriod(period) ?? 0;
 
   return {
     ...period,
@@ -32,7 +33,7 @@ export function createUsePeriodActions({
   appendActivityLog: AppendActivityLog;
 }) {
   return {
-    upsertUsePeriod(period: { id?: string; propertyId: string; unit: string; startDate: string; endDate?: string; useType: string; reviewed?: boolean; reviewedAt?: string; reviewNotes?: string }) {
+    upsertUsePeriod(period: { id?: string; propertyId: string; unit: string; startDate: string; endDate?: string; useType: string; vacancyTreatment?: UsePeriod["vacancyTreatment"]; reviewed?: boolean; reviewedAt?: string; reviewNotes?: string }) {
       const normalized = normalizeUsePeriod({
         id: period.id || `up-${Date.now()}`,
         propertyId: period.propertyId,
@@ -40,7 +41,8 @@ export function createUsePeriodActions({
         startDate: period.startDate,
         endDate: period.endDate || "",
         useType: period.useType,
-        rentalUsePct: period.useType === "Owner-Occupied" || period.useType === "Vacant" ? 0 : 1,
+        rentalUsePct: period.useType === "Owner-Occupied" ? 0 : 1,
+        vacancyTreatment: period.useType === "Vacant" ? (period.vacancyTreatment || "held-for-rent") : undefined,
         reviewed: period.reviewed,
         reviewedAt: period.reviewedAt,
         reviewNotes: period.reviewNotes,

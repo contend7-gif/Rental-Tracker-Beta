@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.3",
+    releaseDate: "2026-09-13",
+    title: "Vacancy deductions and document unit corrections",
+    summary: "Keep rental deductions during tenant turnover and preserve confirmed unit assignments when importing utility bills or correcting linked transactions.",
+    changes: [
+      "Separate vacant occupancy from rental purpose: held-for-rent vacancy retains rental expense allocation and depreciation, with an explicit Not held for rent option.",
+      "Treat existing vacancy periods as held for rent by default; review periods that were actually nonrental using the new setting. Both start and end dates are included.",
+      "Preserve manually selected units when choosing or replacing an upload file, and apply confirmed scope consistently to single-bill utility suggestions.",
+      "Keep single-purpose linked receipts aligned when a transaction's property or unit is corrected, while preserving combined statements and lease or work-order attachments.",
+      "Existing document and transaction scope mismatches remain available for review; this release does not bulk-rewrite historical document assignments.",
+    ],
+  },
+  {
     version: "1.9.2",
     releaseDate: "2026-09-12",
     title: "A clearer Work Queue",

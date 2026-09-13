@@ -25,6 +25,17 @@ const duplexUnits: Unit[] = [
   { id: "u-616", propertyId: "prop-1", name: "616", status: "Rental" },
 ];
 
+test("legacy turnover vacancy retains depreciation while explicit nonrental vacancy reduces it", () => {
+  const owner: UsePeriod = { id: "owner", propertyId: "prop-1", unit: "614", startDate: "2026-01-01", useType: "Owner-Occupied", rentalUsePct: 0 };
+  const gap: UsePeriod = { id: "gap", propertyId: "prop-1", unit: "616", startDate: "2026-08-10", endDate: "2026-08-11", useType: "Vacant", rentalUsePct: 0 };
+  for (const unit of ["Shared", "616"]) {
+    const args = { asset: { ...sharedBuilding, unit }, year: 2026, units: duplexUnits };
+    const before = adjustedAssetDepreciationForYear({ ...args, usePeriods: [owner] });
+    assert.equal(adjustedAssetDepreciationForYear({ ...args, usePeriods: [owner, gap] }), before);
+    assert.ok(adjustedAssetDepreciationForYear({ ...args, usePeriods: [owner, { ...gap, vacancyTreatment: "nonrental" }] }) < before);
+  }
+});
+
 test("shared building rental use follows mixed unit occupancy", () => {
   const leases: Lease[] = [
     {

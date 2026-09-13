@@ -1,5 +1,6 @@
 import type { Asset, Lease, Unit, UsePeriod } from "../models.ts";
 import { leaseIsActiveByDate } from "./leaseActivity.ts";
+import { rentalUsePctFromUsePeriod } from "./usePeriodRentalUse.ts";
 
 function clampRentalUsePct(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -25,15 +26,6 @@ function findMatchingUsePeriod(usePeriods: UsePeriod[], propertyId: string, unit
   return usePeriods
     .filter((period) => period.propertyId === propertyId && period.unit === unit && period.startDate <= date && (!period.endDate || period.endDate >= date))
     .sort((a, b) => b.startDate.localeCompare(a.startDate))[0];
-}
-
-function rentalUsePctFromUsePeriod(period?: UsePeriod) {
-  if (!period) return null;
-  if (Number.isFinite(Number(period.rentalUsePct))) return clampRentalUsePct(Number(period.rentalUsePct));
-
-  const useType = String(period.useType || "").toLowerCase();
-  if (useType.includes("owner") || useType.includes("vacant")) return 0;
-  return 1;
 }
 
 function rentalUsePctForPropertyUnitOnDate(args: {

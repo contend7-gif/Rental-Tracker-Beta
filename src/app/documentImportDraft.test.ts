@@ -3,6 +3,19 @@ import test from "node:test";
 import { createBlankDocumentImportDraft } from "./draftFactories.js";
 import { buildDocumentImportFileDraft, buildDocumentImportPickerDraft, hasDocumentImportContext } from "./documentImportDraft.ts";
 
+test("selecting or replacing an upload file retains a manually chosen unit", () => {
+  for (const unit of ["616", "Shared"]) {
+    const draft = buildDocumentImportFileDraft({
+      previous: { ...createBlankDocumentImportDraft("p1", unit), unitScopeOverride: true },
+      file: { name: "utility-reupload.pdf", type: "application/pdf" }, dataUrl: "data:pdf",
+      propertyFilter: "p1", unitFilter: "614", defaultPropertyId: "p1",
+      suggestDocumentType: () => "Invoice", getSuggestedTags: () => [], formatTags: () => "",
+    });
+    assert.equal(draft.unit, unit);
+    assert.equal(draft.unitScopeOverride, true);
+  }
+});
+
 test("a button event cannot become document metadata or retain a previous import link", () => {
   const previous = { ...createBlankDocumentImportDraft("old-property", "Unit A"), type: "Invoice", linkedId: "old-transaction", linkType: "transaction" };
   const clickEvent = { type: "click", target: {}, preventDefault() {} };

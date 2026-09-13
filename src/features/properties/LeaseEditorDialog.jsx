@@ -296,6 +296,17 @@ export function LeaseEditorDialog({
                       <Input type="date" value={usePeriodDraft.endDate || ""} onChange={(e) => setUsePeriodDraft({ ...usePeriodDraft, endDate: e.target.value })} />
                       <Button variant="secondary" onClick={() => saveUnitOccupancyPeriod({ propertyId: leaseDraft.propertyId, name: leaseDraft.unit })}>{editingUsePeriodId ? "Update dates" : "Save dates"}</Button>
                     </div>
+                    {usePeriodDraft.useType === "Vacant" && <div className="mt-2">
+                      <label className="text-xs text-slate-600">Use while vacant</label>
+                      <Select value={usePeriodDraft.vacancyTreatment || "held-for-rent"} onValueChange={(value) => setUsePeriodDraft((prev) => ({ ...prev, vacancyTreatment: value }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="held-for-rent">Held for rent / between tenants</SelectItem>
+                          <SelectItem value="nonrental">Not held for rent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="mt-1 text-xs text-slate-500">Held-for-rent vacancy retains rental expense allocation and depreciation. It does not count as occupied rental days.</p>
+                    </div>}
                     <div className="mt-2 grid gap-2 md:grid-cols-[auto_minmax(180px,1fr)]">
                       <label className="flex items-center gap-2 text-xs text-slate-700">
                         <input
@@ -311,7 +322,7 @@ export function LeaseEditorDialog({
                         onChange={(event) => setUsePeriodDraft({ ...usePeriodDraft, reviewNotes: event.target.value })}
                       />
                     </div>
-                    <div className="mt-2 text-xs text-slate-500">Leave end date blank to keep this status until a lease starts.</div>
+                    <div className="mt-2 text-xs text-slate-500">Both dates are included. Leave end date blank to keep this status until a lease starts.</div>
                     {editingUsePeriodId && (
                       <div className="mt-1 flex items-center gap-2">
                         <span className="text-xs text-blue-700">Editing existing period.</span>
@@ -329,7 +340,7 @@ export function LeaseEditorDialog({
                         </span>
                         <div className="flex items-center gap-1">
                           {!period.reviewed && <Button size="sm" variant="secondary" onClick={() => actions.updateUsePeriodReview(period.id, { reviewed: true })}>Mark reviewed</Button>}
-                          <Button size="sm" variant="secondary" onClick={() => { setEditingUsePeriodId(period.id); setUsePeriodDraft({ useType: period.useType, startDate: period.startDate, endDate: period.endDate || "", reviewed: Boolean(period.reviewed), reviewNotes: period.reviewNotes || "" }); }}>Edit</Button>
+                          <Button size="sm" variant="secondary" onClick={() => { setEditingUsePeriodId(period.id); setUsePeriodDraft({ useType: period.useType, vacancyTreatment: period.vacancyTreatment || "held-for-rent", startDate: period.startDate, endDate: period.endDate || "", reviewed: Boolean(period.reviewed), reviewNotes: period.reviewNotes || "" }); }}>Edit</Button>
                           <Button size="sm" variant="secondary" onClick={() => confirmAndDeleteUsePeriod(period)}>Delete</Button>
                         </div>
                       </div>

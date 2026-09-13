@@ -182,6 +182,7 @@ export type UsePeriod = {
   endDate?: string;
   useType: string;
   rentalUsePct: number;
+  vacancyTreatment?: "held-for-rent" | "nonrental";
   reviewed?: boolean;
   reviewedAt?: string;
   reviewNotes?: string;

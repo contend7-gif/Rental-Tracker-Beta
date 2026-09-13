@@ -13,6 +13,23 @@ import {
 } from "./accounting.ts";
 import { initialLoans, initialRecurringTemplates, initialUsePeriods } from "../data/mockData.ts";
 
+test("turnover vacancy preserves expenses and shared allocation, with inclusive dates and explicit nonrental opt-out", () => {
+  const owner = { id: "owner", propertyId: "p1", unit: "614", startDate: "2026-01-01", useType: "Owner-Occupied", rentalUsePct: 0 };
+  const vacant = { id: "gap", propertyId: "p1", unit: "616", startDate: "2026-08-10", endDate: "2026-08-11", useType: "Vacant", rentalUsePct: 0 };
+  const args = { propertyId: "p1", unit: "616", date: "2026-08-11", usePeriods: [owner, vacant], units: [
+    { id: "a", propertyId: "p1", name: "614", status: "Owner-Occupied" as const },
+    { id: "b", propertyId: "p1", name: "616", status: "Rental" as const },
+  ] };
+  assert.equal(getRentalUsePctForDate(args), 1);
+  assert.equal(deductibleAmountForTransaction({ amount: 304.86, type: "Expense", capitalImprovement: false, rentalUsePct: getRentalUsePctForDate(args) }), 304.86);
+  assert.equal(getRentalUsePctForDate({ ...args, unit: "Shared" }), 0.5);
+  assert.equal(getRentalUsePctForRange({ ...args, unit: "Shared", startDate: "2026-08-01", endDate: "2026-08-31" }), 0.5);
+  const nonrental = { ...args, usePeriods: [owner, { ...vacant, vacancyTreatment: "nonrental" as const }] };
+  assert.equal(getRentalUsePctForDate(nonrental), 0);
+  assert.equal(getRentalUsePctForDate({ ...nonrental, date: "2026-08-12" }), 1);
+  assert.equal(getRentalUsePctForRange({ ...nonrental, startDate: "2026-08-10", endDate: "2026-08-12" }), 1 / 3);
+});
+
 test("date-based rental-use lookup handles mid-year shared changes", () => {
   const pct = getRentalUsePctForDate({ propertyId: "p1", unit: "Shared", date: "2026-06-15", usePeriods: initialUsePeriods });
   assert.equal(pct, 0.5);

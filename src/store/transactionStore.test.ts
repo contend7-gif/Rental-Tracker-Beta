@@ -31,6 +31,29 @@ function update<T>(current: T[], updater: T[] | ((previous: T[]) => T[])) {
   return typeof updater === "function" ? updater(current) : updater;
 }
 
+test("a transaction scope correction updates only its single-purpose receipt and persists through later edits", () => {
+  let transactions = [baseTransaction];
+  const receipt: DocumentItem = { id: "receipt", name: "Utility bill", type: "Invoice", propertyId: "property-1", unit: "Unit 1", unitScopeOverride: true, transactionId: baseTransaction.id };
+  const combined = { ...receipt, id: "combined", relatedTransactionIds: ["other-transaction"] };
+  const unrelated = { ...receipt, id: "unrelated", transactionId: "other-transaction" };
+  let documents: DocumentItem[] = [receipt, combined, unrelated];
+  const actions = createTransactionActions({
+    getTransactions: () => transactions, getUsePeriods: () => [], getLeases: () => [], getUnits: () => [],
+    setTransactions: (updater) => { transactions = update(transactions, updater); },
+    setDocuments: (updater) => { documents = update(documents, updater); },
+    setWorkOrders: () => undefined, setTenantLedgerEntries: () => undefined, setAssets: () => undefined, appendActivityLog: () => undefined,
+  });
+  actions.addOrUpdateTransaction({ ...baseTransaction, unit: "Unit 2" });
+  assert.equal(documents[0].unit, "Unit 2");
+  assert.equal(documents[0].unitScopeOverride, true);
+  assert.equal(documents[1], combined);
+  assert.equal(documents[2], unrelated);
+  actions.addOrUpdateTransaction({ ...transactions[0], amount: 100 });
+  assert.equal(documents[0].unit, "Unit 2");
+  actions.addOrUpdateTransaction({ ...transactions[0], unit: "Shared" });
+  assert.equal(documents[0].unit, "Shared");
+});
+
 test("transaction deletion audits the existing record and safely unlinks related records", () => {
   let transactions = [baseTransaction, { ...baseTransaction, id: "transaction-2" }];
   let documents: DocumentItem[] = [{

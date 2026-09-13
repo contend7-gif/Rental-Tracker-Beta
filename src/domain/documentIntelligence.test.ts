@@ -1173,6 +1173,7 @@ test("manual shared document scope overrides OCR and linked transaction unit con
   assert.equal(fields?.unit, "Shared");
   assert.ok(fields?.reasons?.includes("Unit scope was manually set as Shared."));
   assert.equal(suggestion?.unit, "Shared");
+  assert.equal(inferDocumentUtilitySections(args).filter((section) => !section.external)[0]?.unit, "Shared");
 });
 
 test("confirmed OCR field overrides take precedence in extracted fields and expense drafts", () => {

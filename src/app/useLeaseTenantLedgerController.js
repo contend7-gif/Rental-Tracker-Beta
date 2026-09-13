@@ -549,6 +549,7 @@ export function useLeaseTenantLedgerController({
       startDate: usePeriodDraft.startDate,
       endDate: effectiveEndDate,
       useType: usePeriodDraft.useType,
+      vacancyTreatment: usePeriodDraft.vacancyTreatment || "held-for-rent",
       reviewed: Boolean(usePeriodDraft.reviewed),
       reviewedAt: usePeriodDraft.reviewed ? new Date().toISOString() : "",
       reviewNotes: String(usePeriodDraft.reviewNotes || "").trim(),

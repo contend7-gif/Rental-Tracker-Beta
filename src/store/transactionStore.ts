@@ -47,6 +47,7 @@ export function createTransactionActions({
   return {
     addOrUpdateTransaction(transaction: Transaction, assetPayload?: AssetPayload) {
       const normalizedTransaction = normalizeTransaction(transaction);
+      const priorTransaction = getTransactions().find((existing) => existing.id === normalizedTransaction.id);
       const existsBefore = getTransactions().some((existing) => existing.id === normalizedTransaction.id);
       const normalizedAmount = Number(normalizedTransaction.amount);
       const linkedWorkOrderId = String(normalizedTransaction.workOrderId || "").trim();
@@ -57,6 +58,21 @@ export function createTransactionActions({
           ? previous.map((existing) => (existing.id === normalizedTransaction.id ? normalizedTransaction : existing))
           : [normalizedTransaction, ...previous];
       });
+      if (priorTransaction && (priorTransaction.unit !== normalizedTransaction.unit || priorTransaction.propertyId !== normalizedTransaction.propertyId)) {
+        setDocuments((previous) => previous.map((document) => {
+          // Combined statements and lease/work-order attachments can span scopes.
+          if (document.transactionId !== normalizedTransaction.id || document.leaseId || document.workOrderId ||
+            (document.relatedTransactionIds || []).some((id) => id !== normalizedTransaction.id)) return document;
+          return normalizeDocument({
+            ...document,
+            propertyId: normalizedTransaction.propertyId,
+            unit: normalizedTransaction.unit,
+            unitScopeOverride: true,
+            reviewedWarningKeys: undefined,
+            reviewedWarningsAt: undefined,
+          });
+        }));
+      }
       setWorkOrders((previous) => previous.map((workOrder) => {
         const hasTransactionLink = workOrder.transactionId === normalizedTransaction.id;
         const isDirectLink = linkedWorkOrderId !== "" && workOrder.id === linkedWorkOrderId;

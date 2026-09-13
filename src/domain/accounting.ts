@@ -30,14 +30,7 @@ function leaseIsActiveByDate(lease: Lease, date: string) {
 }
 
 import { leaseIsOpenEnded } from "./leaseTerms.js";
-
-function rentalUsePctFromUsePeriod(period?: UsePeriod) {
-  if (!period) return null;
-  if (Number.isFinite(Number(period.rentalUsePct))) return Number(period.rentalUsePct);
-  const useType = String(period.useType || "").toLowerCase();
-  if (useType.includes("owner") || useType.includes("vacant")) return 0;
-  return 1;
-}
+import { rentalUsePctFromUsePeriod } from "./usePeriodRentalUse.ts";
 
 function findMatchingUsePeriod(usePeriods: UsePeriod[], propertyId: string, unit: string, date: string) {
   return usePeriods

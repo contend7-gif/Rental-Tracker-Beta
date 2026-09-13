@@ -1163,7 +1163,7 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
     }, new Map<string, DocumentUtilitySection & { __sortScore?: number }>() ).values(),
   );
 
-  return deduped
+  const resolvedSections = deduped
     .filter((section) => !section.external || utilitySectionHasSignal(section))
     .filter((section, _, collection) => section.amount != null || !collection.some((candidate) =>
       candidate !== section && candidate.amount != null &&
@@ -1187,6 +1187,17 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
       return !shadowedByNeighbor;
     })
     .map(({ __sortScore, ...section }) => section);
+
+  const manualUnit = documentScopeOverride(document);
+  const internalSections = resolvedSections.filter((section) => !section.external);
+  // A single bill follows the user's confirmed scope. A combined statement
+  // keeps each service location separate rather than applying one unit to all.
+  if (manualUnit && internalSections.length === 1) {
+    return resolvedSections.map((section) => section === internalSections[0]
+      ? { ...section, unit: manualUnit, reasons: [...(section.reasons || []).filter((reason) => !reason.startsWith("Unit scope resolved as ")), `Unit scope was manually set as ${manualUnit}.`] }
+      : section);
+  }
+  return resolvedSections;
 }
 
 function pickServiceSummary(text: string, vendorName = "") {

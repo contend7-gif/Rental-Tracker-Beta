@@ -84,7 +84,7 @@ export function buildDocumentImportFileDraft({
     type,
     propertyId,
     unit,
-    unitScopeOverride: false,
+    unitScopeOverride: Boolean(previous.unitScopeOverride),
     linkType: previous.linkType || "none",
     linkedId: previous.linkedId || "",
     tags: previous.tags || "",
