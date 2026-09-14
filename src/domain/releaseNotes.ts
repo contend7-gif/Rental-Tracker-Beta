@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.4",
+    releaseDate: "2026-09-14",
+    title: "Reliable document previews and monthly bills",
+    summary: "Open saved PDFs after restarting, preserve unit-specific utility drafts, and avoid duplicate warnings for separate monthly bills.",
+    changes: [
+      "Keep loaded preview files available while document tags, unit assignments, and record links refresh; provide View file when a preview has not loaded.",
+      "Read separate service totals and billing periods from combined utility PDFs, including statements with mailing addresses outside saved properties.",
+      "Preserve the selected utility section's unit when applying remembered vendor details to an expense draft.",
+      "Require a matching bill date for vendor-and-amount duplicate warnings; importing different monthly bills together no longer makes them duplicates.",
+      "Continue flagging identical file contents and shared record links for review, even when files have different names.",
+    ],
+  },
+  {
     version: "1.9.3",
     releaseDate: "2026-09-13",
     title: "Vacancy deductions and document unit corrections",

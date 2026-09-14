@@ -1245,6 +1245,26 @@ test("utility issuer evidence outranks page and customer labels", () => {
 });
 
 
+test("native combined utility subtotals exclude mailing headers and keep each service period", () => {
+  const property = { id: "p1", name: "Duplex", address: "101-102 Sample Ave, Sampleville, WI 53000" };
+  const sections = inferDocumentUtilitySections({
+    document: { name: "combined.pdf", type: "Utility bill", propertyId: "p1", unit: "102", unitScopeOverride: true, extractedText: [
+      "Example Utilities", "Customer 900 Other St", "Page 1 of 3", "Billing Date: 1/31/2026", "Account # 000000",
+      "12/15/202501/15/2026 31 Days", "Electric 90.00", "Total For: 900 Other St 90.00",
+      "12/30/202501/15/2026 16 Days", "Electric 20.00", "Customer 900 Other St", "Page 2 of 3",
+      "Water 24.22", "Total For: 101 Sample Ave 44.22",
+      "12/30/202501/15/2026 16 Days", "Electric 30.00", "Customer 900 Other St", "Page 3 of 3",
+      "Water 25.44", "Total For: 102 Sample Ave 55.44",
+    ].join("\n") }, property, candidateProperties: [property],
+    candidateUnits: [{ propertyId: "p1", name: "101" }, { propertyId: "p1", name: "102" }],
+  });
+  assert.equal(sections.length, 3);
+  assert.equal(sections.filter(s => s.external).length, 1);
+  assert.deepEqual(sections.filter(s => !s.external).map(s => [s.unit, s.amount, s.date, s.servicePeriodStart, s.servicePeriodEnd]), [
+    ["101", 44.22, "2026-01-31", "2025-12-30", "2026-01-15"], ["102", 55.44, "2026-01-31", "2025-12-30", "2026-01-15"],
+  ]);
+});
+
 test("explicit utility unit totals outrank later line charges and retain the bill date", () => {
   const args = {document:{name:"utility.pdf",type:"Scanned PDF",propertyId:"p1",extractedText:"Sample Utilities\nBilling Date: 7/31/2026\nAccount # 000000\n101 Sample Ave\nAmount Due $70.00\nTotal For: 101 Sample Ave 30.00\nCustomer Charge 13.00\nWater 7.76\nTotal For: 102 Sample Ave 40.00"},property:{id:"p1",name:"Duplex",address:"101-102 Sample Ave"},candidateUnits:[{propertyId:"p1",name:"101"},{propertyId:"p1",name:"102"}]};
   const sections = inferDocumentUtilitySections(args).filter((section) => !section.external);

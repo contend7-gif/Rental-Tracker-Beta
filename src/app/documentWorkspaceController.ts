@@ -498,7 +498,7 @@ export function createDocumentWorkspaceController({
       ? {
           ...memoryDraft,
           propertyId: nextPropertyId,
-          unit: vendorMemory.propertyId === nextPropertyId ? memoryDraft.unit : nextUnit,
+          unit: nextUnit,
         }
       : baseDraft;
     const prefilledFields = [

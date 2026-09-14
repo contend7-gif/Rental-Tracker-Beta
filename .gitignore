@@ -27,4 +27,5 @@ rental-tracker-export*.json
 !src/fixtures/**/*.csv
 coverage/
 output/playwright/
+output/maintenance/
 .DS_Store

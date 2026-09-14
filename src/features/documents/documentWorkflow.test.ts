@@ -7,7 +7,26 @@ import {
   isDocumentReviewed,
   removeSupportingOnlyTag,
   sortDocumentAttachOptions,
+  resolveDocumentForReview,
 } from "./documentWorkflow.js";
+
+test("review retains on-demand PDF bytes after metadata refresh without reverting corrected fields", () => {
+  const loaded = { id: "pdf", relativePath: "saved.pdf", fileHash: "abc", mimeType: "application/pdf", dataUrl: "data:application/pdf;base64,abc", unit: "614", tags: [] };
+  const { dataUrl, ...metadata } = loaded;
+  const current = { ...metadata, unit: "616", tags: ["reviewed"], transactionId: "new-link" };
+  const resolved = resolveDocumentForReview(loaded, current);
+  assert.equal(resolved.dataUrl, dataUrl);
+  assert.equal(resolved.unit, "616");
+  assert.deepEqual(resolved.tags, ["reviewed"]);
+  assert.equal(resolved.transactionId, "new-link");
+  assert.equal("dataUrl" in current, false);
+  assert.equal(resolveDocumentForReview(null, current), null);
+  assert.equal(resolveDocumentForReview(loaded, null), loaded);
+  for (const changed of [{ relativePath: "replacement.pdf" }, { fileHash: "new-hash" }, { id: "other-document" }, { mimeType: "image/png" }]) {
+    assert.equal(resolveDocumentForReview(loaded, { ...current, ...changed }).dataUrl, undefined);
+  }
+  assert.equal(resolveDocumentForReview(loaded, { ...current, dataUrl: "new-file" }).dataUrl, "new-file");
+});
 
 const baseDocument = {
   id: "doc-1",

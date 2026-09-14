@@ -19,6 +19,7 @@ import {
 import {
   SUPPORTING_ONLY_TAG,
   isDocumentReviewed,
+  resolveDocumentForReview,
 } from "./documentWorkflow.js";
 import { selectDocumentsForWorkspaceTab } from "./documentWorkspaceFilters.js";
 
@@ -476,9 +477,10 @@ export function DocumentsWorkspace({
       sources: ["context"],
     });
   };
-  const currentReviewDocument = reviewDocument
-    ? visibleDocuments.find((document) => document.id === reviewDocument.id) || reviewDocument
-    : null;
+  const currentReviewDocument = resolveDocumentForReview(
+    reviewDocument,
+    reviewDocument ? visibleDocuments.find((document) => document.id === reviewDocument.id) : null,
+  );
   const currentReviewDuplicateCandidates = currentReviewDocument
     ? buildDocumentDuplicateCandidates(currentReviewDocument, {
         documents: filteredDocuments,

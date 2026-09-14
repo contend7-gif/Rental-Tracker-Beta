@@ -152,3 +152,65 @@ test("document health badges summarize warnings and attachment state", () => {
   assert.ok(readyBadges.some((badge) => badge.label === "Suggested link"));
   assert.ok(readyBadges.some((badge) => badge.label === "Ready to attach"));
 });
+
+test("separate monthly bills are not duplicates despite matching vendor and amount", () => {
+  const documents = [
+    { id: "jan", name: "January internet.pdf", transactionId: "t-jan" },
+    { id: "feb", name: "February internet.pdf", transactionId: "t-feb" },
+  ];
+  const transactionById = {
+    "t-jan": { vendor: "Example Internet", amount: 40, date: "2026-01-17" },
+    "t-feb": { vendor: "Example Internet", amount: 40, date: "2026-02-17" },
+  };
+  assert.deepEqual(buildDocumentDuplicateCandidates(documents[0], { documents, transactionById }), []);
+  const sameNames = documents.map((document) => ({ ...document, name: "statement.pdf" }));
+  assert.deepEqual(buildDocumentDuplicateCandidates(sameNames[0], { documents: sameNames, transactionById }), []);
+});
+
+test("OCR invoice dates distinguish monthly subscriptions imported together", () => {
+  const documents = [
+    { id: "jan", name: "invoice-001.pdf", uploadedAt: "2026-09-14T12:00:00Z" },
+    { id: "feb", name: "invoice-002.pdf", uploadedAt: "2026-09-14T12:00:00Z" },
+  ];
+  const getDocumentExtractedFields = (document) => ({
+    vendorName: "Example Software", totalAmount: 20,
+    invoiceDate: document.id === "jan" ? "2026-01-05" : "2026-02-05",
+  });
+  assert.deepEqual(buildDocumentDuplicateCandidates(documents[0], { documents, getDocumentExtractedFields }), []);
+  assert.deepEqual(buildDocumentDuplicateCandidates(documents[0], {
+    documents, getDocumentExtractedFields: () => ({ vendorName: "Example Software", totalAmount: 20 }),
+  }), []);
+});
+
+test("different file names still match when vendor amount and invoice date agree", () => {
+  const documents = [{ id: "a", name: "original.pdf" }, { id: "b", name: "scan.pdf" }];
+  const candidates = buildDocumentDuplicateCandidates(documents[0], {
+    documents, getDocumentExtractedFields: () => ({ vendorName: "Example Software", totalAmount: 20, invoiceDate: "2026-01-05" }),
+  });
+  assert.equal(candidates.length, 1);
+  assert.deepEqual(candidates[0].reasons, ["same amount", "same date", "same vendor"]);
+});
+
+test("identical file hashes remain duplicates when names and parsed dates differ", () => {
+  const documents = [
+    { id: "a", name: "original.pdf", fileHash: "same-hash" },
+    { id: "b", name: "renamed.pdf", fileHash: "same-hash" },
+  ];
+  const candidates = buildDocumentDuplicateCandidates(documents[0], {
+    documents, getDocumentExtractedFields: (document) => ({ invoiceDate: document.id === "a" ? "2026-01-05" : "2026-02-05" }),
+  });
+  assert.equal(candidates.length, 1);
+  assert.ok(candidates[0].reasons.includes("same file contents"));
+});
+
+test("missing amounts do not count as matching zero-dollar invoices", () => {
+  const documents = [{ id: "a", name: "a.pdf" }, { id: "b", name: "b.pdf" }];
+  for (const totalAmount of [null, undefined, ""]) {
+    assert.deepEqual(buildDocumentDuplicateCandidates(documents[0], {
+      documents, getDocumentExtractedFields: () => ({ vendorName: "Example Software", totalAmount, invoiceDate: "2026-01-05" }),
+    }), []);
+  }
+  assert.equal(buildDocumentDuplicateCandidates(documents[0], {
+    documents, getDocumentExtractedFields: () => ({ vendorName: "Example Software", totalAmount: 0, invoiceDate: "2026-01-05" }),
+  }).length, 1);
+});

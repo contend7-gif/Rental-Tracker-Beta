@@ -26,8 +26,9 @@ function DocumentInlinePreview({ document, hasIndexedText, openDocumentPreview }
   if (!document?.dataUrl) {
     return (
       <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-        <div className="font-medium text-slate-800">No preview available</div>
-        <div className="mt-1 text-xs">The file metadata is saved, but the preview source is not loaded in this session.</div>
+        <div className="font-medium text-slate-800">Preview not loaded</div>
+        <div className="mt-1 text-xs">Try opening the saved file. If it cannot be read, the app will show the reason.</div>
+        <Button size="sm" variant="secondary" className="mt-2" onClick={() => openDocumentPreview(document)}>View file</Button>
       </div>
     );
   }

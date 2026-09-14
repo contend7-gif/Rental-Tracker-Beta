@@ -826,6 +826,12 @@ function pickMeterReadServicePeriod(text: string) {
 
 function pickServicePeriod(text: string) {
   const normalizedText = normalizeLooseOcrText(text);
+  const adjacentDates = normalizedText.match(/\b(\d{2}\/\d{2}\/\d{4})\s*(\d{2}\/\d{2}\/\d{4})\s+\d+\s+days\b/i);
+  if (adjacentDates) {
+    const startDate = parseDateText(adjacentDates[1]);
+    const endDate = parseDateText(adjacentDates[2]);
+    if (startDate && endDate && endDate >= startDate) return { startDate, endDate };
+  }
   const patterns = [
     /\b(?:bill(?:ing)?|service|usage)\s*period\b[^a-z0-9]{0,10}([^\n]+?)\s*(?:to|through|thru|-)\s*([^\n]+)/i,
     /\bfrom\s+((?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})|(?:[a-z]{3,9}\s+\d{1,2},?\s+\d{4})|(?:\d{4}-\d{2}-\d{2}))\s*(?:to|through|thru|-)\s*((?:\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})|(?:[a-z]{3,9}\s+\d{1,2},?\s+\d{4})|(?:\d{4}-\d{2}-\d{2}))/i,
@@ -1033,6 +1039,12 @@ function inferSectionProperty(
   property: InferDocumentTagsArgs["property"],
   candidateProperties: InferDocumentTagsArgs["candidateProperties"] = [],
 ) {
+  // A service subtotal may omit the city/ZIP printed in the mailing header.
+  const streetMatch = [property, ...candidateProperties].find((candidate) => {
+    const street = String(candidate?.address || "").match(new RegExp(ADDRESS_PATTERN.source, "i"))?.[0];
+    return street && matchAddress(address, street);
+  });
+  if (streetMatch) return streetMatch;
   const searchText = normalizeSearchText(`${address}\n${text}`);
   if (property?.address && matchAddress(searchText, property.address)) return property;
   return candidateProperties.find((candidateProperty) => candidateProperty?.address && matchAddress(searchText, candidateProperty.address)) || null;
@@ -1074,6 +1086,12 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
   if (!extractedText || !looksUtilityDocument(combinedText)) return [];
 
   let addressAnchors = findAddressAnchors(extractedText);
+  const explicitTotals = [...extractedText.matchAll(new RegExp(`\\btotal\\s+for\\s*:?\\s*(${ADDRESS_PATTERN.source})`, "gi"))]
+    .map((match) => ({ address: match[1], index: (match.index || 0) + match[0].lastIndexOf(match[1]) }));
+  // Native PDFs put each subtotal directly after its address. Older scanned
+  // layouts may put charges later, so retain their existing section strategy.
+  const totalAnchors = explicitTotals.length && explicitTotals.every((anchor) => /^\s*\$?\s*\d+(?:,\d{3})*\.\d{2}\b/.test(extractedText.slice(anchor.index + anchor.address.length))) ? explicitTotals : [];
+  if (totalAnchors.length) addressAnchors = totalAnchors;
   // Explicit service locations outrank customer/remittance addresses on coupons.
   const serviceAddresses = [...extractedText.matchAll(new RegExp(`\\bservice\\s+address\\s*:?\\s*(${ADDRESS_PATTERN.source})`, "gi"))]
     .map((match) => normalizeAddressForMatch(match[1]));
@@ -1095,8 +1113,12 @@ export function inferDocumentUtilitySections(args: InferDocumentTagsArgs): Docum
   const sections: Array<DocumentUtilitySection & { __sortScore?: number }> = addressAnchors.map((anchor, index) => {
     const previousAnchor = addressAnchors[index - 1];
     const nextAnchor = addressAnchors[index + 1];
-    const sectionStart = previousAnchor ? Math.max(0, Math.floor((previousAnchor.index + anchor.index) / 2)) : Math.max(0, anchor.index - 220);
-    const sectionEnd = nextAnchor ? Math.min(extractedText.length, nextAnchor.index) : Math.min(extractedText.length, anchor.index + 1600);
+    const sectionStart = totalAnchors.length
+      ? (previousAnchor ? previousAnchor.index + previousAnchor.address.length : 0)
+      : previousAnchor ? Math.max(0, Math.floor((previousAnchor.index + anchor.index) / 2)) : Math.max(0, anchor.index - 220);
+    const sectionEnd = totalAnchors.length
+      ? Math.min(extractedText.length, anchor.index + anchor.address.length + 30)
+      : nextAnchor ? Math.min(extractedText.length, nextAnchor.index) : Math.min(extractedText.length, anchor.index + 1600);
     const sectionText = extractedText.slice(sectionStart, sectionEnd);
     const matchedProperty = inferSectionProperty(sectionText, anchor.address, property, candidateProperties);
     const propertyId = String(matchedProperty?.id || "").trim() || undefined;

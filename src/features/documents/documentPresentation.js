@@ -56,6 +56,7 @@ function dateLike(value) {
 }
 
 function amountLike(value) {
+  if (value == null || String(value).trim() === "") return undefined;
   const amount = Number(value);
   return Number.isFinite(amount) ? Math.round(Math.abs(amount) * 100) / 100 : undefined;
 }
@@ -207,7 +208,7 @@ export function buildDocumentDuplicateCandidates(document, {
   const currentLinkedTxn = document.transactionId ? transactionById[document.transactionId] : null;
   const currentName = normalizeComparableText(document.name);
   const currentVendor = normalizeComparableText(currentFields?.vendorName || currentLinkedTxn?.vendor || "");
-  const currentDate = dateLike(currentFields?.invoiceDate || currentFields?.serviceDate || currentLinkedTxn?.date || document.uploadedAt);
+  const currentDate = dateLike(currentFields?.invoiceDate || currentFields?.serviceDate || currentLinkedTxn?.date);
   const currentAmount = amountLike(currentFields?.totalAmount ?? currentLinkedTxn?.amount);
   const currentTargetKey = linkedDocumentTargetKey(document);
 
@@ -219,35 +220,52 @@ export function buildDocumentDuplicateCandidates(document, {
       const reasons = [];
       let score = 0;
 
+      const sameFile = Boolean(document.fileHash && candidate.fileHash && document.fileHash === candidate.fileHash);
+      if (sameFile) {
+        score += 10;
+        reasons.push("same file contents");
+      }
+
       const candidateTargetKey = linkedDocumentTargetKey(candidate);
-      if (currentTargetKey && candidateTargetKey && currentTargetKey === candidateTargetKey) {
+      const sameTarget = Boolean(currentTargetKey && candidateTargetKey && currentTargetKey === candidateTargetKey);
+      if (sameTarget) {
         score += 6;
         reasons.push("same linked record");
       }
 
       const candidateName = normalizeComparableText(candidate.name);
-      if (currentName && candidateName && currentName === candidateName) {
+      const sameName = Boolean(currentName && candidateName && currentName === candidateName);
+      if (sameName) {
         score += 4;
         reasons.push("same file name");
       }
 
       const candidateAmount = amountLike(candidateFields?.totalAmount ?? candidateLinkedTxn?.amount);
-      if (currentAmount != null && candidateAmount != null && Math.abs(currentAmount - candidateAmount) < 0.01) {
+      const sameAmount = currentAmount != null && candidateAmount != null && Math.abs(currentAmount - candidateAmount) < 0.01;
+      if (sameAmount) {
         score += 2;
         reasons.push("same amount");
       }
 
-      const candidateDate = dateLike(candidateFields?.invoiceDate || candidateFields?.serviceDate || candidateLinkedTxn?.date || candidate.uploadedAt);
-      if (currentDate && candidateDate && currentDate === candidateDate) {
+      // Upload dates describe the import session, not the invoice being compared.
+      const candidateDate = dateLike(candidateFields?.invoiceDate || candidateFields?.serviceDate || candidateLinkedTxn?.date);
+      const sameDate = Boolean(currentDate && candidateDate && currentDate === candidateDate);
+      const differentDates = Boolean(currentDate && candidateDate && currentDate !== candidateDate);
+      if (sameDate) {
         score += 2;
         reasons.push("same date");
       }
 
       const candidateVendor = normalizeComparableText(candidateFields?.vendorName || candidateLinkedTxn?.vendor || "");
-      if (currentVendor && candidateVendor && (currentVendor.includes(candidateVendor) || candidateVendor.includes(currentVendor))) {
+      const sameVendor = Boolean(currentVendor && candidateVendor && (currentVendor.includes(candidateVendor) || candidateVendor.includes(currentVendor)));
+      if (sameVendor) {
         score += 2;
         reasons.push("same vendor");
       }
+
+      // Recurring bills commonly share vendor and amount. Require an actual
+      // matching bill date unless file identity, a link, or a name supports it.
+      if (!sameFile && !sameTarget && (differentDates || !(sameName || (sameVendor && sameAmount && sameDate)))) return null;
 
       return {
         document: candidate,
@@ -255,7 +273,7 @@ export function buildDocumentDuplicateCandidates(document, {
         reasons,
       };
     })
-    .filter((candidate) => candidate.score >= 4)
+    .filter((candidate) => candidate && candidate.score >= 4)
     .sort((left, right) => right.score - left.score || String(right.document?.uploadedAt || "").localeCompare(String(left.document?.uploadedAt || "")))
     .slice(0, 5);
 }

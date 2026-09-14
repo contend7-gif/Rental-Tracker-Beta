@@ -6,6 +6,19 @@ import {
 
 export const SUPPORTING_ONLY_TAG = "supporting-only";
 
+export function resolveDocumentForReview(loadedDocument, currentDocument) {
+  if (!loadedDocument) return null;
+  if (!currentDocument) return loadedDocument;
+  if (currentDocument.id !== loadedDocument.id || currentDocument.dataUrl) return currentDocument;
+  const sameFile = ["relativePath", "filePath", "fileHash", "mimeType"]
+    .every((field) => String(currentDocument[field] || "") === String(loadedDocument[field] || ""));
+  // Store records omit file bytes. Retain the on-demand preview while allowing
+  // fresh tags, unit corrections, and links to appear in the review dialog.
+  return sameFile && loadedDocument.dataUrl
+    ? { ...currentDocument, dataUrl: loadedDocument.dataUrl }
+    : currentDocument;
+}
+
 function hasSupportingOnlyTag(document) {
   return Array.isArray(document?.tags) && document.tags.some((tag) => String(tag || "").trim().toLowerCase() === SUPPORTING_ONLY_TAG);
 }

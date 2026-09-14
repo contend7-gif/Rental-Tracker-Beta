@@ -70,6 +70,44 @@ test("packaged desktop supports the core Documents workflow", async () => {
   }
 });
 
+test("saved PDF review retains its preview after a complete desktop restart", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-pdf-review-"));
+  let firstRun = null;
+  let secondRun = null;
+  try {
+    firstRun = await launchDesktopApp(profilePath);
+    await firstRun.page.getByRole("button", { name: "Documents", exact: true }).click();
+    const chooserPromise = firstRun.page.waitForEvent("filechooser");
+    await firstRun.page.getByRole("button", { name: "Upload document", exact: true }).click();
+    await (await chooserPromise).setFiles({ name: "saved-lease.pdf", mimeType: "application/pdf", buffer: makeTextPdf([[{ text: "Example signed lease" }]]) });
+    await expect(firstRun.page.getByRole("heading", { name: "Add document", exact: true })).toBeVisible();
+    await firstRun.page.getByRole("button", { name: "Save document only", exact: true }).click();
+    await expect.poll(async () => firstRun.page.evaluate(async () => {
+      const saved = await window.desktopPersistence.loadAppData();
+      const doc = saved.backup?.data?.documents?.find((item) => item.name === "saved-lease.pdf");
+      return Boolean(doc?.relativePath && !doc?.dataUrl);
+    })).toBe(true);
+    await firstRun.electronApp.close();
+    firstRun = null;
+    secondRun = await launchDesktopApp(profilePath);
+    const { page } = secondRun;
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    await page.getByRole("button", { name: "Library (5)", exact: true }).click();
+    const card = page.getByRole("group", { name: "Document saved-lease.pdf", exact: true });
+    await card.getByTitle("More actions", { exact: true }).click();
+    await card.getByRole("button", { name: "Review details", exact: true }).click();
+    await expect(page.getByText("Preview available", { exact: true })).toBeVisible();
+    await expect(page.getByText("Preview not loaded", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "View file", exact: true }).first().click();
+    await expect(page.locator('iframe[title="saved-lease.pdf"]')).toBeVisible();
+    expect(secondRun.rendererErrors).toEqual([]);
+  } finally {
+    await firstRun?.electronApp.close().catch(() => {});
+    await secondRun?.electronApp.close().catch(() => {});
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test("document upload buttons save a document type rather than the click event", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-import-type-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
