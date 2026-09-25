@@ -329,6 +329,44 @@ test("packaged desktop gives each Transactions mode one clear job", async () => 
   }
 });
 
+test("packaged mileage log saves trips separately and posts a linked monthly expense", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-mileage-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await run.page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await run.page.getByRole("tab", { name: /Mileage log/ }).click();
+    await run.page.getByLabel("Trip date").fill("2026-08-10");
+    await run.page.getByLabel("Destination").fill("Hardware store");
+    await run.page.getByLabel("Business purpose").fill("Buy rental supplies");
+    await run.page.getByLabel("Business miles").fill("20");
+    await run.page.getByLabel("Rate per mile").fill("0.725");
+    await run.page.getByRole("button", { name: "Save trip", exact: true }).click();
+    await expect(run.page.getByText("Hardware store · Buy rental supplies")).toBeVisible();
+    await expect.poll(async () => run.page.evaluate(async () => {
+      const data = (await window.desktopPersistence.loadAppData()).backup.data;
+      return { trips: data.mileageEntries?.length || 0, postings: data.transactions.filter((transaction) => transaction.mileageEntryIds?.length).length };
+    })).toEqual({ trips: 1, postings: 0 });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await run.page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await run.page.getByRole("tab", { name: /Mileage log/ }).click();
+    await expect(run.page.getByText("Hardware store · Buy rental supplies")).toBeVisible();
+    run.page.once("dialog", (dialog) => dialog.accept());
+    await run.page.getByRole("button", { name: "Review and post month" }).click();
+    await expect.poll(async () => run.page.evaluate(async () => {
+      const data = (await window.desktopPersistence.loadAppData()).backup.data;
+      return data.transactions.find((transaction) => transaction.mileageEntryIds?.length)?.amount;
+    })).toBe(14.5);
+    run.page.once("dialog", (dialog) => dialog.accept());
+    await run.page.getByRole("button", { name: "Undo posting" }).click();
+    await expect(run.page.getByText("1 unposted")).toBeVisible();
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run?.electronApp.close().catch(() => {});
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test("packaged desktop gives each Properties mode one clear job", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-properties-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);

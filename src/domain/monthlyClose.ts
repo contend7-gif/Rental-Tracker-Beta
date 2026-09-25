@@ -148,6 +148,7 @@ export function buildMonthlyCloseReview(args: {
   const supportedTransactionIds = buildTransactionSupportIndex(args.documents);
   const missingSupport = monthTransactions.filter((transaction) => (
     transaction.type === "Expense"
+    && !(transaction.category === "Auto and travel" && Number(transaction.mileageMiles) > 0)
     && !hasTransactionSupport(transaction, supportedTransactionIds)
     && transaction.reviewOverrides?.missing_receipt !== "not_available"
   ));

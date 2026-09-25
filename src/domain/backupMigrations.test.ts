@@ -20,7 +20,7 @@ test("normalizeAndMigrateBackup upgrades legacy v1 backups to current schema", (
   const migration = normalizeAndMigrateBackup(legacyBackup);
 
   assert.equal(migration.migratedFromSchemaVersion, 1);
-  assert.deepEqual(migration.migrationsApplied, [2, 3, 4, 5]);
+  assert.deepEqual(migration.migrationsApplied, [2, 3, 4, 5, 6]);
   assert.equal(migration.backup.schemaVersion, BACKUP_SCHEMA_VERSION);
 
   const data = migration.backup.data as Record<string, unknown>;
@@ -122,7 +122,7 @@ test("normalizeAndMigrateBackup migrates tenant ledger posting metadata in schem
   };
 
   const migration = normalizeAndMigrateBackup(v3Backup);
-  assert.deepEqual(migration.migrationsApplied, [4, 5]);
+  assert.deepEqual(migration.migrationsApplied, [4, 5, 6]);
 
   const data = migration.backup.data as Record<string, unknown>;
   const entries = data.tenantLedgerEntries as Array<Record<string, unknown>>;
@@ -158,7 +158,7 @@ test("normalizeAndMigrateBackup migrates activity log metadata in schema v5", ()
   };
 
   const migration = normalizeAndMigrateBackup(v4Backup);
-  assert.deepEqual(migration.migrationsApplied, [5]);
+  assert.deepEqual(migration.migrationsApplied, [5, 6]);
 
   const data = migration.backup.data as Record<string, unknown>;
   const activityLog = data.activityLog as Array<Record<string, unknown>>;

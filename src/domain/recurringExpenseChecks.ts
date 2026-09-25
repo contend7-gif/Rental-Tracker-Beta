@@ -118,6 +118,9 @@ export function buildRecurringExpenseChecks(args: {
     const sample = transactions[transactions.length - 1];
     const patternKey = stablePatternKey(signature);
     const lastRecordedDate = dates[dates.length - 1];
+    // An inferred pattern is no longer reliable after two unrecorded cycles.
+    // Keep old expenses from becoming permanent overdue alerts.
+    if (args.todayIso > addDays(addMonths(lastRecordedDate, 2), graceDays)) return;
     let monthOffset = 1;
     let expectedDate = addMonths(lastRecordedDate, monthOffset);
     const acknowledgedThrough = args.acknowledgements?.[patternKey];

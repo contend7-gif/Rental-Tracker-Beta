@@ -7,6 +7,7 @@ export function useAppDataSnapshot({
   leases,
   loanPayments,
   loans,
+  mileageEntries,
   properties,
   recurringDrafts,
   recurringTemplates,
@@ -20,6 +21,7 @@ export function useAppDataSnapshot({
   const currentAppDataSnapshot = useMemo(
     () => ({
       transactions,
+      mileageEntries,
       assets,
       documents,
       leases,
@@ -40,6 +42,7 @@ export function useAppDataSnapshot({
       leases,
       loanPayments,
       loans,
+      mileageEntries,
       properties,
       recurringDrafts,
       recurringTemplates,

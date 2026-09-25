@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, Asset, DocumentItem, Lease, Loan, LoanPayment, Property, RecurringDraft, RecurringTemplate, TenantLedgerEntry, Transaction, Unit, UsePeriod, Vendor, WorkOrder } from "../models.ts";
+import type { ActivityLogEntry, Asset, DocumentItem, Lease, Loan, LoanPayment, MileageEntry, Property, RecurringDraft, RecurringTemplate, TenantLedgerEntry, Transaction, Unit, UsePeriod, Vendor, WorkOrder } from "../models.ts";
 import { createSampleDatasetReplacement } from "../domain/dataSafety.ts";
 import { normalizeActivityLogEntry } from "./activityStore.ts";
 import { normalizeAsset } from "./assetStore.ts";
@@ -13,6 +13,7 @@ import { normalizeUsePeriod } from "./usePeriodStore.ts";
 
 export type RentalStoreData = {
   transactions: Transaction[];
+  mileageEntries: MileageEntry[];
   assets: Asset[];
   documents: DocumentItem[];
   loans: Loan[];
@@ -33,6 +34,7 @@ export async function createDemoDataState(): Promise<RentalStoreData> {
   const demo = createSampleDatasetReplacement();
   return {
     transactions: cloneItems(demo.transactions),
+    mileageEntries: [],
     assets: cloneItems(demo.assets).map((asset) => normalizeAsset(asset as Asset)),
     documents: cloneItems(demo.documents).map((document) => normalizeDocument(document as DocumentItem)),
     loans: normalizeLoansWithUniqueIds(cloneItems(demo.loans) as Loan[]),
@@ -54,6 +56,7 @@ export function normalizeBackupData(rawData: unknown): RentalStoreData {
   const data = isRecord(rawData) ? rawData : {};
   return {
     transactions: dedupeRecordsById(readBackupCollection<Transaction>(data.transactions)),
+    mileageEntries: dedupeRecordsById(readBackupCollection<MileageEntry>(data.mileageEntries)),
     assets: readBackupCollection<Asset>(data.assets).map((asset) => normalizeAsset(asset)),
     documents: readBackupCollection<DocumentItem>(data.documents).map((document) => normalizeDocument(document)),
     leases: readBackupCollection<Lease>(data.leases).map((lease) => normalizeLease(lease)),

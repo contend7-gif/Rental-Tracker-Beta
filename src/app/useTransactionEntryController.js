@@ -250,6 +250,7 @@ export function useTransactionEntryController({
       invoiceAmount,
       mileageMiles: form.type === "Expense" && form.category === "Auto and travel" && mileageMiles > 0 ? mileageMiles : undefined,
       mileageRate: form.type === "Expense" && form.category === "Auto and travel" && mileageRate > 0 ? mileageRate : undefined,
+      mileageEntryIds: editingTxnId ? transactions.find((transaction) => transaction.id === editingTxnId)?.mileageEntryIds : undefined,
       mobileCompanionMileageId: String(form.mobileCompanionMileageId || "").trim() || undefined,
       servicePeriodStart: form.servicePeriodStart || undefined,
       servicePeriodEnd: form.servicePeriodEnd || undefined,

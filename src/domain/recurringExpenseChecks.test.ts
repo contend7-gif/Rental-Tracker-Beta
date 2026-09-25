@@ -97,3 +97,9 @@ test("marking a missed cycle intentional resumes checking on the next expected c
   assert.equal(resumed.length, 1);
   assert.equal(resumed[0].expectedDate, "2026-09-05");
 });
+
+test("old inferred monthly patterns stop producing overdue checks", () => {
+  const transactions = [expense("t1", "2026-01-13"), expense("t2", "2026-02-13"), expense("t3", "2026-03-13")];
+  assert.equal(buildRecurringExpenseChecks({ transactions, todayIso: "2026-05-20" }).length, 1);
+  assert.deepEqual(buildRecurringExpenseChecks({ transactions, todayIso: "2026-09-24" }), []);
+});

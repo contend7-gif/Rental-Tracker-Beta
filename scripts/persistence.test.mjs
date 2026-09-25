@@ -46,6 +46,7 @@ function sampleBackup(overrides = {}) {
         amount: 125.5,
         status: "active",
       }],
+      mileageEntries: [{ id: "mile1", date: "2026-05-03", propertyId: "p1", unit: "A", destination: "Hardware store", purpose: "Buy supplies", miles: 12, rate: 0.7 }],
       leases: [{ id: "l1", propertyId: "p1", unit: "A", tenantName: "Tenant", startDate: "2026-01-01", endDate: "2026-12-31", monthlyRent: 1200, status: "Active" }],
       tenantLedgerEntries: [{ id: "tle1", leaseId: "l1", date: "2026-05-01", kind: "charge", amount: 1200, memo: "May rent", createdAt: "2026-05-01T00:00:00.000Z" }],
       documents: [{
@@ -98,6 +99,7 @@ test("saving and loading app data round-trips core rental records", async (t) =>
   assert.equal(loaded.backup.data.properties[0].id, "p1");
   assert.equal(loaded.backup.data.units[0].id, "u1");
   assert.equal(loaded.backup.data.transactions[0].amount, 125.5);
+  assert.equal(loaded.backup.data.mileageEntries[0].destination, "Hardware store");
   assert.equal(loaded.backup.data.leases[0].tenantName, "Tenant");
   assert.equal(loaded.backup.data.tenantLedgerEntries[0].id, "tle1");
   assert.equal(loaded.backup.data.loans[0].id, "loan1");

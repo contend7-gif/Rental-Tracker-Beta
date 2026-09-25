@@ -152,6 +152,7 @@ export type Transaction = {
   invoiceAmount?: number;
   mileageMiles?: number;
   mileageRate?: number;
+  mileageEntryIds?: string[];
   mobileCompanionMileageId?: string;
   servicePeriodStart?: string;
   servicePeriodEnd?: string;
@@ -172,6 +173,17 @@ export type Transaction = {
   workOrderId?: string;
   tenantLedgerEntryId?: string;
   status: "active" | "voided";
+};
+
+export type MileageEntry = {
+  id: string;
+  date: string;
+  propertyId: string;
+  unit: UnitScope;
+  destination: string;
+  purpose: string;
+  miles: number;
+  rate: number;
 };
 
 export type UsePeriod = {

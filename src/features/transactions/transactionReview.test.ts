@@ -47,6 +47,12 @@ test("transaction review flags missing receipts unless a document is attached", 
   );
 });
 
+test("a recorded mileage entry does not require a separate receipt", () => {
+  const transaction = { ...baseTransaction, category: "Auto and travel", description: "Supply pickup at Menards", mileageMiles: 20.4, mileageRate: 0.725, receiptName: "" };
+  assert.equal(getTransactionReviewIssues(transaction, context).some((issue) => issue.key === "missing_receipt"), false);
+  assert.equal(getTransactionReviewIssues({ ...transaction, mileageMiles: 0 }, context).some((issue) => issue.key === "missing_receipt"), true);
+});
+
 test("document-created related transaction attachment clears missing receipt review", () => {
   const transaction = { ...baseTransaction, receiptName: "", taxChecked: true };
   const issues = getTransactionReviewIssues(transaction, {

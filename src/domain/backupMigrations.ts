@@ -2,7 +2,7 @@ import { normalizeTenantLedgerAccountingTreatment } from "./tenantLedgerPosting.
 
 type BackupRecord = Record<string, unknown>;
 
-export const BACKUP_SCHEMA_VERSION = 5;
+export const BACKUP_SCHEMA_VERSION = 6;
 
 export type BackupEnvelope = {
   schemaVersion: number;
@@ -155,11 +155,16 @@ function migrateV4ToV5(data: BackupRecord): BackupRecord {
   };
 }
 
+function migrateV5ToV6(data: BackupRecord): BackupRecord {
+  return { ...data, mileageEntries: mapRecordArray(data.mileageEntries, (entry) => entry) };
+}
+
 const BACKUP_MIGRATORS: Record<number, (data: BackupRecord) => BackupRecord> = {
   2: migrateV1ToV2,
   3: migrateV2ToV3,
   4: migrateV3ToV4,
   5: migrateV4ToV5,
+  6: migrateV5ToV6,
 };
 
 export function normalizeImportedBackup(rawBackup: unknown): BackupEnvelope | null {
@@ -244,7 +249,6 @@ export function normalizeAndMigrateBackup(
     migrationsApplied,
   };
 }
-
 
 
 

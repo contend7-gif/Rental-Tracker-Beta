@@ -6,7 +6,7 @@ import { backupDocumentArchivePath, buildBackupZipBuffer, inspectBackupZipBuffer
 import { ensureRentalTrackerDataDirs, getFileSize, getRentalTrackerDataPaths, readDocumentAsDataUrl, safeRelativeDocumentPath, writeDocumentBlob } from "./fileStore.mjs";
 
 export const DATABASE_SCHEMA_VERSION = 1;
-export const BACKUP_SCHEMA_VERSION = 5;
+export const BACKUP_SCHEMA_VERSION = 6;
 export const SQLITE_MIGRATION_META_KEY = "legacyLocalStorageImportedAt";
 export const DEFAULT_AUTO_BACKUP_RETENTION = 12;
 export const DEFAULT_AUTO_BACKUP_INTERVAL_DAYS = 3;
@@ -47,6 +47,15 @@ const COLLECTIONS = [
       category: (item) => text(item.category),
       amount: (item) => numberOrNull(item.amount),
       status: (item) => text(item.status),
+    },
+  },
+  {
+    key: "mileageEntries",
+    table: "mileage_entries",
+    columns: {
+      mileage_entry_id: (item) => text(item.id),
+      property_id: (item) => text(item.propertyId),
+      trip_date: (item) => text(item.date),
     },
   },
   {
@@ -347,6 +356,15 @@ export function runDatabaseMigrations(db) {
       category TEXT,
       amount REAL,
       status TEXT,
+      json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS mileage_entries (
+      id TEXT PRIMARY KEY,
+      mileage_entry_id TEXT NOT NULL,
+      property_id TEXT,
+      trip_date TEXT,
       json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );

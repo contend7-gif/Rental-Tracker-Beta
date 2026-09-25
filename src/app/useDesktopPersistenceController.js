@@ -39,6 +39,7 @@ export function useDesktopPersistenceController({
   hasAnyData,
   assets,
   loans,
+  mileageEntries,
   loanPayments,
   planningActionItems,
   planningActiveScenarioId,
@@ -191,6 +192,7 @@ export function useDesktopPersistenceController({
     settings: sanitizeAppSettingsForExport(appSettings),
     data: {
       transactions,
+      mileageEntries,
       assets,
       documents,
       leases,
@@ -698,6 +700,7 @@ export function useDesktopPersistenceController({
       settings: sanitizeAppSettingsForExport(appSettings),
       data: {
         transactions,
+        mileageEntries,
         assets,
         documents,
         leases,
@@ -760,6 +763,7 @@ export function useDesktopPersistenceController({
     leases,
     loanPayments,
     loans,
+    mileageEntries,
     planningActionItems,
     planningActiveScenarioId,
     planningAssumptions,

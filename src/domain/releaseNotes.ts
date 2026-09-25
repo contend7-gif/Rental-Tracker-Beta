@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.5",
+    releaseDate: "2026-09-24",
+    title: "Mileage log and clearer follow-ups",
+    summary: "Record trips separately, review a monthly mileage posting, and stop old inferred bill reminders from staying overdue indefinitely.",
+    changes: [
+      "Add a Mileage log inside Transactions with one record per trip, including date, destination, business purpose, miles, rate, property, and unit.",
+      "Keep trip logs out of ledger totals until a completed month is reviewed and posted as one linked expense; allow that posting to be undone without deleting trips.",
+      "Show existing mileage transactions in the log as already posted, and label mileage clearly in Transaction activity without demanding a separate receipt file.",
+      "Retire inferred missing-payment alerts after two unrecorded monthly cycles so old utility patterns do not remain overdue indefinitely.",
+    ],
+  },
+  {
     version: "1.9.4",
     releaseDate: "2026-09-14",
     title: "Reliable document previews and monthly bills",

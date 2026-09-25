@@ -120,6 +120,7 @@ export function QuickAddWorkspace({
   saveTransaction,
   setForm,
   setNotice,
+  openMileageLog,
   setPropertyQuickAddOpen,
   setRentAmountTouched,
   showDeMinimisControls,
@@ -246,7 +247,7 @@ export function QuickAddWorkspace({
   const rentUnitMissing = isRentPayment && (!form.unit || form.unit === "Shared");
   const rentLeaseMissing = isRentPayment && rentLeaseOptions.length > 1 && !selectedExplicitRentLease;
   const saveDisabled = properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing || rentLeaseMissing;
-  const receiptRecommended = form.type === "Expense" && amountEntered && rentAmount >= 75 && !pendingTxnAttachment && !pendingDocumentExpenseSource?.documentId;
+  const receiptRecommended = form.type === "Expense" && !showMileageControls && amountEntered && rentAmount >= 75 && !pendingTxnAttachment && !pendingDocumentExpenseSource?.documentId;
   const taxTreatmentExplanation = (() => {
     if (form.type !== "Expense") return "Income is tracked for reporting; deductible expense preview does not apply.";
     if (servicePeriodRecommended && form.servicePeriodStart && form.servicePeriodEnd) return "Rental-use percentage is calculated from occupancy during the service period.";
@@ -709,7 +710,8 @@ export function QuickAddWorkspace({
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">Mileage log support</div>
-                    <div className="mt-1 text-xs text-slate-600">Support data only. Tax Center can export the detail, but this is not a tax-rate engine.</div>
+                    <div className="mt-1 text-xs text-slate-600">Record the trip date, business purpose and miles here. A separate receipt file is not needed for a mileage-rate entry; keep your mileage log and any other supporting records.</div>
+                    <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={openMileageLog}>Open dedicated mileage log in Transactions</Button>
                   </div>
                   <Badge variant="outline">Auto and travel</Badge>
                 </div>

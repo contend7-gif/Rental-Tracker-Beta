@@ -45,6 +45,7 @@ export function getTransactionReviewIssues(transaction, context = {}) {
   if (
     isTaxRelevant &&
     transaction.type === "Expense" &&
+    !(transaction.category === "Auto and travel" && Number(transaction.mileageMiles) > 0) &&
     transaction.reviewOverrides?.missing_receipt !== "not_available" &&
     !hasTransactionSupport(transaction, supportIndex)
   ) {

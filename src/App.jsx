@@ -307,7 +307,7 @@ export default function App() {
 
   const accessRole = appSettings.accessRole || "admin";
   const accessRoleLabel = ACCESS_ROLE_LABELS[accessRole] || "Admin";
-  const { transactions, assets, documents, leases, tenantLedgerEntries, vendors, workOrders, loans, loanPayments, usePeriods, recurringTemplates, recurringDrafts, properties, units, activityLog, actions } = useRentalStore({ actorName: appSettings.operatorName, actorRole: accessRoleLabel });
+  const { transactions, mileageEntries, assets, documents, leases, tenantLedgerEntries, vendors, workOrders, loans, loanPayments, usePeriods, recurringTemplates, recurringDrafts, properties, units, activityLog, actions } = useRentalStore({ actorName: appSettings.operatorName, actorRole: accessRoleLabel });
   const activeProperties = getActiveProperties(properties);
   const {
     addPlanningActionFromCapitalTarget,
@@ -436,6 +436,7 @@ export default function App() {
     leases,
     loanPayments,
     loans,
+    mileageEntries,
     properties,
     recurringDrafts,
     recurringTemplates,
@@ -506,6 +507,7 @@ export default function App() {
     leases,
     loanPayments,
     loans,
+    mileageEntries,
     openConfirmDialog,
     planningActionItems,
     planningActiveScenarioId,
@@ -1861,6 +1863,7 @@ export default function App() {
   const appWorkspaceProps = {
     acceptVisibleSafeSuggestions,
     actions,
+    requirePermission,
     clearWorkspaceFocus,
     openConfirmDialog,
     activeProperties,
@@ -2361,6 +2364,7 @@ export default function App() {
     transactionReviewById,
     transactionReviewInbox,
     transactions,
+    mileageEntries,
     txnAttachmentInputRef,
     toggleDashboardCardSetting,
     toggleSetupChecklistShowFull,

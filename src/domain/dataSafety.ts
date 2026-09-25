@@ -4,6 +4,7 @@ const MEANINGFUL_DATA_KEYS = [
   "properties",
   "units",
   "transactions",
+  "mileageEntries",
   "leases",
   "tenantLedgerEntries",
   "documents",

@@ -13,6 +13,14 @@ test("monthly close recognizes direct and shared document links as expense suppo
   assert.equal(review?.issues.find((issue) => issue.kind === "missing_support")?.count, 1);
 });
 
+test("monthly close accepts a recorded mileage log without a separate receipt", () => {
+  const review = buildMonthlyCloseReview({
+    month: "2026-08", todayIso: "2026-09-05",
+    transactions: [{ id: "mileage", date: "2026-08-10", type: "Expense", category: "Auto and travel", mileageMiles: 20.4, amount: 14.82, status: "active", receiptName: "" }] as never[],
+  });
+  assert.equal(review?.issues.some((issue) => issue.kind === "missing_support"), false);
+});
+
 test("monthly close uses the same early-payment and first-due rules as Loans", () => {
   const loans = [
     { id: "paid", originatedOn: "2025-01-01", scheduledPI: 100 },

@@ -48,6 +48,9 @@ export function createTransactionActions({
     addOrUpdateTransaction(transaction: Transaction, assetPayload?: AssetPayload) {
       const normalizedTransaction = normalizeTransaction(transaction);
       const priorTransaction = getTransactions().find((existing) => existing.id === normalizedTransaction.id);
+      if (priorTransaction?.mileageEntryIds?.length && !normalizedTransaction.mileageEntryIds?.length) {
+        normalizedTransaction.mileageEntryIds = priorTransaction.mileageEntryIds;
+      }
       const existsBefore = getTransactions().some((existing) => existing.id === normalizedTransaction.id);
       const normalizedAmount = Number(normalizedTransaction.amount);
       const linkedWorkOrderId = String(normalizedTransaction.workOrderId || "").trim();

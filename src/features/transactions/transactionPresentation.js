@@ -78,6 +78,7 @@ export function buildTransactionWorkspaceModes({
   bankMatchOpenCount = 0,
   expectedRecurringCount = 0,
   importedCount = 0,
+  mileageCount = 0,
   recurringCount = 0,
   transactionCount = 0,
 } = {}) {
@@ -87,6 +88,12 @@ export function buildTransactionWorkspaceModes({
       label: "Activity",
       count: transactionCount,
       description: "Browse and edit posted income, expenses, payments, and transfers.",
+    },
+    {
+      key: "mileage",
+      label: "Mileage log",
+      count: mileageCount,
+      description: "Record trips and review monthly mileage before posting an expense.",
     },
     {
       key: "attention",
@@ -116,6 +123,7 @@ export function buildTransactionWorkspaceModes({
 export function ledgerViewForTransactionWorkspaceMode(mode = "activity") {
   return {
     activity: "all",
+    mileage: "all",
     attention: "review",
     recurring: "recurring",
     imports: "imported",
@@ -159,6 +167,7 @@ export function transactionTaxStatusLabel(transaction, readiness = {}, isTaxRele
 }
 
 export function transactionSupportStatusLabel(transaction, { missingReceipt = false, documentCount = 0 } = {}) {
+  if (transaction?.category === "Auto and travel" && Number(transaction?.mileageMiles) > 0) return "Mileage log recorded";
   if (missingReceipt) return "Receipt missing";
   if (transaction?.receiptName || documentCount > 0) return "Receipt attached";
   if (isRentIncomeTransaction(transaction)) return "Receipt not required";
@@ -167,6 +176,7 @@ export function transactionSupportStatusLabel(transaction, { missingReceipt = fa
 
 export function transactionCategoryStatusLabel(transaction) {
   if (isRentIncomeTransaction(transaction)) return "Rent";
+  if (transaction?.category === "Auto and travel" && Number(transaction?.mileageMiles) > 0) return "Mileage";
   return String(transaction?.category || "Uncategorized").trim() || "Uncategorized";
 }
 

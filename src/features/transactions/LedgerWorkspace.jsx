@@ -5,7 +5,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { AlertTriangle, ArrowLeftRight, Banknote, FileSearch, Filter, Repeat2, Upload, WalletCards } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Banknote, Car, FileSearch, Filter, Repeat2, Upload, WalletCards } from "lucide-react";
 import { canRunSafeBulkReview } from "../shared/auditBadges.js";
 import { ResponsiveTableFrame } from "../shared/uiHelpers.jsx";
 import {
@@ -24,17 +24,20 @@ import {
   transactionTaxStatusLabel,
 } from "./transactionPresentation.js";
 import { workspaceFocusDomId } from "../../app/workspaceFocus.ts";
+import { MileageLogWorkspace } from "./MileageLogWorkspace.jsx";
 
 const LEDGER_PANEL_CLASS = "rounded-xl border border-slate-200 bg-white shadow-none";
 const LEDGER_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
 const TRANSACTION_MODE_ICONS = {
   activity: FileSearch,
+  mileage: Car,
   attention: AlertTriangle,
   recurring: Repeat2,
   imports: Upload,
 };
 
 export function LedgerWorkspace({
+  actions,
   activeProperties,
   BANK_IMPORT_MATCH_RULE_OPTIONS,
   WORKSPACE_MUTED_PANEL_CLASS,
@@ -66,6 +69,15 @@ export function LedgerWorkspace({
   ledgerReconciliationFilter,
   ledgerSort,
   ledgerTransactions,
+  transactions = [],
+  mileageEntries = [],
+  yearFilter,
+  propertyFilter,
+  unitFilter,
+  usePeriods = [],
+  leases = [],
+  units = [],
+  requirePermission,
   markTransactionCapitalImprovement,
   onBankImportInputChange,
   onBankImportMatchRuleChange,
@@ -108,6 +120,12 @@ export function LedgerWorkspace({
   const [matchingRulesOpen, setMatchingRulesOpen] = useState(false);
   const [focusedRecurringTemplateId, setFocusedRecurringTemplateId] = useState("");
   const recurringFocusRequestId = workspaceFocus?.source === "recurring" ? workspaceFocus.requestId : "";
+  const mileageFocusRequestId = workspaceFocus?.source === "mileage" ? workspaceFocus.requestId : "";
+  useEffect(() => {
+    if (!mileageFocusRequestId) return;
+    setWorkspaceMode("mileage");
+    clearWorkspaceFocus?.();
+  }, [mileageFocusRequestId]);
   useEffect(() => {
     if (!recurringFocusRequestId) return;
     const target = recurringTemplates.find((template) => template.id === workspaceFocus.recordId);
@@ -200,6 +218,8 @@ export function LedgerWorkspace({
     ];
   }, [currency, ledgerTransactions, summaryView, todayIso]);
   const workspaceModes = buildTransactionWorkspaceModes({
+    mileageCount: mileageEntries.filter((entry) => entry.date?.startsWith(yearFilter) && (propertyFilter === "all" || entry.propertyId === propertyFilter) && (unitFilter === "all" || entry.unit === unitFilter)).length
+      + transactions.filter((transaction) => transaction.status === "active" && transaction.category === "Auto and travel" && Number(transaction.mileageMiles) > 0 && !transaction.mileageEntryIds?.length && transaction.date?.startsWith(yearFilter) && (propertyFilter === "all" || transaction.propertyId === propertyFilter) && (unitFilter === "all" || transaction.unit === unitFilter)).length,
     attentionCount: transactionReviewInbox.length,
     bankMatchOpenCount: unreconciledTransactions.length + bankImportUnmatchedRows.length,
     expectedRecurringCount: expectedRecurringTransactions.length,
@@ -282,7 +302,7 @@ export function LedgerWorkspace({
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-3 !p-4">
-        <div role="tablist" aria-label="Transaction workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <div role="tablist" aria-label="Transaction workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
           {workspaceModes.map((mode) => {
             const ModeIcon = TRANSACTION_MODE_ICONS[mode.key];
             const selected = workspaceMode === mode.key;
@@ -307,6 +327,10 @@ export function LedgerWorkspace({
             );
           })}
         </div>
+
+        {workspaceMode === "mileage" ? <MileageLogWorkspace actions={actions} mileageEntries={mileageEntries} transactions={transactions} openTransaction={openTransaction} properties={propertyOptions} propertyNameById={propertyNameById} yearFilter={yearFilter} propertyFilter={propertyFilter} unitFilter={unitFilter} usePeriods={usePeriods} leases={leases} units={units} todayIso={todayIso} currency={currency} requirePermission={requirePermission} /> : null}
+
+        {workspaceMode !== "mileage" ? <>
 
         {workspaceMode === "activity" ? (
           <>
@@ -824,6 +848,7 @@ export function LedgerWorkspace({
                       ) : null}
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-slate-900">{t.description || "(No description)"}</div>
+                        {t.category === "Auto and travel" && Number(t.mileageMiles) > 0 ? <div className="mt-1 text-xs font-medium text-blue-700">Mileage · {Number(t.mileageMiles)} business miles</div> : null}
                         <div className="mt-1 truncate text-xs text-slate-500">
                           {[counterpartyLabel, t.date, propertyLabel, formatTransactionUnitLabel(t.unit)].filter(Boolean).join(" / ")}
                         </div>
@@ -925,6 +950,7 @@ export function LedgerWorkspace({
             })()
           ))
         )}
+        </> : null}
       </CardContent>
     </Card>
   );

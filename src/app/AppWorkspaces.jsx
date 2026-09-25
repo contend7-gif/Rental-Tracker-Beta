@@ -397,6 +397,15 @@ function buildLedgerWorkspaceContract(props, { bankImportMatchRuleOptions }) {
       "documents",
       "ledgerCategories",
       "ledgerTransactions",
+      "transactions",
+      "mileageEntries",
+      "yearFilter",
+      "propertyFilter",
+      "unitFilter",
+      "usePeriods",
+      "leases",
+      "units",
+      "requirePermission",
       "properties",
       "propertyNameById",
       "recurringTemplates",
@@ -437,6 +446,7 @@ function buildLedgerWorkspaceContract(props, { bankImportMatchRuleOptions }) {
       "transactionReviewInbox",
     ]),
     actions: pickProps(props, [
+      "actions",
       "markTransactionCapitalImprovement",
       "markTransactionsTaxReviewed",
       "reconcileTransactions",
@@ -694,6 +704,7 @@ export function AppWorkspaces(props) {
       {view === "quickAdd" && (
         <QuickAddWorkspace
           {...commonProps}
+          openMileageLog={() => { props.requestWorkspaceFocus("mileage", "log"); setView("ledger"); }}
           categories={categories}
           expenseSuggestionConfidenceLabel={expenseSuggestionConfidenceLabel}
           formatPercentInput={formatPercentInput}

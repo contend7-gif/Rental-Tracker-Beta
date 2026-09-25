@@ -22,19 +22,22 @@ test("transaction workspace modes keep activity, cleanup, recurring, and imports
     bankMatchOpenCount: 2,
     expectedRecurringCount: 1,
     importedCount: 8,
+    mileageCount: 3,
     recurringCount: 6,
     transactionCount: 59,
   });
 
   assert.deepEqual(modes.map((mode) => [mode.key, mode.count]), [
     ["activity", 59],
+    ["mileage", 3],
     ["attention", 31],
     ["recurring", 6],
     ["imports", 8],
   ]);
-  assert.match(modes[1].description, /Work Queue/);
-  assert.match(modes[2].description, /1 expected posting due/);
+  assert.match(modes[2].description, /Work Queue/);
+  assert.match(modes[3].description, /1 expected posting due/);
   assert.equal(ledgerViewForTransactionWorkspaceMode("activity"), "all");
+  assert.equal(ledgerViewForTransactionWorkspaceMode("mileage"), "all");
   assert.equal(ledgerViewForTransactionWorkspaceMode("attention"), "review");
   assert.equal(ledgerViewForTransactionWorkspaceMode("recurring"), "recurring");
   assert.equal(ledgerViewForTransactionWorkspaceMode("imports"), "imported");
@@ -115,4 +118,11 @@ test("rent income uses receipt-not-required support wording when no document is 
   assert.equal(transactionSupportStatusLabel(rent), "Receipt not required");
   assert.equal(transactionSupportStatusLabel(rent, { documentCount: 1 }), "Receipt attached");
   assert.equal(transactionCategoryStatusLabel(rent), "Rent");
+});
+
+test("recorded miles are identified as mileage in ledger status", () => {
+  const mileage = { type: "Expense", category: "Auto and travel", mileageMiles: 20.4 };
+  assert.equal(transactionSupportStatusLabel(mileage), "Mileage log recorded");
+  assert.equal(transactionCategoryStatusLabel(mileage), "Mileage");
+  assert.equal(transactionCategoryStatusLabel({ ...mileage, mileageMiles: 0 }), "Auto and travel");
 });
