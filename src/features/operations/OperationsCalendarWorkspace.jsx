@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
+import React, { useMemo } from "react";
 import {
   AlertTriangle,
   BellRing,
@@ -190,11 +191,11 @@ export function OperationsCalendarWorkspace({
   openLease,
   persistenceHealth,
 }) {
-  const [horizonDays, setHorizonDays] = useState(90);
-  const [sourceFilter, setSourceFilter] = useState("all");
-  const [workspaceMode, setWorkspaceMode] = useState("agenda");
-  const [selectedMonth, setSelectedMonth] = useState(todayIso.slice(0, 7));
-  const [showHandled, setShowHandled] = useState(false);
+  const [horizonDays, setHorizonDays] = useWorkspaceMemory("operations:horizonDays", 90);
+  const [sourceFilter, setSourceFilter] = useWorkspaceMemory("operations:sourceFilter", "all");
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("operations:workspaceMode", "agenda");
+  const [selectedMonth, setSelectedMonth] = useWorkspaceMemory("operations:selectedMonth", todayIso.slice(0, 7));
+  const [showHandled, setShowHandled] = useWorkspaceMemory("operations:showHandled", false);
   const recurringExpenseChecks = useMemo(() => buildRecurringExpenseChecks({
     acknowledgements: appSettings.recurringExpenseCheckAcknowledgements,
     recurringTemplates,

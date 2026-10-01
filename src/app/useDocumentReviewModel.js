@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useDeferredValue, useMemo } from "react";
 import { formatUnitLabel } from "../domain/unitLabels.js";
 import {
   documentNeedsIndexing,
@@ -43,6 +43,7 @@ export function useDocumentReviewModel({
   workOrderById,
   workOrders,
 }) {
+  const deferredDocumentSearch = useDeferredValue(documentSearch);
   const shouldPrepareDocumentReview = Boolean(isActive || isDocumentImportOpen || selectedDocument);
   const shouldAnalyzeImportDraft = Boolean(
     isDocumentImportOpen
@@ -495,7 +496,7 @@ export function useDocumentReviewModel({
 
   const visibleDocuments = useMemo(() => {
     if (!shouldPrepareDocumentReview) return [];
-    const query = documentSearch.trim().toLowerCase();
+    const query = deferredDocumentSearch.trim().toLowerCase();
     const scoped = filteredDocuments.filter((document) => {
       const linkedWorkOrder = getDocumentLinkedWorkOrder(document);
       const hasLinkedRecord = Boolean(document.transactionId || document.leaseId || document.workOrderId || linkedWorkOrder);
@@ -539,7 +540,7 @@ export function useDocumentReviewModel({
       return (a.name || "").localeCompare(b.name || "");
     });
     return sorted;
-  }, [documentSearch, documentSort, documentStatusFilter, filteredDocuments, getDocumentLinkedWorkOrder, documentSearchIndex, documentExpenseReviewRecordById, documentWorkOrderReviewRecordById, expenseQueueShowDismissed, shouldPrepareDocumentReview]);
+  }, [deferredDocumentSearch, documentSort, documentStatusFilter, filteredDocuments, getDocumentLinkedWorkOrder, documentSearchIndex, documentExpenseReviewRecordById, documentWorkOrderReviewRecordById, expenseQueueShowDismissed, shouldPrepareDocumentReview]);
 
   const visibleDocumentsMissingIndex = useMemo(
     () => visibleDocuments.filter((document) => documentNeedsOcr(document) || documentNeedsIndexing(document)),

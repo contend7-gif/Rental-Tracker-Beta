@@ -1,3 +1,4 @@
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -150,11 +151,11 @@ export function PropertiesWorkspace(props) {
   } = props;
   const requestedProperties = propertyFilter === "all" ? properties : properties.filter((property) => property.id === propertyFilter);
   const archivedPropertyCount = requestedProperties.filter((property) => property.archivedAt).length;
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useWorkspaceMemory("properties:showArchived", false);
   const scopedProperties = requestedProperties.filter((property) => showArchived || !property.archivedAt);
-  const [selectedPropertyId, setSelectedPropertyId] = useState(() => scopedProperties[0]?.id || "");
-  const [tab, setTab] = useState("overview");
-  const [recordSection, setRecordSection] = useState("valuation");
+  const [selectedPropertyId, setSelectedPropertyId] = useWorkspaceMemory("properties:selectedPropertyId", () => scopedProperties[0]?.id || "");
+  const [tab, setTab] = useWorkspaceMemory("properties:tab", "overview");
+  const [recordSection, setRecordSection] = useWorkspaceMemory("properties:recordSection", "valuation");
   const [editOpen, setEditOpen] = useState(false);
   const [editDraft, setEditDraft] = useState(null);
   const [imageBusy, setImageBusy] = useState(false);
@@ -166,7 +167,7 @@ export function PropertiesWorkspace(props) {
   const [photoDraft, setPhotoDraft] = useState(null);
   const [photoToRemove, setPhotoToRemove] = useState(null);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
-  const [unitDetailId, setUnitDetailId] = useState("");
+  const [unitDetailId, setUnitDetailId] = useWorkspaceMemory("properties:unitDetailId", "");
   const photoInputRef = useRef(null);
 
   useEffect(() => {

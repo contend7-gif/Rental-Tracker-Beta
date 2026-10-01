@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Building2, CalendarDays, ChevronDown, FilePlus2, Home, Landmark, PlusCircle, Receipt, Wallet, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, Building2, CalendarDays, ChevronDown, FilePlus2, Home, Landmark, PlusCircle, Receipt, Search, Wallet, Wrench } from "lucide-react";
 import { getWorkspaceFilterVisibility } from "./workspaceFilterVisibility.js";
 
 const newActionIcons = {
@@ -16,11 +16,13 @@ const newActionIcons = {
 };
 
 export function AppHeaderCard({
+  navigation,
   currentView,
   dashboardAsOfDate,
   dashboardFiltersSummary,
   filterControls,
   notice,
+  openGlobalSearch,
   prefetchDialog,
   primaryAction,
   settingsSavedText,
@@ -121,7 +123,7 @@ export function AppHeaderCard({
       {filterVisibility.year ? <label className="relative grid h-12 w-20 min-w-0 grid-rows-[12px_22px] content-center overflow-hidden rounded-md border border-slate-200 bg-white px-2 pb-1.5 pt-2">
         <span className="flex items-center gap-1 self-end text-[9px] font-semibold uppercase leading-[11px] text-slate-500"><CalendarDays className="h-2.5 w-2.5 text-teal-700" />Year</span>
         <Select value={filterControls.yearFilter} onValueChange={filterControls.setYearFilter}>
-          <SelectTrigger className="!h-[22px] !min-h-0 appearance-none overflow-hidden !border-0 !bg-transparent !px-0 !py-0 !pr-4 !text-xs font-semibold !leading-5 !shadow-none focus:!ring-0"><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="Year" className="!h-[22px] !min-h-0 appearance-none overflow-hidden !border-0 !bg-transparent !px-0 !py-0 !pr-4 !text-xs font-semibold !leading-5 !shadow-none focus:!ring-0"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="2025">2025</SelectItem><SelectItem value="2026">2026</SelectItem></SelectContent>
         </Select>
         <ChevronDown className="pointer-events-none absolute bottom-2.5 right-1.5 h-3 w-3 text-slate-500" />
@@ -129,7 +131,7 @@ export function AppHeaderCard({
       {filterVisibility.property ? <label className="relative grid h-12 w-44 min-w-0 grid-rows-[12px_22px] content-center overflow-hidden rounded-md border border-slate-200 bg-white px-2 pb-1.5 pt-2">
         <span className="flex items-center gap-1 self-end text-[9px] font-semibold uppercase leading-[11px] text-slate-500"><Building2 className="h-2.5 w-2.5 text-teal-700" />Property</span>
         <Select value={filterControls.propertyFilter} onValueChange={filterControls.setPropertyFilter}>
-          <SelectTrigger className="!h-[22px] !min-h-0 appearance-none overflow-hidden !border-0 !bg-transparent !px-0 !py-0 !pr-4 !text-xs font-semibold !leading-5 !shadow-none focus:!ring-0"><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="Property" className="!h-[22px] !min-h-0 appearance-none overflow-hidden !border-0 !bg-transparent !px-0 !py-0 !pr-4 !text-xs font-semibold !leading-5 !shadow-none focus:!ring-0"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All properties</SelectItem>
             {filterControls.properties.map((property) => <SelectItem key={property.id} value={property.id}>{property.name}</SelectItem>)}
@@ -140,7 +142,7 @@ export function AppHeaderCard({
       {filterVisibility.unit ? <label className="relative grid h-12 w-28 min-w-0 grid-rows-[12px_22px] content-center overflow-hidden rounded-md border border-slate-200 bg-white px-2 pb-1.5 pt-2">
         <span className="flex items-center gap-1 self-end text-[9px] font-semibold uppercase leading-[11px] text-slate-500"><Home className="h-2.5 w-2.5 text-teal-700" />Unit</span>
         <Select value={filterControls.unitFilter} onValueChange={filterControls.setUnitFilter}>
-          <SelectTrigger className="!h-[22px] !min-h-0 appearance-none overflow-hidden !border-0 !bg-transparent !px-0 !py-0 !pr-4 !text-xs font-semibold !leading-5 !shadow-none focus:!ring-0" disabled={filterControls.propertyFilter === "all"}><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="Unit" className="!h-[22px] !min-h-0 appearance-none overflow-hidden !border-0 !bg-transparent !px-0 !py-0 !pr-4 !text-xs font-semibold !leading-5 !shadow-none focus:!ring-0" disabled={filterControls.propertyFilter === "all"}><SelectValue /></SelectTrigger>
           <SelectContent>{filterControls.unitFilterOptions.map((unitOpt) => <SelectItem key={unitOpt.value} value={unitOpt.value}>{unitOpt.label}</SelectItem>)}</SelectContent>
         </Select>
         <ChevronDown className="pointer-events-none absolute bottom-2.5 right-1.5 h-3 w-3 text-slate-500" />
@@ -175,12 +177,20 @@ export function AppHeaderCard({
             </div>
           </div>
         </div>
-        <div className="flex min-w-0 flex-col justify-center gap-2 self-center sm:flex-row sm:items-center">{dashboardFilterControls}{primaryActionButton}</div>
+        <div className="flex min-w-0 flex-col justify-center gap-2 self-center sm:flex-row sm:items-center">
+          {dashboardFilterControls}
+          <div className="flex gap-1" aria-label="Navigation history">
+            <Button variant="secondary" disabled={!navigation?.canGoBack} onClick={navigation?.goBack} aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" title="Go back (Alt+Left)"><ArrowLeft className="h-4 w-4" /></Button>
+            <Button variant="secondary" disabled={!navigation?.canGoForward} onClick={navigation?.goForward} aria-label="Go forward" aria-keyshortcuts="Alt+ArrowRight" title="Go forward (Alt+Right)"><ArrowRight className="h-4 w-4" /></Button>
+          </div>
+          <Button variant="secondary" onClick={openGlobalSearch} aria-keyshortcuts="Control+k Meta+k" className="!h-12" title="Search records and actions (Ctrl+K)"><Search className="h-4 w-4" />Search<span className="hidden text-xs text-slate-400 xl:inline">Ctrl K</span></Button>
+          {primaryActionButton}
+        </div>
         </div>
       </CardContent>
     </Card>
     {(notice || settingsSavedVisible) && (
-      <div className="w-full rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-medium text-emerald-800">
+      <div role="status" className="w-full rounded-md border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-medium text-emerald-800">
         {notice || settingsSavedText}
       </div>
     )}

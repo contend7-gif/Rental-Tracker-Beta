@@ -1,3 +1,4 @@
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -25,6 +26,7 @@ import {
 } from "./transactionPresentation.js";
 import { workspaceFocusDomId } from "../../app/workspaceFocus.ts";
 import { MileageLogWorkspace } from "./MileageLogWorkspace.jsx";
+import { RecordPager, useRecordPage } from "../shared/RecordPager.jsx";
 
 const LEDGER_PANEL_CLASS = "rounded-xl border border-slate-200 bg-white shadow-none";
 const LEDGER_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
@@ -111,10 +113,10 @@ export function LedgerWorkspace({
   updateBankReconciliationDraft,
 }) {
   const propertyOptions = activeProperties || properties;
-  const [ledgerView, setLedgerView] = useState("all");
-  const [workspaceMode, setWorkspaceMode] = useState("activity");
-  const [reviewReasonFilter, setReviewReasonFilter] = useState("all");
-  const [summaryView, setSummaryView] = useState("posted");
+  const [ledgerView, setLedgerView] = useWorkspaceMemory("transactions:ledgerView", "all");
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("transactions:workspaceMode", "activity");
+  const [reviewReasonFilter, setReviewReasonFilter] = useWorkspaceMemory("transactions:reviewReasonFilter", "all");
+  const [summaryView, setSummaryView] = useWorkspaceMemory("transactions:summaryView", "posted");
   const [selectedReviewIds, setSelectedReviewIds] = useState([]);
   const [importPanelOpen, setImportPanelOpen] = useState(false);
   const [matchingRulesOpen, setMatchingRulesOpen] = useState(false);
@@ -201,6 +203,7 @@ export function LedgerWorkspace({
           : ledgerView === "future"
             ? futureTransactions
             : ledgerTransactions;
+  const transactionPage = useRecordPage(displayedTransactions, JSON.stringify([ledgerView, search, ledgerCategoryFilter, ledgerReconciliationFilter, ledgerSort, yearFilter, propertyFilter, unitFilter, reviewReasonFilter]), 50, "transactions");
   const visibleFutureTransactionCount = displayedTransactions.filter((transaction) => isFutureDatedTransaction(transaction, todayIso)).length;
   const showFutureNotice = ledgerView === "future" || visibleFutureTransactionCount > 0;
   const ledgerSummary = useMemo(() => {
@@ -759,7 +762,7 @@ export function LedgerWorkspace({
             <h2 className="text-base font-semibold text-slate-900">{modeListPresentation.title}</h2>
             <div className="mt-0.5 text-xs text-slate-500">{modeListPresentation.helper}</div>
           </div>
-          <Badge variant="secondary">{displayedTransactions.length} shown</Badge>
+          <Badge variant="secondary">{transactionPage.records.length} shown · {displayedTransactions.length} matching</Badge>
         </div>
 
         {selectedDisplayedReviewIds.length > 0 ? (
@@ -792,7 +795,7 @@ export function LedgerWorkspace({
                       : "No transactions in this view."}
           </div>
         ) : (
-          displayedTransactions.map((t) => (
+          transactionPage.records.map((t) => (
             (() => {
               const review = transactionReviewById[t.id] || { issues: [], readiness: { key: "ready", label: "Ready" } };
               const { Icon, iconClass, amountClass } = getTransactionVisual(t);
@@ -950,6 +953,7 @@ export function LedgerWorkspace({
             })()
           ))
         )}
+        <RecordPager {...transactionPage} label="Transactions" />
         </> : null}
       </CardContent>
     </Card>

@@ -8,6 +8,20 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.6",
+    releaseDate: "2026-09-30",
+    title: "Faster saves and easier navigation",
+    summary: "Find records across your portfolio, return to your place between screens, and save large histories with fewer database writes.",
+    changes: [
+      "Add Search and Ctrl+K to find transactions, documents, leases, maintenance, properties, screens, and create actions across all years and properties.",
+      "Add Back and Forward navigation with Alt+Left and Alt+Right, restoring each screen's year, property, and unit scope.",
+      "Remember workspace tabs, searches, list pages, selected details, and scroll position while the app stays open; return to document review after visiting a linked record.",
+      "Show Transactions and the Documents inbox/library in pages of 50 records, retaining full matching totals and bulk-action scope.",
+      "Save only changed database records while preserving order, deletions, backups, and transaction-wide rollback.",
+      "Reduce initial JavaScript loading and repeated transaction review calculations while keeping feature screens loaded on demand.",
+    ],
+  },
+  {
     version: "1.9.5",
     releaseDate: "2026-09-24",
     title: "Mileage log and clearer follow-ups",

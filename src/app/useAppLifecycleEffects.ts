@@ -46,10 +46,6 @@ export function useAppLifecycleEffects({
   view,
 }: UseAppLifecycleEffectsArgs) {
   useEffect(() => {
-    setUnitFilter("all");
-  }, [propertyFilter, setUnitFilter]);
-
-  useEffect(() => {
     if (!appSettings.autoMaterializeRecurring) return;
     actions.materializeRecurringTransactions(recurringThroughDate);
   }, [appSettings.autoMaterializeRecurring, actions, recurringThroughDate]);

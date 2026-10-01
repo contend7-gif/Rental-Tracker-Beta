@@ -41,6 +41,140 @@ async function launchDesktopApp(profilePath) {
   return { electronApp, page, rendererErrors };
 }
 
+test("global search opens historical records and large lists page without losing matches", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-search-pages-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const propertyId = backup.data.properties[0].id;
+      backup.data.transactions = Array.from({ length: 123 }, (_, index) => ({
+        id: `page-transaction-${index}`, description: `Example paging transaction ${String(index).padStart(3, "0")}`,
+        status: "active", propertyId, unit: "Shared", date: "2026-08-15", type: "Expense", category: "Repairs", amount: 20,
+        vendor: "Example vendor", receiptName: "example-receipt.pdf", taxChecked: true, reconciled: true,
+      }));
+      backup.data.transactions.push({ ...backup.data.transactions[0], id: "historical-search", date: "2024-01-01", description: "Example historical search target" });
+      backup.data.documents = Array.from({ length: 123 }, (_, index) => ({
+        id: `page-document-${index}`, name: `Example paging document ${String(index).padStart(3, "0")}`, propertyId,
+        unit: "Shared", workOrderId: index === 122 ? "global-closed-work" : "", type: "Other", tags: ["supporting-only"], uploadedAt: "2026-08-15T12:00:00.000Z", extractedText: "Example supporting record",
+      }));
+      backup.settings.leaseAutomationEnabled = false;
+      backup.data.workOrders.push({ id: "global-closed-work", propertyId, unit: "Shared", title: "Example completed search repair", description: "Fictional completed task", status: "Completed", priority: "Low", reportedOn: "2026-08-01", createdAt: "2026-08-01T12:00:00.000Z" });
+      const saved = await window.desktopPersistence.saveAppData(backup);
+      if (saved.ok === false) throw new Error(saved.message);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    const { page } = run;
+    await expect(page.getByText("Settings saved.", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    const transactionPager = page.getByRole("navigation", { name: "Transactions pages" });
+    await expect(transactionPager).toContainText("1–50 of 123");
+    await transactionPager.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(transactionPager).toContainText("51–100 of 123");
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400);
+    // Preserve the chosen offset; Playwright's click would scroll the sidebar button into view.
+    await page.getByRole("button", { name: "Documents", exact: true }).dispatchEvent("click");
+    await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Go back", exact: true }).click();
+    await expect(transactionPager).toContainText("51\u2013100 of 123");
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(400);
+    await page.keyboard.press("Alt+ArrowRight");
+    await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
+    await page.keyboard.press("Alt+ArrowLeft");
+    await expect(transactionPager).toContainText("51\u2013100 of 123");
+    await page.getByPlaceholder("Search", { exact: true }).fill("transaction 122");
+    await expect(page.getByText("Example paging transaction 122", { exact: true })).toBeVisible();
+    await expect(transactionPager).toHaveCount(0);
+
+    await page.keyboard.press("Control+k");
+    const search = page.getByRole("combobox", { name: "Search all records and actions" });
+    await expect(search).toBeFocused();
+    await search.press("Tab");
+    expect(await page.evaluate(() => document.querySelector("dialog[open]")?.contains(document.activeElement))).toBe(true);
+    await search.focus();
+    await search.fill("historical search target");
+    await expect(page.getByRole("listbox", { name: "Search results" }).getByRole("option")).toHaveCount(1);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "modern-search-preview.png") });
+    await search.press("Enter");
+    await expect(page.getByRole("heading", { name: "Example historical search target", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    await page.getByRole("button", { name: /^Library \(123\)/ }).click();
+    const documentPager = page.getByRole("navigation", { name: "Documents pages" });
+    await expect(page.getByRole("group", { name: /^Document Example paging document/ })).toHaveCount(50);
+    await documentPager.getByRole("button", { name: "Next", exact: true }).click();
+    await documentPager.getByRole("button", { name: "Next", exact: true }).click();
+    await expect(documentPager).toContainText("101–123 of 123");
+    await expect(page.getByRole("group", { name: /^Document Example paging document/ })).toHaveCount(23);
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await expect(page.getByPlaceholder("Search", { exact: true })).toHaveValue("transaction 122");
+    await expect(page.getByRole("button", { name: "Go forward", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Go back", exact: true }).click();
+    await expect(documentPager).toContainText("101–123 of 123");
+    await expect(page.getByRole("group", { name: /^Document Example paging document/ })).toHaveCount(23);
+
+    await page.getByRole("button", { name: "Search", exact: false }).filter({ hasText: "Ctrl K" }).click();
+    await expect(search).toBeFocused();
+    await search.fill("paging document 122");
+    await expect(page.getByRole("listbox", { name: "Search results" }).getByRole("option")).toHaveCount(1);
+    await search.press("Enter");
+    await expect(page.getByRole("heading", { name: "Example paging document 122", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "View", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Maintenance", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Go back", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Example paging document 122", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+k");
+    await search.fill("completed search repair");
+    await expect(page.getByRole("listbox", { name: "Search results" }).getByRole("option")).toHaveCount(1);
+    await search.press("Enter");
+    await expect(page.locator("#workspace-focus-work-order-global-closed-work")).toBeVisible();
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("navigation restores property and unit scope and remembered property tabs", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-navigation-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    await expect(page.getByRole("button", { name: "Go back", exact: true })).toBeDisabled();
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    const property = page.locator("main").getByLabel("Property", { exact: true });
+    const unit = page.locator("main").getByLabel("Unit", { exact: true });
+    const propertyId = await property.locator("option").nth(1).getAttribute("value");
+    await property.selectOption(propertyId);
+    const unitValue = await unit.locator('option:not([value="all"])').first().getAttribute("value");
+    await unit.selectOption(unitValue);
+    await page.getByRole("button", { name: "Loans", exact: true }).click();
+    await property.selectOption("all");
+    await page.locator("main").getByLabel("Year", { exact: true }).selectOption("2025");
+    await page.getByRole("button", { name: "Go back", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
+    await expect(property).toHaveValue(propertyId);
+    await expect(unit).toHaveValue(unitValue);
+    await expect(page.locator("main").getByLabel("Year", { exact: true })).toHaveValue("2026");
+    await page.getByRole("button", { name: "Go forward", exact: true }).click();
+    await expect(property).toHaveValue("all");
+    await expect(page.locator("main").getByLabel("Year", { exact: true })).toHaveValue("2025");
+    await page.getByRole("button", { name: "Properties", exact: true }).click();
+    const unitsTab = page.getByRole("tab", { name: /^Units/ });
+    await unitsTab.click();
+    await page.getByRole("button", { name: "Loans", exact: true }).click();
+    await page.getByRole("button", { name: "Go back", exact: true }).click();
+    await expect(unitsTab).toHaveAttribute("aria-selected", "true");
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test("packaged desktop supports the core Documents workflow", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-documents-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);

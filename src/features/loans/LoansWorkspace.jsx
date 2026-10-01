@@ -1,3 +1,4 @@
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -99,7 +100,7 @@ export function LoansWorkspace({
   yearFilter,
   yearScopedLoanPayments,
 }) {
-  const [workspaceMode, setWorkspaceMode] = useState("overview");
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("loans:workspaceMode", "overview");
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
   const inboxReviewCount = loanReviewInbox?.counts?.total || 0;
   const debtTotals = useMemo(

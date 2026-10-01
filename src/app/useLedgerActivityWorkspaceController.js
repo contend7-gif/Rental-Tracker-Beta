@@ -1,8 +1,8 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useDeferredValue, useMemo } from "react";
 import { buildTransactionSupportIndex } from "../domain/transactionSupport.ts";
 import { getScheduleELineIdForTransaction, scheduleELines } from "./accountingShared.js";
 import {
-  buildTransactionReviewInbox,
+  buildTransactionReviewRecords,
   getTransactionReviewIssues,
   getTransactionTaxReadiness,
 } from "../features/transactions/transactionReview.js";
@@ -27,6 +27,7 @@ export function useLedgerActivityWorkspaceController({
   unitFilter,
   yearFilter,
 }) {
+  const deferredSearch = useDeferredValue(search);
   const filteredTransactions = useMemo(
     () =>
       activeTx.filter(
@@ -34,9 +35,9 @@ export function useLedgerActivityWorkspaceController({
           t.date.startsWith(yearFilter) &&
           (propertyFilter === "all" || t.propertyId === propertyFilter) &&
           (unitFilter === "all" || t.unit === unitFilter) &&
-          matchesLedgerTransactionSearch(t, search),
+          matchesLedgerTransactionSearch(t, deferredSearch),
       ),
-    [activeTx, yearFilter, propertyFilter, unitFilter, search],
+    [activeTx, yearFilter, propertyFilter, unitFilter, deferredSearch],
   );
 
   const ledgerCategories = useMemo(() => [{ id: "all", label: "All Schedule E lines" }, ...scheduleELines], []);
@@ -75,28 +76,27 @@ export function useLedgerActivityWorkspaceController({
     [documents, assets, isTaxReviewRelevantTransaction],
   );
 
-  const transactionReviewInbox = useMemo(
-    () => buildTransactionReviewInbox(filteredTransactions, transactionReviewContext),
+  const transactionReviewRecords = useMemo(
+    () => buildTransactionReviewRecords(filteredTransactions, transactionReviewContext),
     [filteredTransactions, transactionReviewContext],
   );
 
+  const transactionReviewInbox = useMemo(() => transactionReviewRecords
+    .filter((record) => record.issues.length > 0)
+    .sort((left, right) => right.issues.length - left.issues.length || String(right.transaction.date || "").localeCompare(String(left.transaction.date || ""))), [transactionReviewRecords]);
+
   const transactionReviewById = useMemo(
-    () => Object.fromEntries(filteredTransactions.map((transaction) => [
-      transaction.id,
-      {
-        issues: getTransactionReviewIssues(transaction, transactionReviewContext),
-        readiness: getTransactionTaxReadiness(transaction, transactionReviewContext),
-      },
-    ])),
-    [filteredTransactions, transactionReviewContext],
+    () => Object.fromEntries(transactionReviewRecords.map(({ transaction, issues, readiness }) => [transaction.id, { issues, readiness }])),
+    [transactionReviewRecords],
   );
 
   const getTransactionReview = useCallback(
     (transaction) => {
       if (!transaction) return null;
+      const issues = getTransactionReviewIssues(transaction, transactionReviewContext);
       return {
-        issues: getTransactionReviewIssues(transaction, transactionReviewContext),
-        readiness: getTransactionTaxReadiness(transaction, transactionReviewContext),
+        issues,
+        readiness: getTransactionTaxReadiness(transaction, transactionReviewContext, issues),
       };
     },
     [transactionReviewContext],

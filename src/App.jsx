@@ -1,5 +1,5 @@
 import { usePlanningWorkspace } from "./app/usePlanningWorkspace.js";
-import React, { useState } from "react";
+import React, { lazy, Suspense, useEffect, useState } from "react";
 import { currency, getRentalUsePctForDate, getRentalUsePctForRange } from "./domain/accounting.ts";
 import { adjustedAssetDepreciationForYear } from "./domain/assetDepreciation.ts";
 import {
@@ -69,6 +69,8 @@ import {
 } from "./app/lazyRegistry.js";
 import { AppDialogs } from "./app/AppDialogs.jsx";
 import { AppWorkspaces } from "./app/AppWorkspaces.jsx";
+import { WorkspaceMemoryProvider } from "./app/WorkspaceMemory.jsx";
+import { useWorkspaceNavigation } from "./app/useWorkspaceNavigation.js";
 import { AppHeaderCard } from "./app/AppHeaderCard.jsx";
 import { AppSidebar } from "./app/AppSidebar.jsx";
 import { useAccessSettingsController } from "./app/useAccessSettingsController.ts";
@@ -137,10 +139,27 @@ import { useWorkspaceFilterOptions } from "./app/useWorkspaceFilterOptions.js";
 import packageMeta from "../package.json";
 
 const EMPTY_DOCUMENTS = [];
+const GlobalSearchDialog = lazy(() => import("./app/GlobalSearchDialog.jsx"));
 
 export default function App() {
+  return <WorkspaceMemoryProvider><AppContent /></WorkspaceMemoryProvider>;
+}
+
+function AppContent() {
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setGlobalSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   const { appSettings, settingsSavedVisible, setSetting: persistSetting, setDashboardCardSetting: persistDashboardCardSetting, resetToDefaults: resetStoredSettings, replaceSettings } = useAppSettings();
-  const [view, setView] = useState(() => appSettings.defaultView || "dashboard");
+  const { dashboardContext, yearFilter, propertyFilter, unitFilter, setYearFilter, setPropertyFilter, setUnitFilter, applyDashboardContext } = useDashboardContext({ yearFilter: DEFAULT_DASHBOARD_YEAR, propertyFilter: "all", unitFilter: "all" });
+  const { view, setView, goBack, goForward, canGoBack, canGoForward } = useWorkspaceNavigation(appSettings.defaultView || "dashboard", dashboardContext, applyDashboardContext);
   const [newWorkOrderRequestKey, setNewWorkOrderRequestKey] = useState(0);
   const [workspaceFocus, setWorkspaceFocus] = useState(null);
   const requestWorkspaceFocus = (source, recordId) => setWorkspaceFocus(createWorkspaceFocusRequest(source, recordId));
@@ -175,7 +194,7 @@ export default function App() {
     view,
     viewPrefetchMap: likelyNextViewsByView,
   });
-  const { dashboardContext, yearFilter, propertyFilter, unitFilter, setYearFilter, setPropertyFilter, setUnitFilter, applyDashboardContext } = useDashboardContext({ yearFilter: DEFAULT_DASHBOARD_YEAR, propertyFilter: "all", unitFilter: "all" });
+
 
   const {
     escrowDisbursements,
@@ -2636,6 +2655,8 @@ export default function App() {
         />
         <main className="min-w-0 space-y-4">
           <AppHeaderCard
+            navigation={{ goBack, goForward, canGoBack, canGoForward }}
+            openGlobalSearch={() => setGlobalSearchOpen(true)}
             currentView={currentView}
             dashboardAsOfDate={dashboardAsOfDate}
             dashboardFiltersSummary={dashboardFiltersSummary}
@@ -2664,6 +2685,27 @@ export default function App() {
         </main>
       </div>
       <AppDialogs {...appDialogProps} />
+      {globalSearchOpen && <Suspense fallback={<div role="status" className="fixed right-4 top-4 z-50 rounded-lg bg-white p-3 shadow">Opening search…</div>}>
+        <GlobalSearchDialog
+          collections={{ transaction: transactions, document: documents, lease: leases, maintenance: workOrders, property: properties, navigation: navGroups.flatMap((group) => group.items.map(([id, name]) => ({ id, name }))), action: primaryAction.items.map((item) => ({ id: item.key, name: item.label, description: item.detail })) }}
+          propertyNames={propertyNameById}
+          onClose={() => setGlobalSearchOpen(false)}
+          onSelect={(result) => {
+            if (result.kind === "navigation") return setView(result.id);
+            if (result.kind === "action") return primaryAction.items.find((item) => item.key === result.id)?.onClick();
+            if (result.kind === "transaction") return openTransaction(transactionById[result.id]);
+            if (result.kind === "lease") return openLease(leases.find((lease) => lease.id === result.id));
+            const record = (result.kind === "document" ? documents : result.kind === "maintenance" ? workOrders : properties).find((item) => item.id === result.id);
+            if (!record) return;
+            setPropertyFilter(result.kind === "property" ? record.id : record.propertyId || "all");
+            setUnitFilter("all");
+            if (result.kind === "property") return setView("properties");
+            if (result.kind === "maintenance") setMaintenanceStatusFilter("all");
+            requestWorkspaceFocus(result.kind, record.id);
+            setView(result.kind === "document" ? "documents" : "maintenance");
+          }}
+        />
+      </Suspense>}
     </div>
   );
 }

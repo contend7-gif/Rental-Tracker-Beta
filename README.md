@@ -6,6 +6,10 @@ This app is not a tax filing product. Keep your own backups and confirm tax fili
 
 ## Main Workflows
 
+- `Search` / `Ctrl+K`: find transactions, documents, leases, maintenance, properties, screens, and create actions across all properties and years. Use arrow keys and Enter to open a result, or Escape to close.
+- Transactions and the Documents inbox/library display 50 matching records per page. Filters reset paging; totals and existing bulk actions retain their full matching scope.
+- Back/Forward buttons and `Alt+Left` / `Alt+Right` restore visited screens and their year/property/unit scope. Tabs, searches, list pages, property selections, document reviews, and scroll positions are remembered while the app stays open.
+
 - `Dashboard`: status-first rental summary, urgent review counts, compact previews, and setup attention only while setup needs work.
 - `Review Center`: one place for transaction, document, asset, maintenance, lease, tenant-ledger, loan, and Tax Center cleanup, with what/why/fix guidance, safe fix-in-place actions, and loan year-end 1098/escrow review fields.
 - `Operations Calendar`: agenda and full month views for rent, lease lifecycle, maintenance, document, recurring, planning, loan, backup, and Smart Check dates, with reversible Done, Snooze, Waiting, and Intentional follow-up states plus a reversible Monthly Close review.
@@ -71,6 +75,8 @@ npm run desktop:dist
 ```
 
 Desktop persistence uses SQLite plus a managed document folder in Electron's user-data directory. Imported document blobs are stored as files, while metadata, hashes, and relative paths are stored in SQLite. The browser/dev fallback can still read legacy localStorage data for Alpha migration.
+
+Desktop saves compare complete snapshots against committed rows and write only changed records and explicit removals. Collection order is preserved separately for consistent restart and backup behavior. `npm run bench:saves` measures this path with temporary fictional data and excludes automatic backup creation.
 
 Desktop builds store the OpenAI API key through Electron safeStorage when OS-backed encryption is available. API keys are excluded from localStorage-shaped settings and backups.
 

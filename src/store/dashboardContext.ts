@@ -112,7 +112,7 @@ export function useDashboardContext(initial: DashboardContextState = DEFAULT_DAS
   }, []);
 
   const setPropertyFilter = useCallback((propertyFilter: string) => {
-    setDashboardContext((prev) => ({ ...prev, propertyFilter }));
+    setDashboardContext((prev) => ({ ...prev, propertyFilter, unitFilter: prev.propertyFilter === propertyFilter ? prev.unitFilter : "all" }));
   }, []);
 
   const setUnitFilter = useCallback((unitFilter: string) => {

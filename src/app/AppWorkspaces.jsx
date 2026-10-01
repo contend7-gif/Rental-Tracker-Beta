@@ -52,6 +52,7 @@ import {
   TaxWorkspace,
   prefetchDialog,
 } from "./lazyRegistry.js";
+import { WorkspaceScroll } from "./WorkspaceMemory.jsx";
 import { WorkspaceLoadingState } from "./WorkspaceLoadingState.jsx";
 
 const MemoizedDocumentsWorkspace = React.memo(DocumentsWorkspace);
@@ -685,6 +686,7 @@ export function AppWorkspaces(props) {
 
   return (
     <Suspense fallback={<WorkspaceLoadingState />}>
+      <WorkspaceScroll key={view} view={view}>
       {view === "dashboard" && (
         <DashboardWorkspace
           {...commonProps}
@@ -803,6 +805,7 @@ export function AppWorkspaces(props) {
           {...settingsWorkspaceProps}
         />
       )}
+      </WorkspaceScroll>
     </Suspense>
   );
 }

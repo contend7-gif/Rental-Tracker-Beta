@@ -1,3 +1,4 @@
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -178,9 +179,9 @@ export function MaintenanceWorkspace({
   const [createPanelOpen, setCreatePanelOpen] = useState(Boolean(pendingDocumentWorkOrderSource?.documentId));
   const [vendorPanelOpen, setVendorPanelOpen] = useState(false);
   const [optionalCreateOpen, setOptionalCreateOpen] = useState(false);
-  const [expandedOverrides, setExpandedOverrides] = useState({});
-  const [workspaceMode, setWorkspaceMode] = useState("active");
-  const [queueQuickFilter, setQueueQuickFilter] = useState("active");
+  const [expandedOverrides, setExpandedOverrides] = useWorkspaceMemory("maintenance:expandedOverrides", {});
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("maintenance:workspaceMode", "active");
+  const [queueQuickFilter, setQueueQuickFilter] = useWorkspaceMemory("maintenance:queueQuickFilter", "active");
   const [focusedWorkOrderId, setFocusedWorkOrderId] = useState("");
   const [vendorActionsOpenId, setVendorActionsOpenId] = useState("");
   const propertyOptions = selectableProperties(properties, workOrderDraft.propertyId);
@@ -223,8 +224,8 @@ export function MaintenanceWorkspace({
       clearWorkspaceFocus?.();
       return;
     }
-    setWorkspaceMode("active");
-    setQueueQuickFilter("active");
+    setWorkspaceMode(CLOSED_STATUSES.has(target.status) ? "history" : "active");
+    setQueueQuickFilter(CLOSED_STATUSES.has(target.status) ? "history" : "active");
     setMaintenanceStatusFilter("all");
     setExpandedOverrides((current) => ({ ...current, [target.id]: true }));
     setFocusedWorkOrderId(target.id);

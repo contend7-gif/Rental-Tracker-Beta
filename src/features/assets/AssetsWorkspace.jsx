@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
+import React, { useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -395,8 +396,8 @@ export function AssetsWorkspace({
   yearFilter,
   workOrderById,
 }) {
-  const [workspaceMode, setWorkspaceMode] = useState("overview");
-  const [expandedAssetIds, setExpandedAssetIds] = useState(() => new Set());
+  const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("assets:workspaceMode", "overview");
+  const [expandedAssetIds, setExpandedAssetIds] = useWorkspaceMemory("assets:expandedAssetIds", () => new Set());
   const selectedYearNum = Number(yearFilter);
   const visibleProperties = propertyFilter === "all"
     ? properties

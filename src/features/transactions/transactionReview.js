@@ -99,8 +99,7 @@ export function getTransactionReviewIssues(transaction, context = {}) {
   return issues;
 }
 
-export function getTransactionTaxReadiness(transaction, context = {}) {
-  const issues = getTransactionReviewIssues(transaction, context);
+export function getTransactionTaxReadiness(transaction, context = {}, issues = getTransactionReviewIssues(transaction, context)) {
   if (issues.length > 0) return { key: "needs_review", label: "Needs review", issues };
   const isTaxRelevant = context.isTaxReviewRelevantTransaction?.(transaction) ?? transaction?.type === "Expense";
   if (!isTaxRelevant) return { key: "not_tax_relevant", label: "Not tax relevant", issues };
@@ -108,17 +107,19 @@ export function getTransactionTaxReadiness(transaction, context = {}) {
 }
 
 export function buildTransactionReviewInbox(transactions = [], context = {}) {
-  context = { ...context, transactionSupportIndex: buildTransactionSupportIndex(context.documents) };
-  return transactions
-    .map((transaction) => ({
-      transaction,
-      readiness: getTransactionTaxReadiness(transaction, context),
-      issues: getTransactionReviewIssues(transaction, context),
-    }))
+  return buildTransactionReviewRecords(transactions, context)
     .filter((record) => record.issues.length > 0)
     .sort((left, right) => {
       const issueDelta = right.issues.length - left.issues.length;
       if (issueDelta !== 0) return issueDelta;
       return String(right.transaction.date || "").localeCompare(String(left.transaction.date || ""));
     });
+}
+
+export function buildTransactionReviewRecords(transactions = [], context = {}) {
+  context = { ...context, transactionSupportIndex: context.transactionSupportIndex || buildTransactionSupportIndex(context.documents) };
+  return transactions.map((transaction) => {
+    const issues = getTransactionReviewIssues(transaction, context);
+    return { transaction, issues, readiness: getTransactionTaxReadiness(transaction, context, issues) };
+  });
 }

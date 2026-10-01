@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
   deductibleAmountForTransaction,
   deductibleMortgageInterest,
@@ -15,7 +15,7 @@ export function useTaxDerivedCalculators({
   units,
   usePeriods,
 }) {
-  const effectiveTransactionRentalUsePct = (txn) =>
+  const effectiveTransactionRentalUsePct = useCallback((txn) =>
     (String(txn.servicePeriodStart || "").trim() && String(txn.servicePeriodEnd || "").trim() && String(txn.servicePeriodEnd || "") >= String(txn.servicePeriodStart || ""))
       ? getRentalUsePctForRange({
           propertyId: txn.propertyId,
@@ -37,17 +37,17 @@ export function useTaxDerivedCalculators({
           units,
           fallbackOwnerUsePct: Number(txn.ownerUsePct || 0),
           ownerUsePctOverride: Boolean(txn.ownerUsePctOverride),
-        });
+        }), [usePeriods, leases, units]);
 
-  const effectiveTransactionDeductibleAmount = (txn) =>
+  const effectiveTransactionDeductibleAmount = useCallback((txn) =>
     deductibleAmountForTransaction({
       amount: Number(txn.amount || 0),
       type: txn.type,
       capitalImprovement: Boolean(txn.capitalImprovement),
       rentalUsePct: effectiveTransactionRentalUsePct(txn),
-    });
+    }), [effectiveTransactionRentalUsePct]);
 
-  const effectiveLoanPaymentDeductibleInterest = (payment) => {
+  const effectiveLoanPaymentDeductibleInterest = useCallback((payment) => {
     const loan = loanById[payment.loanId];
     if (!loan) return Number(payment.deductibleInterest || 0);
     return deductibleMortgageInterest({
@@ -59,9 +59,9 @@ export function useTaxDerivedCalculators({
       units,
       sharedUnit: "Shared",
     });
-  };
+  }, [loanById, usePeriods, leases, units]);
 
-  const effectiveLoanPaymentRentalUsePct = (payment) => {
+  const effectiveLoanPaymentRentalUsePct = useCallback((payment) => {
     const loan = loanById[payment.loanId];
     if (!loan) return 1;
     return getRentalUsePctForDate({
@@ -73,7 +73,7 @@ export function useTaxDerivedCalculators({
       units,
       fallbackOwnerUsePct: 0,
     });
-  };
+  }, [loanById, usePeriods, leases, units]);
 
   const observedLoanDefaultsById = useMemo(
     () =>

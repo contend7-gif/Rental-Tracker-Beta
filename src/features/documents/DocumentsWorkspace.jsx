@@ -1,3 +1,4 @@
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -22,6 +23,7 @@ import {
   resolveDocumentForReview,
 } from "./documentWorkflow.js";
 import { selectDocumentsForWorkspaceTab } from "./documentWorkspaceFilters.js";
+import { RecordPager, useRecordPage } from "../shared/RecordPager.jsx";
 
 const DocumentReviewDialog = lazy(() => import("./DocumentReviewDialog.jsx").then((module) => ({ default: module.DocumentReviewDialog })));
 
@@ -193,18 +195,36 @@ export function DocumentsWorkspace({
   workspaceFocus,
   propertyNameById,
 }) {
-  const [documentsTab, setDocumentsTab] = useState("inbox");
-  const [documentSubview, setDocumentSubview] = useState("all");
-  const [documentGroupMode, setDocumentGroupMode] = useState("none");
-  const [reviewDocument, setReviewDocument] = useState(null);
+  const [documentsTab, setDocumentsTab] = useWorkspaceMemory("documents:documentsTab", "inbox");
+  const [documentSubview, setDocumentSubview] = useWorkspaceMemory("documents:documentSubview", "all");
+  const [documentGroupMode, setDocumentGroupMode] = useWorkspaceMemory("documents:documentGroupMode", "none");
+  const [selectedDocumentId, setSelectedDocumentId] = useWorkspaceMemory("documents:selectedDocumentId", "");
+  const [reviewDocument, setLoadedReviewDocument] = useState(null);
+  const setReviewDocument = (document) => {
+    setSelectedDocumentId(document?.id || "");
+    setLoadedReviewDocument(document);
+  };
+  useEffect(() => {
+    if (!selectedDocumentId || workspaceFocus?.source === "document") return;
+    const selected = filteredDocuments.find((document) => document.id === selectedDocumentId);
+    if (!selected) { setReviewDocument(null); return; }
+    if (reviewDocument?.id === selectedDocumentId) return;
+    let cancelled = false;
+    Promise.resolve(loadDocumentForReview?.(selected)).then((loaded) => {
+      if (!cancelled) setLoadedReviewDocument(loaded || selected);
+    }).catch(() => {
+      if (!cancelled) setLoadedReviewDocument(selected);
+    });
+    return () => { cancelled = true; };
+  }, [selectedDocumentId, filteredDocuments, workspaceFocus?.requestId]);
   const mobileCompanionCatalog = useMemo(
     () => buildMobileCompanionCatalog({ properties, units }),
     [properties, units],
   );
 
   const showDocumentReview = async (document) => {
-    const documentWithFile = await loadDocumentForReview?.(document);
-    setReviewDocument(documentWithFile || document);
+    setSelectedDocumentId(document.id);
+    setLoadedReviewDocument(null);
   };
 
   const documentFocusRequestId = workspaceFocus?.source === "document" ? workspaceFocus.requestId : "";
@@ -379,6 +399,8 @@ export function DocumentsWorkspace({
     unlinkedDocuments,
     visibleDocuments,
   });
+  const documentScopeKey = useMemo(() => filteredDocuments.map((document) => document.id).join("|"), [filteredDocuments]);
+  const documentPage = useRecordPage(documentsForTab, JSON.stringify([documentsTab, documentSubview, documentGroupMode, documentSearch, documentSort, documentStatusFilter, documentScopeKey]), 50, "documents");
   const documentGroupContext = useMemo(() => ({
     monthLabel: (document) => {
       const fields = getDocumentExtractedFields(document);
@@ -721,12 +743,12 @@ export function DocumentsWorkspace({
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
               {visibleDocumentsMissingIndex.length > 0 ? (
                 <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={markVisibleDocumentsPendingOcr} disabled={documentBatchOcrBusy}>
-                  Queue visible OCR ({visibleDocumentsMissingIndex.length})
+                  Queue matching OCR ({visibleDocumentsMissingIndex.length})
                 </Button>
               ) : null}
               {visibleAutomaticOcrDocuments.length > 0 ? (
                 <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => void runVisibleDocumentOcr()} disabled={documentBatchOcrBusy}>
-                  {documentBatchOcrBusy ? "Running visible OCR..." : "Run visible OCR (" + visibleAutomaticOcrDocuments.length + ")"}
+                  {documentBatchOcrBusy ? "Running matching OCR..." : "Run matching OCR (" + visibleAutomaticOcrDocuments.length + ")"}
                 </Button>
               ) : null}
               {pendingExpenseReviewCount > 0 ? (
@@ -771,7 +793,7 @@ export function DocumentsWorkspace({
                 ) : null}
                 {visibleExpenseReviewRecords.length > 0 ? (
                   <Button size="sm" variant="secondary" onClick={dismissVisibleExpenseQueue}>
-                    Mark visible not expenses ({visibleExpenseReviewRecords.length})
+                    Mark matching not expenses ({visibleExpenseReviewRecords.length})
                   </Button>
                 ) : null}
               </div>
@@ -780,6 +802,7 @@ export function DocumentsWorkspace({
         ) : null}
 
         <div className={WORKSPACE_FILTER_PANEL_CLASS}>
+          {documentPage.pageCount > 1 && <p className="mb-2 text-xs text-slate-500">Bulk actions use all files matching the Search and Show filters, across every page.</p>}
           <div className="grid gap-2 md:grid-cols-4">
             <div>
               <Label className="text-xs text-slate-600">Search</Label>
@@ -874,7 +897,10 @@ export function DocumentsWorkspace({
                               : "No files match the current search/filter."}
                 </div>
               ) : (
-                renderDocumentCards(documentsForTab)
+                <>
+                  {renderDocumentCards(documentPage.records)}
+                  <RecordPager {...documentPage} label="Documents" />
+                </>
               )}
             </TabsContent>
           ))}

@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   BACKUP_SCHEMA_VERSION,
   createPersistenceService,
+  createEmptyBackupForTests,
   decryptManagedBackup,
   expectedPersistenceTableNames,
   sanitizeSettingsForPersistence,
@@ -15,7 +16,7 @@ async function withPersistence(t) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "rental-tracker-persistence-"));
   const service = await createPersistenceService({ userDataPath: dir, appVersion: "9.9.9-test" });
   t.after(async () => {
-    service.close();
+    if (service.db.open) service.close();
     await fs.rm(dir, { recursive: true, force: true });
   });
   return service;
@@ -107,6 +108,104 @@ test("saving and loading app data round-trips core rental records", async (t) =>
   assert.equal(loaded.backup.data.activityLog[0].id, "ale1");
   assert.equal(loaded.backup.data.planningActiveScenarioId, "base");
   assert.deepEqual(loaded.backup.data.taxDayOverrides, { p1: true });
+});
+
+function databaseSnapshot(db) {
+  return Object.fromEntries(expectedPersistenceTableNames().map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()]));
+}
+
+test("incremental saves do not mutate unchanged rows and synchronize edits, additions, and deletions", async (t) => {
+  const service = await withPersistence(t);
+  const initial = sampleBackup({ data: { transactions: [sampleBackup().data.transactions[0], { ...sampleBackup().data.transactions[0], id: "removed" }, { ...sampleBackup().data.transactions[0], id: "untouched" }] } });
+  await service.saveAppData(initial);
+  const untouched = service.db.prepare("SELECT * FROM transactions WHERE id = 'untouched'").get();
+  service.db.exec(`
+    CREATE TEMP TABLE changed_records (action TEXT, id TEXT);
+    CREATE TEMP TRIGGER track_insert AFTER INSERT ON transactions BEGIN INSERT INTO changed_records VALUES ('insert', NEW.id); END;
+    CREATE TEMP TRIGGER track_update AFTER UPDATE ON transactions BEGIN INSERT INTO changed_records VALUES ('update', NEW.id); END;
+    CREATE TEMP TRIGGER track_delete AFTER DELETE ON transactions BEGIN INSERT INTO changed_records VALUES ('delete', OLD.id); END;
+  `);
+  await service.saveAppData(initial);
+  assert.deepEqual(service.db.prepare("SELECT * FROM changed_records").all(), []);
+  const changed = structuredClone(initial);
+  changed.data.transactions = [{ ...initial.data.transactions[0], id: "added" }, { ...initial.data.transactions[0], amount: 250, date: "2026-06-01", category: "Utilities" }, initial.data.transactions[2]];
+  await service.saveAppData(changed);
+  assert.deepEqual(service.db.prepare("SELECT * FROM changed_records ORDER BY action").all(), [{ action: "delete", id: "removed" }, { action: "insert", id: "added" }, { action: "update", id: "t1" }]);
+  assert.deepEqual(service.db.prepare("SELECT * FROM transactions WHERE id = 'untouched'").get(), untouched);
+  const indexed = service.db.prepare("SELECT txn_date, category, amount FROM transactions WHERE id = 't1'").get();
+  assert.deepEqual(indexed, { txn_date: "2026-06-01", category: "Utilities", amount: 250 });
+  assert.deepEqual((await service.loadAppData()).backup.data.transactions, changed.data.transactions);
+  assert.equal(service.db.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+});
+
+test("snapshot reordering survives reopen, deferred loads, and portable backup restore", async (t) => {
+  const service = await withPersistence(t);
+  const backup = sampleBackup();
+  await service.saveAppData(backup);
+  backup.data.transactions.unshift({ ...backup.data.transactions[0], id: "new-first" });
+  backup.data.activityLog.unshift({ ...backup.data.activityLog[0], id: "new-audit-first" });
+  await service.saveAppData(backup);
+  backup.data.transactions.reverse();
+  await service.saveAppData(backup);
+  service.close();
+  const reopened = await createPersistenceService({ userDataPath: service.paths.rootDir, appVersion: "test-reopen" });
+  try {
+    assert.deepEqual((await reopened.loadAppData()).backup.data.transactions.map((item) => item.id), backup.data.transactions.map((item) => item.id));
+    assert.deepEqual((await reopened.loadDeferredCollections(["activityLog"])).collections.activityLog.map((item) => item.id), ["new-audit-first", "ale1"]);
+    const archive = await reopened.exportBackupArchive();
+    const restored = await withPersistence(t);
+    await restored.importBackupArchive(archive.buffer);
+    const restoredBackup = (await restored.loadAppData()).backup;
+    assert.deepEqual(restoredBackup.data.transactions, backup.data.transactions);
+    assert.deepEqual(restoredBackup.data.activityLog, backup.data.activityLog);
+    assert.equal(await restored.readDocumentDataUrl(restoredBackup.data.documents[0]), "data:application/pdf;base64,SGVsbG8=");
+  } finally {
+    reopened.close();
+  }
+});
+
+test("failed incremental save rolls back every table and order, then a retry uses committed state", async (t) => {
+  const service = await withPersistence(t);
+  const backup = sampleBackup();
+  await service.saveAppData(backup);
+  const before = databaseSnapshot(service.db);
+  const filesBefore = await fs.readdir(service.paths.backupsDir);
+  service.db.exec(`CREATE TRIGGER reject_audit BEFORE INSERT ON activity_log WHEN NEW.id = 'reject-audit' BEGIN SELECT RAISE(ABORT, 'injected save failure'); END;`);
+  backup.data.transactions[0] = { ...backup.data.transactions[0], amount: 999 };
+  backup.data.properties = [];
+  backup.data.activityLog.unshift({ ...backup.data.activityLog[0], id: "reject-audit" });
+  backup.settings.backupIntervalDays = 1;
+  await assert.rejects(service.saveAppData(backup), /injected save failure/);
+  assert.deepEqual(databaseSnapshot(service.db), before);
+  assert.deepEqual(await fs.readdir(service.paths.backupsDir), filesBefore);
+  service.db.exec("DROP TRIGGER reject_audit");
+  await service.saveAppData(backup);
+  const loaded = (await service.loadAppData()).backup;
+  assert.equal(loaded.data.transactions[0].amount, 999);
+  assert.equal(loaded.data.properties.length, 0);
+  assert.equal(loaded.data.activityLog[0].id, "reject-audit");
+  assert.equal(service.db.prepare("PRAGMA integrity_check").get().integrity_check, "ok");
+});
+
+test("legacy row ordering upgrades without changing records and empty replacements delete all collections", async (t) => {
+  const service = await withPersistence(t);
+  const backup = sampleBackup();
+  await service.saveAppData(backup);
+  service.db.prepare("DELETE FROM app_data WHERE key LIKE 'collectionOrder:%'").run();
+  const legacy = await service.loadAppData();
+  assert.equal(legacy.backup.data.transactions[0].id, "t1");
+  const rowBefore = service.db.prepare("SELECT * FROM transactions WHERE id = 't1'").get();
+  await service.saveAppData(legacy.backup);
+  assert.deepEqual(service.db.prepare("SELECT * FROM transactions WHERE id = 't1'").get(), rowBefore);
+  await service.saveAppData(createEmptyBackupForTests());
+  const empty = await service.loadAppData();
+  assert.equal(empty.hasData, false);
+  const counts = (await service.getHealth()).collectionCounts;
+  assert.ok(Object.keys(counts).length > 0);
+  for (const value of Object.values(counts)) assert.equal(value, 0);
+  assert.deepEqual(empty.backup.data.transactions, []);
+  assert.deepEqual(empty.backup.data.documents, []);
+  assert.deepEqual(empty.backup.data.activityLog, []);
 });
 
 test("activity history can load after the primary app data", async (t) => {

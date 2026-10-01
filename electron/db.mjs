@@ -596,20 +596,38 @@ function stableItemId(collection, item, index) {
 }
 
 function writeCollection(db, collection, items, now) {
-  db.prepare(`DELETE FROM ${collection.table}`).run();
-  const statement = statementForCollection(db, collection);
+  // Compare with committed rows, rather than a process cache that could become stale
+  // after rollback, restore, or another persistence operation.
+  const existing = new Map(db.prepare(`SELECT id, json FROM ${collection.table}`).all().map((row) => [row.id, row.json]));
+  const incoming = new Map();
   for (const [index, item] of items.entries()) {
     const id = stableItemId(collection, item, index);
-    const row = {
-      id,
-      json: JSON.stringify({ ...item, id: item.id || id }),
-      updated_at: now,
-    };
+    incoming.set(id, { item, json: JSON.stringify({ ...item, id: item.id || id }) });
+  }
+  const remove = db.prepare(`DELETE FROM ${collection.table} WHERE id = ?`);
+  for (const id of existing.keys()) {
+    if (!incoming.has(id)) remove.run(id);
+  }
+  const statement = statementForCollection(db, collection);
+  for (const [id, { item, json }] of incoming) {
+    if (existing.get(id) === json) continue;
+    const row = { id, json, updated_at: now };
     for (const [column, mapper] of Object.entries(collection.columns)) {
       row[column] = mapper(item);
     }
     statement.run(row);
   }
+  // Rowids no longer follow snapshot order when a new record is prepended.
+  // Store only the ordered IDs, without rewriting otherwise unchanged records.
+  writeAppDataValue(db, `collectionOrder:${collection.key}`, JSON.stringify([...incoming.keys()]), now);
+}
+
+function writeAppDataValue(db, key, value, now) {
+  db.prepare(`
+    INSERT INTO app_data (key, value, updated_at) VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+    WHERE app_data.value <> excluded.value
+  `).run(key, value, now);
 }
 
 export async function saveAppDataToDatabase({ db, paths, backup, appVersion = "", autoBackup = true, retentionCount = DEFAULT_AUTO_BACKUP_RETENTION, encryptionKey = null }) {
@@ -633,16 +651,8 @@ export async function saveAppDataToDatabase({ db, paths, backup, appVersion = ""
     for (const collection of COLLECTIONS) {
       writeCollection(db, collection, preparedCollections[collection.key], now);
     }
-    db.prepare(`
-      INSERT INTO app_data (key, value, updated_at)
-      VALUES ('workspaceData', @value, @updatedAt)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-    `).run({ value: JSON.stringify(getWorkspaceData(data)), updatedAt: now });
-    db.prepare(`
-      INSERT INTO app_data (key, value, updated_at)
-      VALUES ('settings', @value, @updatedAt)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
-    `).run({ value: JSON.stringify(sanitizeSettingsForPersistence(safeBackup.settings)), updatedAt: now });
+    writeAppDataValue(db, "workspaceData", JSON.stringify(getWorkspaceData(data)), now);
+    writeAppDataValue(db, "settings", JSON.stringify(sanitizeSettingsForPersistence(safeBackup.settings)), now);
     setMeta(db, "lastSaveAt", now);
     setMeta(db, "lastAppVersion", safeBackup.appVersion || appVersion || "");
   });
@@ -690,8 +700,18 @@ export async function createRestorePointInDatabase({ db, paths, backup, appVersi
 }
 
 function readCollection(db, collection) {
-  const rows = db.prepare(`SELECT json FROM ${collection.table} ORDER BY rowid ASC`).all();
-  return rows.map((row) => parseJson(row.json, {})).filter(isRecord);
+  const rows = db.prepare(`SELECT id, json FROM ${collection.table} ORDER BY rowid ASC`).all();
+  const order = parseJson(db.prepare("SELECT value FROM app_data WHERE key = ?").get(`collectionOrder:${collection.key}`)?.value, []);
+  const remaining = new Map(rows.map((row) => [row.id, row]));
+  const ordered = [];
+  for (const id of Array.isArray(order) ? order : []) {
+    if (!remaining.has(id)) continue;
+    ordered.push(remaining.get(id));
+    remaining.delete(id);
+  }
+  // Legacy databases have no order metadata; preserve their existing rowid order.
+  for (const row of remaining.values()) ordered.push(row);
+  return ordered.map((row) => parseJson(row.json, {})).filter(isRecord);
 }
 
 function getCollectionCounts(db) {

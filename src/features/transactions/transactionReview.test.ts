@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildTransactionReviewInbox,
+  buildTransactionReviewRecords,
   getTransactionReviewIssues,
   getTransactionTaxReadiness,
 } from "./transactionReview.js";
@@ -28,6 +29,17 @@ const context = {
   assets: [],
   isTaxReviewRelevantTransaction: (transaction) => transaction.type === "Expense",
 };
+
+test("shared transaction review records retain readiness and inbox ordering", () => {
+  const transactions = [baseTransaction, { ...baseTransaction, id: "needs-review", receiptName: "", taxChecked: false }];
+  const records = buildTransactionReviewRecords(transactions, context);
+  for (const record of records) {
+    assert.deepEqual(record.issues, getTransactionReviewIssues(record.transaction, context));
+    assert.deepEqual(record.readiness, getTransactionTaxReadiness(record.transaction, context));
+    assert.equal(record.readiness.issues, record.issues);
+  }
+  assert.deepEqual(buildTransactionReviewInbox(transactions, context).map((record) => record.transaction.id), ["needs-review"]);
+});
 
 test("blank receipt names are missing support in both individual and inbox reviews", () => {
   const transaction = { ...baseTransaction, receiptName: "   " };

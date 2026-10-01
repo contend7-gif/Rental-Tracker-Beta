@@ -1,3 +1,4 @@
+import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
@@ -279,12 +280,12 @@ export function ReviewCenterWorkspace({
   visibleSafeSuggestionCount = 0,
   yearFilter,
 }) {
-  const [activeSection, setActiveSection] = useState("all");
+  const [activeSection, setActiveSection] = useWorkspaceMemory("review:activeSection", "all");
   const [batchPreview, setBatchPreview] = useState(null);
-  const [query, setQuery] = useState("");
-  const [priority, setPriority] = useState("all");
-  const [selectedKey, setSelectedKey] = useState("");
-  const [visibleLimit, setVisibleLimit] = useState(20);
+  const [query, setQuery] = useWorkspaceMemory("review:query", "");
+  const [priority, setPriority] = useWorkspaceMemory("review:priority", "all");
+  const [selectedKey, setSelectedKey] = useWorkspaceMemory("review:selectedKey", "");
+  const [visibleLimit, setVisibleLimit] = useWorkspaceMemory("review:visibleLimit", 20);
   const [trackedReview, setTrackedReview] = useState(null);
   const [reviewNotice, setReviewNotice] = useState("");
 
