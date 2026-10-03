@@ -22,7 +22,7 @@ The first modernization pass improves startup loading, review calculations, larg
 
 ## Next separate work
 
-The incremental SQLite save follow-up is described below. Navigation history and remembered workspace state are described below. Consistent detail panels remain a future product improvement.
+The incremental SQLite save follow-up is described below. Navigation history and remembered workspace state are described below. The subsequent local dialog and detail-panel work is described in [the October 1 follow-up](dialog-and-record-panels-2026-10-01.md).
 
 ## Incremental save follow-up
 

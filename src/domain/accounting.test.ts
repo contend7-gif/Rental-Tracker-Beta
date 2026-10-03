@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   allocateAmountToYearByServicePeriod,
   createLoanPayment,
+  currency,
   deductibleAmountForTransaction,
   deductibleMortgageInterest,
   generateRecurringDrafts,
@@ -12,6 +13,15 @@ import {
   loanBreakdown,
 } from "./accounting.ts";
 import { initialLoans, initialRecurringTemplates, initialUsePeriods } from "../data/mockData.ts";
+
+test("currency presentation retains cents, signs, and grouping across repeated calls", () => {
+  for (let iteration = 0; iteration < 3; iteration++) {
+    assert.equal(currency(1234.56), "$1,234.56");
+    assert.equal(currency(-20.5), "-$20.50");
+    assert.equal(currency(0), "$0.00");
+    assert.equal(currency(1.999), "$2.00");
+  }
+});
 
 test("turnover vacancy preserves expenses and shared allocation, with inclusive dates and explicit nonrental opt-out", () => {
   const owner = { id: "owner", propertyId: "p1", unit: "614", startDate: "2026-01-01", useType: "Owner-Occupied", rentalUsePct: 0 };

@@ -156,7 +156,7 @@ export function useTransactionEntryController({
   ]);
 
   const saveTransaction = async (keepOpen = false) => {
-    if (!requirePermission("create_edit_records", "This access profile cannot save transactions.")) return;
+    if (!requirePermission("create_edit_records", "This access profile cannot save transactions.")) return false;
     const amount = transactionAmount;
     const ownerUsePct = effectiveOwnerUsePct;
     const ownerUsePctOverride = Boolean(form.ownerUsePctOverride);
@@ -196,7 +196,7 @@ export function useTransactionEntryController({
     if (!propertyExists) {
       setNotice("Add or select a property before saving a transaction.");
       setView("properties");
-      return;
+      return false;
     }
 
     const validUnitNames = new Set([
@@ -205,12 +205,12 @@ export function useTransactionEntryController({
     ]);
     if (!form.unit || !validUnitNames.has(form.unit)) {
       setNotice("Select a valid unit before saving a transaction.");
-      return;
+      return false;
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
       setNotice("Enter an amount greater than zero before saving a transaction.");
-      return;
+      return false;
     }
 
     const txId = editingTxnId || `t${Date.now()}`;
@@ -355,6 +355,7 @@ export function useTransactionEntryController({
     setPendingTxnAttachment(null);
     if (txnAttachmentInputRef.current) txnAttachmentInputRef.current.value = "";
     setRentAmountTouched(false);
+    return true;
   };
 
   const onTransactionAttachmentInputChange = (event) => {

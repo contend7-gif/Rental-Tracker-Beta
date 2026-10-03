@@ -27,7 +27,7 @@ export function Select({ value: controlledValue, onValueChange, children, classN
     if (controlledValue === undefined) setInternalValue(next);
   };
 
-  const ctx = useMemo(() => ({ value, setValue, items }), [value, items]);
+  const ctx = useMemo(() => ({ value, setValue, items, ariaLabel: props["aria-label"] }), [value, items, props["aria-label"]]);
 
   return (
     <SelectContext.Provider value={ctx}>
@@ -42,6 +42,7 @@ export function SelectTrigger({ className, children: _children, ...props }) {
   const ctx = useContext(SelectContext);
   return (
     <select
+      aria-label={ctx?.ariaLabel}
       value={String(ctx?.value ?? "")}
       onChange={(e) => ctx?.setValue(e.target.value)}
       className={cn(

@@ -1,5 +1,7 @@
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
-import React, { useEffect, useMemo, useState } from "react";
+import { RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
+import { DialogClose, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
@@ -184,6 +186,10 @@ export function MaintenanceWorkspace({
   const [queueQuickFilter, setQueueQuickFilter] = useWorkspaceMemory("maintenance:queueQuickFilter", "active");
   const [focusedWorkOrderId, setFocusedWorkOrderId] = useState("");
   const [vendorActionsOpenId, setVendorActionsOpenId] = useState("");
+  const [detailId, setDetailId] = useState("");
+  const detailTrigger = useRef(null);
+  const detail = maintenanceVisibleWorkOrders.find((record) => record.id === detailId);
+  const detailFiles = detail ? documents.filter((file) => file.workOrderId === detail.id || (detail.transactionId && file.transactionId === detail.transactionId)) : [];
   const propertyOptions = selectableProperties(properties, workOrderDraft.propertyId);
   const reviewContext = {
     transactions: Object.values(transactionById || {}),
@@ -676,6 +682,7 @@ export function MaintenanceWorkspace({
                         )}
                       </div>
                       <div className="flex w-full flex-wrap gap-2 sm:w-auto xl:flex-col">
+                        <Button size="sm" variant="secondary" onClick={(event) => { detailTrigger.current = event.currentTarget; setDetailId(workOrder.id); }}>Open record</Button>
                         <Button size="sm" className="w-full sm:w-auto xl:w-40" onClick={primaryAction.onClick}>
                           <PrimaryIcon className="h-4 w-4" aria-hidden="true" />
                           {primaryAction.label}
@@ -1073,6 +1080,32 @@ export function MaintenanceWorkspace({
             </table>
           </ResponsiveTableFrame>
         </div> : null}
+        <RecordDetailPanel open={Boolean(detail)} onOpenChange={(open) => { if (!open) { setDetailId(""); requestAnimationFrame(() => detailTrigger.current?.isConnected && detailTrigger.current.focus()); } }}>
+          {detail && <>
+            <DialogHeader><DialogTitle>{detail.title || "Work order"}</DialogTitle></DialogHeader>
+            <div className="mt-4 grid gap-6 lg:grid-cols-2">
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">{propertyNameById[detail.propertyId]} · {labelForUnit(detail.unit)} · {detail.status}</p>
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div><dt>Priority</dt><dd>{detail.priority || "Normal"}</dd></div>
+                  <div><dt>Due</dt><dd>{formatMaintenanceDate(detail.dueDate)}</dd></div>
+                  <div><dt>Cost</dt><dd>{currency(resolveWorkOrderCost(detail, transactionById))}</dd></div>
+                  <div><dt>Accounting</dt><dd>{maintenanceAccountingTreatmentLabel(detail.accountingTreatment)}</dd></div>
+                </dl>
+                <p className="whitespace-pre-wrap text-sm">{detail.description || "No description entered."}</p>
+                {detail.notes && <p className="whitespace-pre-wrap text-sm text-slate-600">{detail.notes}</p>}
+                <p className="text-sm">{detail.transactionId ? "Expense linked" : "No linked expense"} · {detailFiles.length} files</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => { setDetailId(""); setExpandedOverrides((previous) => ({ ...previous, [detail.id]: true })); }}>Edit details</Button>
+                  <Button variant="secondary" onClick={() => { setDetailId(""); openWorkOrderDocuments(detail); }}>Open documents</Button>
+                  <Button variant="secondary" disabled={!canCreateEditRecords} onClick={() => { setDetailId(""); createWorkOrderExpense(detail); }}>Review expense</Button>
+                  <DialogClose variant="secondary">Close</DialogClose>
+                </div>
+              </div>
+              <RecordFilePreview document={detailFiles[0]} />
+            </div>
+          </>}
+        </RecordDetailPanel>
       </CardContent>
     </Card>
   );

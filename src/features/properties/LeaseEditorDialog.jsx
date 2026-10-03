@@ -1,5 +1,7 @@
+import { DraftRecoveryControls } from "../shared/DraftRecovery.jsx";
+import { RecordDetailPanel } from "../shared/RecordDetailPanel.jsx";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { DialogClose, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
@@ -96,8 +98,8 @@ export function LeaseEditorDialog({
           ? "Rent each interval"
           : "Monthly rent";
   return (
-    <Dialog open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
-      <DialogContent className="flex max-h-[90vh] w-[min(96vw,1280px)] max-w-[1280px] flex-col overflow-hidden rounded-xl border bg-white shadow-lg">
+    <RecordDetailPanel className="flex flex-col overflow-hidden" draft={leaseEditorMode === "full" ? leaseDraft : undefined} open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
+
         {!leaseDraft ? (
           <div className="p-4">
             <DialogLoadFallback message="We could not load this editor. Close and try opening Manage again." onClose={closeLeaseEditor} />
@@ -105,6 +107,7 @@ export function LeaseEditorDialog({
         ) : (
           <>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {leaseEditorMode === "full" && <DraftRecoveryControls draftKey={`lease:${leaseDraft.id || `${leaseDraft.propertyId}:${leaseDraft.unit}`}`} draft={leaseDraft} onRestore={(saved) => setLeaseDraft({ ...leaseDraft, ...saved })} />}
               <DialogHeader>
                 <DialogTitle>{leaseEditorMode === "full" ? `Lease - ${leaseDraft.unit} (${leaseDraft.tenantName})` : `Occupancy - ${leaseDraft.unit}`}</DialogTitle>
               </DialogHeader>
@@ -557,12 +560,11 @@ export function LeaseEditorDialog({
               <div className="flex flex-wrap justify-end gap-2">
                 {leaseEditorMode === "full" && <Button onClick={saveLease} disabled={!canCreateEditRecords}>Save lease</Button>}
                 {leaseEditorMode === "full" && leaseDraft?.id && <Button variant="destructive" onClick={confirmAndDeleteLease} disabled={!canDeleteRecords}>Delete lease</Button>}
-                <Button variant="secondary" onClick={closeLeaseEditor}>Close</Button>
+                <DialogClose variant="secondary">Close</DialogClose>
               </div>
             </div>
           </>
         )}
-      </DialogContent>
-    </Dialog>
+    </RecordDetailPanel>
   );
 }

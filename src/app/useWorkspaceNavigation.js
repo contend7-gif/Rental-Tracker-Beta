@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { moveNavigation, pushNavigation } from "./navigationHistory.ts";
 
+function requestNavigation(proceed) {
+  const event = new CustomEvent("rental-tracker:before-navigate", { cancelable: true, detail: { proceed } });
+  if (window.dispatchEvent(event)) proceed();
+}
+
 export function useWorkspaceNavigation(initialView, context, applyContext) {
   const [history, setHistory] = useState(() => ({ entries: [{ view: initialView, ...context }], index: 0 }));
   const current = useRef(history);
@@ -14,16 +19,21 @@ export function useWorkspaceNavigation(initialView, context, applyContext) {
   const setView = useCallback((nextView) => {
     const active = current.current.entries[current.current.index];
     const destination = typeof nextView === "function" ? nextView(active.view) : nextView;
+    if (destination === active.view) return;
+    requestNavigation(() => {
     const next = pushNavigation(current.current, { ...active, view: destination });
     current.current = next;
     setHistory(next);
+    });
   }, []);
   const move = useCallback((delta) => {
     const next = moveNavigation(current.current, delta);
     if (next === current.current) return;
+    requestNavigation(() => {
     current.current = next;
     applyContext(next.entries[next.index]);
     setHistory(next);
+    });
   }, [applyContext]);
   useEffect(() => {
     const onKey = (event) => {

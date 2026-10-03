@@ -33,7 +33,7 @@ export function field(label, child, options = {}) {
           </Badge>
         ) : null}
       </div>
-      {child}
+      {React.isValidElement(child) ? React.cloneElement(child, { "aria-label": child.props["aria-label"] || label }) : child}
       {options.hint ? <div className="mt-1 text-[11px] text-blue-800">{options.hint}</div> : null}
     </div>
   );

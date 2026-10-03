@@ -1,5 +1,7 @@
+import { DraftRecoveryControls } from "./DraftRecovery.jsx";
+import { useState } from "react";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
@@ -18,7 +20,7 @@ export function PropertyQuickAddDialog({
   setPropertyQuickAddOpen,
 }) {
   return (
-    <Dialog open={open} onOpenChange={setPropertyQuickAddOpen}>
+    <Dialog open={open} draft={propertyDraft} onOpenChange={setPropertyQuickAddOpen}>
       <DialogContent className={dialogContentLgClass}>
         <DialogHeader>
           <DialogTitle>Add Property</DialogTitle>
@@ -54,7 +56,7 @@ export function PropertyQuickAddDialog({
         </div>
         <div className="mt-3 flex gap-2">
           <Button onClick={saveProperty}>Save property</Button>
-          <Button variant="secondary" onClick={() => setPropertyQuickAddOpen(false)}>Cancel</Button>
+          <DialogClose variant="secondary">Cancel</DialogClose>
         </div>
       </DialogContent>
     </Dialog>
@@ -79,12 +81,17 @@ export function DashboardQuickAddDialog({
   txnAttachmentInputRef,
   units,
 }) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   return (
     <Dialog
       open={open}
+      draft={{ date: form.date, propertyId: form.propertyId, unit: form.unit, type: form.type, category: form.category, amount: form.amount, description: form.description, attachmentName: pendingTxnAttachment?.name }}
+      closeDisabled={saving}
       onOpenChange={(isOpen) => {
         setDashboardQuickAddOpen(isOpen);
         if (!isOpen) {
+          setSaveError("");
           setForm(createBlankForm(form.propertyId, form.unit || "Shared"));
           setPendingTxnAttachment(null);
           if (txnAttachmentInputRef.current) txnAttachmentInputRef.current.value = "";
@@ -145,9 +152,10 @@ export function DashboardQuickAddDialog({
             {field("Description", <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />)}
           </div>
         </div>
+        {saveError && <p role="alert" className="mt-3 text-sm text-red-700">{saveError}</p>}
         <div className="mt-3 flex gap-2">
-          <Button onClick={() => { saveTransaction(true); setDashboardQuickAddOpen(false); }} disabled={properties.length === 0}>Save</Button>
-          <Button variant="secondary" onClick={() => setDashboardQuickAddOpen(false)}>Cancel</Button>
+          <Button onClick={async () => { if (saving) return; setSaving(true); setSaveError(""); try { if (await saveTransaction(true)) setDashboardQuickAddOpen(false); else setSaveError("This entry was not saved. Check the property, unit, and amount."); } catch { setSaveError("The entry could not be completed. Check the ledger before retrying."); } finally { setSaving(false); } }} disabled={properties.length === 0 || saving}>Save</Button>
+          <DialogClose variant="secondary" disabled={saving}>Cancel</DialogClose>
         </div>
       </DialogContent>
     </Dialog>
@@ -169,6 +177,7 @@ export function LoanEditorDialog({
   return (
     <Dialog
       open={loanEditorOpen}
+      draft={loanDraft}
       onOpenChange={(isOpen) => {
         setLoanEditorOpen(isOpen);
         if (!isOpen) clearLoanDraft(loanDraft.propertyId);
@@ -178,6 +187,7 @@ export function LoanEditorDialog({
         <DialogHeader>
           <DialogTitle>{editingLoanId ? "Edit Loan" : "Add Loan"}</DialogTitle>
         </DialogHeader>
+        <DraftRecoveryControls draftKey={`loan:${editingLoanId || loanDraft.propertyId}`} draft={loanDraft} onRestore={(saved) => setLoanDraft({ ...loanDraft, ...saved })} />
         <div className="mt-2 grid gap-2 md:grid-cols-2">
           {field(
             "Property",
@@ -216,7 +226,7 @@ export function LoanEditorDialog({
         <div className="mt-3 flex gap-2">
           <Button onClick={saveLoan}>{editingLoanId ? "Update loan" : "Add loan"}</Button>
           <Button variant="secondary" onClick={() => clearLoanDraft(loanDraft.propertyId)}>Clear</Button>
-          <Button variant="secondary" onClick={() => { setLoanEditorOpen(false); clearLoanDraft(loanDraft.propertyId); }}>Cancel</Button>
+          <DialogClose variant="secondary">Cancel</DialogClose>
         </div>
       </DialogContent>
     </Dialog>

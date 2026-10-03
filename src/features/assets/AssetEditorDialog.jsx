@@ -1,6 +1,6 @@
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { DialogLoadFallback } from "../shared/CommonDialogs.jsx";
@@ -44,7 +44,7 @@ export function AssetEditorDialog({
   const readiness = draftForReview ? getAssetReadiness(draftForReview, assetReviewContext || {}) : null;
 
   return (
-    <Dialog open={Boolean(assetEditorOpen || assetEditorDraft)} onOpenChange={(isOpen) => { setAssetEditorOpen(isOpen); if (!isOpen) setAssetEditorDraft(null); }}>
+    <Dialog draft={assetEditorDraft} open={Boolean(assetEditorOpen || assetEditorDraft)} onOpenChange={(isOpen) => { setAssetEditorOpen(isOpen); if (!isOpen) setAssetEditorDraft(null); }}>
       <DialogContent className={dialogContentLgClass}>
         {!assetEditorDraft ? (
           <DialogLoadFallback message="We could not load this asset editor. Close and try opening it again." onClose={() => { setAssetEditorOpen(false); setAssetEditorDraft(null); }} />
@@ -162,7 +162,7 @@ export function AssetEditorDialog({
             <div className="mt-3 flex gap-2">
               <Button onClick={saveEditedAsset}>{assetEditorDraft?.id ? "Save changes" : "Add asset"}</Button>
               {assetEditorDraft?.id && <Button variant="destructive" onClick={deleteAsset}>Delete</Button>}
-              <Button variant="secondary" onClick={() => { setAssetEditorOpen(false); setAssetEditorDraft(null); }}>Cancel</Button>
+              <DialogClose variant="secondary">Cancel</DialogClose>
             </div>
           </>
         )}

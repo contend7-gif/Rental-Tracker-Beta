@@ -1,12 +1,13 @@
 {
   "name": "rental-tracker-beta",
   "private": true,
-  "version": "1.9.6",
+  "version": "1.9.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "bench:saves": "node scripts/benchmark-saves.mjs",
+    "bench:desktop": "node scripts/benchmark-desktop.mjs",
     "preview": "vite preview",
     "bug:sweep": "node scripts/bug-sweep.mjs",
     "privacy:scan": "node scripts/privacy-scan.mjs",

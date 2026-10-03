@@ -8,6 +8,20 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.7",
+    releaseDate: "2026-10-03",
+    title: "Faster review and a more comfortable desktop",
+    summary: "Review records in consistent panels, retain drafts while working, and customize transaction lists with clearer feedback and keyboard controls.",
+    changes: [
+      "Open document review faster by preparing advanced sections and manual attachment choices when first expanded.",
+      "Use consistent side panels for transactions, documents, property editing, unit details, lease editing, and maintenance records, with linked file previews and reliable keyboard focus.",
+      "Protect unsaved dialog edits and transaction workspace navigation; explicitly save and restore transaction, lease, and loan drafts within the current window. Drafts expire when the window closes and file contents are excluded.",
+      "Save named Transactions and Documents filter views; switch Transaction Activity to a sortable table with remembered optional columns and clear bulk-selection scope.",
+      "Show file loading, save progress, and explicit retry actions while preserving invalid transaction input and preventing repeated submissions during saving.",
+      "Navigate the New menu with the keyboard, save full transaction entry with Ctrl+S, and keep scope filters and panels usable in smaller desktop windows.",
+    ],
+  },
+  {
     version: "1.9.6",
     releaseDate: "2026-09-30",
     title: "Faster saves and easier navigation",

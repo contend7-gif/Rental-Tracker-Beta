@@ -101,8 +101,8 @@ export function createDocumentRecordActions({
   };
 
   const saveDocumentOcrFieldCorrections = (document: DocumentItem, corrections: OcrFieldCorrections = {}) => {
-    if (!requirePermission("review_documents", "This access profile cannot correct OCR fields.")) return;
-    if (!document) return;
+    if (!requirePermission("review_documents", "This access profile cannot correct OCR fields.")) return false;
+    if (!document) return false;
 
     const currentFields = getDocumentExtractedFields?.(document) || {};
     const vendorName = String(corrections.vendorName || "").trim();
@@ -114,11 +114,11 @@ export function createDocumentRecordActions({
 
     if (totalAmountText && (!Number.isFinite(totalAmount) || totalAmount! < 0)) {
       setNotice("Enter a valid non-negative total amount.");
-      return;
+      return false;
     }
     if (servicePeriodStart && servicePeriodEnd && servicePeriodEnd < servicePeriodStart) {
       setNotice("Service period end must be on or after its start date.");
-      return;
+      return false;
     }
 
     const currentOverrides = document.ocrFieldOverrides || {};
@@ -170,6 +170,7 @@ export function createDocumentRecordActions({
     }
 
     setNotice(`OCR corrections saved for ${document.name}.`);
+    return true;
   };
 
   const markDocumentWarningsReviewed = (document: DocumentItem, warningKeys: string[] = []) => {

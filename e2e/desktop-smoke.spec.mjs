@@ -41,6 +41,199 @@ async function launchDesktopApp(profilePath) {
   return { electronApp, page, rendererErrors };
 }
 
+test("dialogs protect unsaved edits, contain focus, and keep invalid Quick Add entries open", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-dialogs-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    const initialCount = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length);
+    await page.getByRole("button", { name: "Properties", exact: true }).click();
+    const newButton = page.getByRole("button", { name: "Transaction", exact: true });
+    const openQuickAdd = async () => {
+      await newButton.click();
+      await expect(page.getByRole("dialog", { name: "Quick Add Transaction", exact: true })).toBeVisible();
+    };
+    await openQuickAdd();
+    const dialog = page.getByRole("dialog", { name: "Quick Add Transaction", exact: true });
+    expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    for (let index = 0; index < 18; index++) {
+      await page.keyboard.press("Tab");
+      expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    }
+    await dialog.getByLabel("Description", { exact: true }).fill("Example unsaved keyboard draft");
+    await dialog.getByLabel("Amount", { exact: true }).fill("0");
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("alert")).toContainText("This entry was not saved");
+    await expect(dialog.getByLabel("Description", { exact: true })).toHaveValue("Example unsaved keyboard draft");
+    await page.keyboard.press("Escape");
+    const discard = page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true });
+    await expect(discard).toBeVisible();
+    await expect(discard.getByRole("button", { name: "Keep editing", exact: true })).toBeFocused();
+    await discard.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(dialog.getByLabel("Description", { exact: true })).toHaveValue("Example unsaved keyboard draft");
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await discard.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(newButton).toBeFocused();
+    expect(await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length)).toBe(initialCount);
+    await openQuickAdd();
+    await expect(dialog.getByRole("alert")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(discard).toHaveCount(0);
+    await openQuickAdd();
+    await dialog.getByLabel("Description", { exact: true }).fill("Example valid Quick Add entry");
+    await dialog.getByLabel("Amount", { exact: true }).fill("20");
+    await dialog.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.filter((item) => item.description === "Example valid Quick Add entry").length)).toBe(1);
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("transaction drafts survive navigation and protect unsaved changes", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-drafts-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    const openEntry = async () => {
+      await page.getByRole("button", { name: "New", exact: true }).click();
+      await page.getByRole("menuitem", { name: /^Transaction/ }).click();
+      await expect(page.getByLabel("Description / memo", { exact: true })).toBeVisible();
+    };
+    await openEntry();
+    await page.getByRole("button", { name: /Repair \/ maintenance/ }).click();
+    await page.getByLabel("Amount", { exact: true }).fill("0");
+    await page.getByLabel("Description / memo", { exact: true }).fill("Example recoverable draft");
+    await page.getByRole("button", { name: "Save transaction", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Not saved");
+    await page.getByRole("button", { name: "Retry save", exact: true }).click();
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example recoverable draft");
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    const prompt = page.getByRole("dialog", { name: "Leave unsaved transaction?", exact: true });
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example recoverable draft");
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await prompt.getByRole("button", { name: "Save draft and leave", exact: true }).click();
+    await openEntry();
+    await page.getByRole("button", { name: "Restore draft", exact: true }).click();
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example recoverable draft");
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await prompt.getByRole("button", { name: "Discard and leave", exact: true }).click();
+    await openEntry();
+    await expect(page.getByRole("button", { name: "Restore draft", exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("");
+    expect(rendererErrors).toEqual([]);
+  } finally { await electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("saved transaction views and table columns survive restart", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-views-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const propertyId = backup.data.properties[0].id;
+      backup.data.transactions = [10, 40].map((amount) => ({ id: `view-txn-${amount}`, propertyId, unit: "Shared", date: "2026-08-15", status: "active", type: "Expense", category: "Repairs", amount, description: `Example saved view ${amount}`, taxChecked: true, reconciled: true }));
+      backup.settings.leaseAutomationEnabled = false;
+      const result = await window.desktopPersistence.saveAppData(backup);
+      if (result.ok === false) throw new Error(result.message);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    const page = run.page;
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await page.getByRole("button", { name: "Table", exact: true }).click();
+    const table = page.getByRole("table", { name: "Transactions table", exact: true });
+    await table.getByRole("button", { name: /^Amount/ }).click();
+    await expect(table.locator("tbody tr").first()).toContainText("Example saved view 40");
+    await page.locator("summary").filter({ hasText: /^Columns$/ }).click();
+    await page.getByRole("checkbox", { name: "Tax", exact: true }).uncheck();
+    await expect(table.getByRole("columnheader", { name: "Tax", exact: true })).toHaveCount(0);
+    await page.getByLabel("Search transactions", { exact: true }).fill("Example saved view 40");
+    await page.locator("summary").filter({ hasText: /^Saved views$/ }).click();
+    await page.getByLabel("Saved view name", { exact: true }).fill("Example saved filter");
+    await page.getByRole("button", { name: "Save current view", exact: true }).click();
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await run.page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await expect(run.page.getByRole("table", { name: "Transactions table", exact: true })).toBeVisible();
+    await expect(run.page.getByRole("columnheader", { name: "Tax", exact: true })).toHaveCount(0);
+    await run.page.locator("summary").filter({ hasText: /^Saved views$/ }).click();
+    await run.page.getByLabel("Saved views", { exact: true }).selectOption("Example saved filter");
+    await expect(run.page.getByLabel("Search transactions", { exact: true })).toHaveValue("Example saved view 40");
+    await expect(run.page.getByRole("table").locator("tbody tr")).toHaveCount(1);
+    expect(run.rendererErrors).toEqual([]);
+  } finally { await run.electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("a missing file preview recovers through Retry after the file is restored", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-file-retry-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      backup.data.documents.push({ id: "example-retry-document", propertyId: backup.data.properties[0].id, unit: "Shared", name: "Example retry document.pdf", type: "Other", tags: ["supporting-only"], uploadedAt: "2026-10-03T12:00:00.000Z", relativePath: "example-retry.pdf", mimeType: "application/pdf", extractedText: "Example fictional saved file" });
+      const result = await window.desktopPersistence.saveAppData(backup);
+      if (result.ok === false) throw new Error(result.message);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await run.page.keyboard.press("Control+k");
+    const search = run.page.getByRole("combobox", { name: "Search all records and actions" });
+    await search.fill("Example retry document");
+    await expect(run.page.getByRole("listbox").getByRole("option")).toHaveCount(1);
+    await search.press("Enter");
+    const preview = run.page.getByRole("region", { name: "File preview: Example retry document.pdf", exact: true });
+    await expect(preview.getByRole("alert")).toBeVisible();
+    fs.writeFileSync(path.join(profilePath, "documents", "example-retry.pdf"), makeTextPdf([[{ text: "Example restored file" }]]));
+    await preview.getByRole("button", { name: "Retry file load", exact: true }).click();
+    await expect(preview.getByText("Preview available", { exact: true })).toBeVisible();
+    await expect(preview.getByRole("alert")).toHaveCount(0);
+    expect(run.rendererErrors).toEqual([]);
+  } finally { await run.electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("narrow windows retain scope filters and keyboard creation and saving", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-keyboard-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    const minimumSize = await electronApp.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      window.setContentSize(720, 900);
+      return window.getMinimumSize();
+    });
+    expect(minimumSize).toEqual([640, 540]);
+    await page.setViewportSize({ width: 720, height: 900 });
+    await expect(page.getByRole("combobox", { name: "Year", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Property", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Unit", exact: true })).toBeVisible();
+    const newButton = page.getByRole("button", { name: "New", exact: true });
+    await newButton.click();
+    const items = page.getByRole("menuitem");
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(items.nth(1)).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(items.first()).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(newButton).toBeFocused();
+    await newButton.click();
+    await page.keyboard.press("Enter");
+    await expect(page.getByLabel("Description / memo", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /Repair \/ maintenance/ }).click();
+    await page.getByLabel("Amount", { exact: true }).fill("23");
+    await page.getByLabel("Description / memo", { exact: true }).fill("Example keyboard save");
+    await page.keyboard.press("Control+s");
+    await expect.poll(async () => page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.filter((record) => record.description === "Example keyboard save").length)).toBe(1);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "modern-narrow-window.png") });
+    expect(rendererErrors).toEqual([]);
+  } finally { await electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
 test("global search opens historical records and large lists page without losing matches", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-search-pages-"));
   let run = await launchDesktopApp(profilePath);
@@ -187,7 +380,7 @@ test("packaged desktop supports the core Documents workflow", async () => {
     await expect(page.getByText("4 files", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Library (4)", exact: true }).click();
 
-    const search = page.getByRole("textbox", { name: /Search files, tags, extracted text/i });
+    const search = page.getByRole("textbox", { name: "Search documents", exact: true });
     await search.fill("plumbing");
     await expect(page.getByText("Example Plumbing receipt", { exact: true })).toBeVisible();
     await expect(page.getByText("Example Hardware roof receipt", { exact: true })).toHaveCount(0);
@@ -221,6 +414,12 @@ test("saved PDF review retains its preview after a complete desktop restart", as
       const doc = saved.backup?.data?.documents?.find((item) => item.name === "saved-lease.pdf");
       return Boolean(doc?.relativePath && !doc?.dataUrl);
     })).toBe(true);
+    await firstRun.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      backup.data.transactions.push({ ...backup.data.transactions[0], id: "panel-preview-transaction", description: "Example linked panel transaction", status: "active", date: "2026-09-20" });
+      backup.data.documents.find((item) => item.name === "saved-lease.pdf").transactionId = "panel-preview-transaction";
+      await window.desktopPersistence.saveAppData(backup);
+    });
     await firstRun.electronApp.close();
     firstRun = null;
     secondRun = await launchDesktopApp(profilePath);
@@ -234,6 +433,28 @@ test("saved PDF review retains its preview after a complete desktop restart", as
     await expect(page.getByText("Preview not loaded", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "View file", exact: true }).first().click();
     await expect(page.locator('iframe[title="saved-lease.pdf"]')).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "saved-lease.pdf", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "View file", exact: true }).first()).toBeFocused();
+    await expect(page.locator('iframe[title="Preview of saved-lease.pdf"]')).toBeVisible();
+    const correctionSection = page.locator("details").filter({ has: page.locator("summary", { hasText: "Correct OCR fields" }) });
+    if (!await correctionSection.evaluate((element) => element.open)) await correctionSection.locator("summary").click();
+    const originalVendor = await page.getByLabel("Vendor", { exact: true }).inputValue();
+    await page.getByLabel("Vendor", { exact: true }).fill("Example unsaved OCR vendor");
+    await page.getByRole("button", { name: "Open linked transaction", exact: true }).click();
+    await page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true }).getByRole("button", { name: "Discard changes", exact: true }).click();
+    const transactionPanel = page.getByRole("dialog", { name: "Example linked panel transaction", exact: true });
+    await expect(transactionPanel.locator('iframe[title="Preview of saved-lease.pdf"]')).toBeVisible();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "record-panel-preview.png") });
+    await page.keyboard.press("Escape");
+    await expect(transactionPanel).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open linked transaction", exact: true })).toBeFocused();
+    await expect(page.getByLabel("Vendor", { exact: true })).toHaveValue(originalVendor);
+    const manualAttachment = page.locator("summary").filter({ hasText: /^Attach manually$/ }).locator("..");
+    await manualAttachment.locator("summary").click();
+    await expect(manualAttachment.getByRole("combobox")).toHaveCount(2);
+    await manualAttachment.getByRole("combobox").first().selectOption("lease");
+    await expect(manualAttachment.getByRole("option", { name: /^Choose lease$/i })).toHaveCount(1);
     expect(secondRun.rendererErrors).toEqual([]);
   } finally {
     await firstRun?.electronApp.close().catch(() => {});
@@ -538,6 +759,13 @@ test("packaged desktop gives each Maintenance mode one clear job", async () => {
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
 
   try {
+    await page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      backup.data.workOrders.push({ id: "example-panel-work", propertyId: backup.data.properties[0].id, unit: "Shared", title: "Example panel maintenance", description: "Fictional panel test", status: "Open", priority: "Low", reportedOn: "2026-10-03", createdAt: "2026-10-03T12:00:00.000Z" });
+      const result = await window.desktopPersistence.saveAppData(backup);
+      if (result.ok === false) throw new Error(result.message);
+    });
+    await page.reload();
     await page.getByRole("button", { name: "Maintenance", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Maintenance", exact: true })).toBeVisible();
 
@@ -548,6 +776,12 @@ test("packaged desktop gives each Maintenance mode one clear job", async () => {
     await expect(activeTab).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Active work orders", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Work Order", exact: true })).toBeVisible();
+    const recordButton = page.getByRole("button", { name: "Open record", exact: true }).first();
+    await recordButton.click();
+    const recordPanel = page.getByRole("dialog");
+    await expect(recordPanel.getByRole("button", { name: "Edit details", exact: true })).toBeVisible();
+    await recordPanel.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(recordButton).toBeFocused();
 
     await historyTab.click();
     await expect(page.getByText("Maintenance history", { exact: true })).toBeVisible();

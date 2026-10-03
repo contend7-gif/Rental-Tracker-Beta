@@ -41,11 +41,12 @@ export function AppHeaderCard({
 
   useEffect(() => {
     if (!newMenuOpen) return undefined;
+    newMenuRef.current?.querySelector('[role="menuitem"]')?.focus();
     const closeFromOutside = (event) => {
       if (!newMenuRef.current?.contains(event.target)) setNewMenuOpen(false);
     };
     const closeFromKeyboard = (event) => {
-      if (event.key === "Escape") setNewMenuOpen(false);
+      if (event.key === "Escape") { setNewMenuOpen(false); newMenuRef.current?.querySelector("button")?.focus(); }
     };
     document.addEventListener("pointerdown", closeFromOutside);
     document.addEventListener("keydown", closeFromKeyboard);
@@ -69,7 +70,14 @@ export function AppHeaderCard({
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${newMenuOpen ? "rotate-180" : ""}`} />
       </Button>
       {newMenuOpen ? (
-        <div role="menu" className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+        <div role="menu" onKeyDown={(event) => {
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const items = [...event.currentTarget.querySelectorAll('[role="menuitem"]')];
+          const current = items.indexOf(document.activeElement);
+          const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : (current + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+          items[next]?.focus();
+        }} className="absolute right-0 top-[calc(100%+8px)] z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
           <div className="border-b border-slate-100 px-3 py-2.5">
             <div className="text-sm font-semibold text-slate-950">Create new</div>
             <div className="mt-0.5 text-xs text-slate-500">Choose the record you want to add.</div>
@@ -85,6 +93,7 @@ export function AppHeaderCard({
                   className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
                   onClick={() => {
                     setNewMenuOpen(false);
+                    newMenuRef.current?.querySelector("button")?.focus();
                     action.onClick();
                   }}
                   onMouseEnter={() => action.prefetchKey && prefetchDialog(action.prefetchKey)}
@@ -119,7 +128,7 @@ export function AppHeaderCard({
   ) : null;
 
   const dashboardFilterControls = showFilterControls ? (
-    <div className="hidden min-w-0 flex-1 items-center gap-2 lg:flex xl:flex-none">
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 xl:flex-none">
       {filterVisibility.year ? <label className="relative grid h-12 w-20 min-w-0 grid-rows-[12px_22px] content-center overflow-hidden rounded-md border border-slate-200 bg-white px-2 pb-1.5 pt-2">
         <span className="flex items-center gap-1 self-end text-[9px] font-semibold uppercase leading-[11px] text-slate-500"><CalendarDays className="h-2.5 w-2.5 text-teal-700" />Year</span>
         <Select value={filterControls.yearFilter} onValueChange={filterControls.setYearFilter}>
@@ -177,7 +186,7 @@ export function AppHeaderCard({
             </div>
           </div>
         </div>
-        <div className="flex min-w-0 flex-col justify-center gap-2 self-center sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-col flex-wrap justify-center gap-2 self-center sm:flex-row sm:items-center">
           {dashboardFilterControls}
           <div className="flex gap-1" aria-label="Navigation history">
             <Button variant="secondary" disabled={!navigation?.canGoBack} onClick={navigation?.goBack} aria-label="Go back" aria-keyshortcuts="Alt+ArrowLeft" title="Go back (Alt+Left)"><ArrowLeft className="h-4 w-4" /></Button>

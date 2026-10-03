@@ -1,3 +1,4 @@
+import { RecordDetailPanel } from "../shared/RecordDetailPanel.jsx";
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -29,7 +30,7 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
@@ -682,11 +683,11 @@ export function PropertiesWorkspace(props) {
         </Card>
       ) : null}
 
-      <Dialog open={Boolean(unitDetail)} onOpenChange={(open) => { if (!open) setUnitDetailId(""); }}>
-        <div className="ml-auto flex h-[calc(100vh-2rem)] w-[min(96vw,620px)] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+      <RecordDetailPanel className="max-w-[720px] p-0" open={Boolean(unitDetail)} onOpenChange={(open) => { if (!open) setUnitDetailId(""); }}>
+        <div className="flex h-full w-full flex-col overflow-hidden">
           <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2"><h2 className="text-base font-semibold text-slate-950">{unitDetail && (/^unit\b/i.test(unitDetail.name) ? unitDetail.name : `Unit ${unitDetail.name}`)}</h2>{unitDetail ? <Badge variant="secondary">{unitStatusLabel[unitDetailStatus] || unitDetailStatus}</Badge> : null}</div>
+              <div className="flex flex-wrap items-center gap-2"><DialogTitle className="text-base font-semibold text-slate-950">{unitDetail && (/^unit\b/i.test(unitDetail.name) ? unitDetail.name : `Unit ${unitDetail.name}`)}</DialogTitle>{unitDetail ? <Badge variant="secondary">{unitStatusLabel[unitDetailStatus] || unitDetailStatus}</Badge> : null}</div>
               <div className="truncate text-sm text-slate-500">{selected?.property.name} | Unit record</div>
             </div>
             <Button size="sm" variant="secondary" className="h-9 w-9 shrink-0 p-0" title="Close unit details" onClick={() => setUnitDetailId("")}><X className="h-4 w-4" /></Button>
@@ -729,9 +730,9 @@ export function PropertiesWorkspace(props) {
 
           {unitDetail ? <div className="grid grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:grid-cols-4"><Button size="sm" variant="secondary" onClick={() => { const unit = unitDetail; setUnitDetailId(""); openUnitEditor(unit); }} disabled={Boolean(selected?.property.archivedAt)}><Pencil className="mr-1.5 h-4 w-4" />Edit unit</Button><Button size="sm" variant="secondary" onClick={() => openDashboardQuickAddForScope?.(selected.property.id, unitDetail.name)} disabled={Boolean(selected?.property.archivedAt)}><ReceiptText className="mr-1.5 h-4 w-4" />Transaction</Button><Button size="sm" variant="secondary" onClick={() => openUnitWorkspace("maintenance")} disabled={Boolean(selected?.property.archivedAt)}><Wrench className="mr-1.5 h-4 w-4" />Maintenance</Button><Button size="sm" variant="secondary" onClick={() => openDocumentImportPicker?.({ propertyId: selected.property.id, unit: unitDetail.name, tags: "unit" })} disabled={Boolean(selected?.property.archivedAt)}><FileText className="mr-1.5 h-4 w-4" />Document</Button></div> : null}
         </div>
-      </Dialog>
+      </RecordDetailPanel>
 
-      <Dialog open={unitEditorOpen} onOpenChange={setUnitEditorOpen}>
+      <Dialog draft={unitDraft} open={unitEditorOpen} onOpenChange={setUnitEditorOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{unitDraft.id ? "Manage unit" : "Add unit"}</DialogTitle><div className="text-sm text-slate-500">{unitDraft.id ? "Update occupancy status or remove an unused unit." : `Add a unit to ${selected?.property.name || "this property"}.`}</div></DialogHeader>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -742,7 +743,7 @@ export function PropertiesWorkspace(props) {
           {unitDraft.id && unitLinkSummary.total > 0 ? <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">The unit name and delete action are locked because {unitLinkSummary.total} linked record{unitLinkSummary.total === 1 ? " exists" : "s exist"}. Lease, transaction, document, maintenance, asset, occupancy, and recurring history stay attached to the original unit name.</div> : null}
           <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
             <div>{unitDraft.id ? <Button variant="secondary" className="text-rose-700" onClick={deleteUnit} disabled={!canDeleteRecords || unitLinkSummary.total > 0}><Trash2 className="mr-2 h-4 w-4" />Delete unit</Button> : null}</div>
-            <div className="flex gap-2"><Button variant="secondary" onClick={() => setUnitEditorOpen(false)}>Cancel</Button><Button onClick={saveUnit} disabled={!canCreateEditRecords || !unitDraft.name.trim() || duplicateUnitName}>{unitDraft.id ? "Save unit" : "Add unit"}</Button></div>
+            <div className="flex gap-2"><DialogClose variant="secondary">Cancel</DialogClose><Button onClick={saveUnit} disabled={!canCreateEditRecords || !unitDraft.name.trim() || duplicateUnitName}>{unitDraft.id ? "Save unit" : "Add unit"}</Button></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -755,8 +756,8 @@ export function PropertiesWorkspace(props) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-3xl">
+      <RecordDetailPanel className="max-w-3xl" draft={editDraft} open={editOpen} onOpenChange={setEditOpen}>
+
           <DialogHeader><DialogTitle>Edit property</DialogTitle><div className="text-sm text-slate-500">Update the core record. Valuation history and supporting documents remain under Manage records.</div></DialogHeader>
           {editDraft ? <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="text-xs font-medium text-slate-600">Name<Input className="mt-1" value={editDraft.name} onChange={(event) => setEditDraft({ ...editDraft, name: event.target.value })} /></label>
@@ -767,11 +768,10 @@ export function PropertiesWorkspace(props) {
             <label className="text-xs font-medium text-slate-600">Land value<Input className="mt-1" type="number" value={editDraft.landValue} onChange={(event) => setEditDraft({ ...editDraft, landValue: event.target.value })} /></label>
             <label className="text-xs font-medium text-slate-600">Manual value basis<Input className="mt-1" type="number" value={editDraft.currentValue} onChange={(event) => setEditDraft({ ...editDraft, currentValue: event.target.value })} /><span className="mt-1 block text-[11px] font-normal text-slate-500">Fallback support used when no valuation history exists.</span></label>
           </div> : null}
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-2"><Button variant="secondary" className="text-amber-800" onClick={() => { setEditOpen(false); setArchiveConfirmOpen(true); }} disabled={!canCreateEditRecords}><Archive className="mr-2 h-4 w-4" />Archive property</Button><div className="flex gap-2"><Button variant="secondary" onClick={() => setEditOpen(false)}>Cancel</Button><Button onClick={saveEdit} disabled={!editDraft?.name.trim() || !editDraft?.address.trim()}><CircleDollarSign className="mr-2 h-4 w-4" />Save property</Button></div></div>
-        </DialogContent>
-      </Dialog>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-2"><Button variant="secondary" className="text-amber-800" onClick={() => { setEditOpen(false); setArchiveConfirmOpen(true); }} disabled={!canCreateEditRecords}><Archive className="mr-2 h-4 w-4" />Archive property</Button><div className="flex gap-2"><DialogClose variant="secondary">Cancel</DialogClose><Button onClick={saveEdit} disabled={!editDraft?.name.trim() || !editDraft?.address.trim()}><CircleDollarSign className="mr-2 h-4 w-4" />Save property</Button></div></div>
+        </RecordDetailPanel>
 
-      <Dialog open={photoEditorOpen} onOpenChange={setPhotoEditorOpen}>
+      <Dialog draft={photoDraft} open={photoEditorOpen} onOpenChange={setPhotoEditorOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Photo details</DialogTitle><div className="text-sm text-slate-500">Add context so condition and system photos are useful later.</div></DialogHeader>
           {photoDraft ? <div className="mt-4 space-y-3">
@@ -780,7 +780,7 @@ export function PropertiesWorkspace(props) {
             <label className="block text-xs font-medium text-slate-600">Scope<Select value={photoDraft.unit} onValueChange={(value) => setPhotoDraft({ ...photoDraft, unit: value })}><SelectTrigger className="mt-1"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Shared">Shared property</SelectItem>{selected?.units.map((unit) => <SelectItem key={unit.id} value={unit.name}>{/^unit\b/i.test(unit.name) ? unit.name : `Unit ${unit.name}`}</SelectItem>)}</SelectContent></Select></label>
             <label className="block text-xs font-medium text-slate-600">Captured on<Input className="mt-1" type="date" value={photoDraft.capturedOn} onChange={(event) => setPhotoDraft({ ...photoDraft, capturedOn: event.target.value })} /></label>
           </div> : null}
-          <div className="mt-5 flex justify-end gap-2"><Button variant="secondary" onClick={() => setPhotoEditorOpen(false)}>Cancel</Button><Button onClick={savePhotoDetails} disabled={!photoDraft}>Save details</Button></div>
+          <div className="mt-5 flex justify-end gap-2"><DialogClose variant="secondary">Cancel</DialogClose><Button onClick={savePhotoDetails} disabled={!photoDraft}>Save details</Button></div>
         </DialogContent>
       </Dialog>
 

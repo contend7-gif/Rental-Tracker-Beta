@@ -1,7 +1,8 @@
 import type { Frequency, Lease, Loan, LoanPayment, RecurringDraft, RecurringTemplate, Transaction, Unit, UsePeriod } from "../models.ts";
 
+const usdFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 export function currency(n: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n || 0);
+  return usdFormatter.format(n || 0);
 }
 
 export function toPctDisplay(n: number) {

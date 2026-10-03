@@ -1,5 +1,5 @@
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { useState } from "react";
 import { leaseExtensionCoverageLabel } from "../../domain/leaseExtensions.ts";
@@ -30,7 +30,7 @@ export function LeaseExtensionDialog({
   const previewExtension = preview?.extension;
   const outstanding = previewExtension ? Math.max(0, Number(previewExtension.rentAmount || 0) - Number(previewExtension.amountPaid || 0)) : 0;
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+    <Dialog closeDisabled={saving} draft={draft} open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl rounded-xl border bg-white shadow-lg">
         <DialogHeader>
           <DialogTitle>Extend lease â€” {lease.tenantName || lease.unit}</DialogTitle>
@@ -80,10 +80,10 @@ export function LeaseExtensionDialog({
             </div>
           )}
         </div>
-        {(lease.extensionRevisions || []).length > 0 && <details className="text-xs"><summary>Correction history ({lease.extensionRevisions.length})</summary>{lease.extensionRevisions.map((revision, index) => <p key={index}>{revision.recordedAt.slice(0, 10)}: {leaseExtensionCoverageLabel(revision.extension)}, rent {currency(revision.extension.rentAmount)}, received {currency(revision.extension.amountPaid)} on {revision.extension.paymentReceivedDate || "—"}</p>)}</details>}
+        {(lease.extensionRevisions || []).length > 0 && <details className="text-xs"><summary>Correction history ({lease.extensionRevisions.length})</summary>{lease.extensionRevisions.map((revision, index) => <p key={index}>{revision.recordedAt.slice(0, 10)}: {leaseExtensionCoverageLabel(revision.extension)}, rent {currency(revision.extension.rentAmount)}, received {currency(revision.extension.amountPaid)} on {revision.extension.paymentReceivedDate || "â€”"}</p>)}</details>}
         <div className="flex justify-end gap-2 border-t pt-3">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={async () => { setSaving(true); try { await onSave(); } finally { setSaving(false); } }} disabled={saving || !preview?.ok}>{saving ? "Saving to desktop…" : "Save extension"}</Button>
+          <DialogClose variant="secondary" disabled={saving}>Cancel</DialogClose>
+          <Button onClick={async () => { setSaving(true); try { await onSave(); } finally { setSaving(false); } }} disabled={saving || !preview?.ok}>{saving ? "Saving to desktopâ€¦" : "Save extension"}</Button>
         </div>
       </DialogContent>
     </Dialog>

@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { DraftRecoveryControls, useTransactionDraftGuard } from "../shared/DraftRecovery.jsx";
+import React, { useEffect, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -134,6 +135,35 @@ export function QuickAddWorkspace({
   transactions = [],
   getUnitStatusForDate,
 }) {
+  const draftKey = `transaction:${editingTxnId || "new"}`;
+  const guard = useTransactionDraftGuard({ draftKey, draft: form, clearForm: clearTransactionForm });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const savingLock = useRef(false);
+  const lastSaveMode = useRef(false);
+  const keyboardSave = useRef(null);
+  keyboardSave.current = () => { if (!saveDisabled && !saving) submit(false); };
+  useEffect(() => {
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== "s" || document.querySelector("dialog[open]")) return;
+      event.preventDefault();
+      keyboardSave.current?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const submit = async (keepOpen) => {
+    if (savingLock.current) return;
+    savingLock.current = true;
+    lastSaveMode.current = keepOpen;
+    setSaving(true);
+    setSaveError("");
+    try {
+      const result = await guard.runSave(() => saveTransaction(keepOpen));
+      if (result === false) setSaveError("Not saved. Review the required fields, then retry.");
+    } catch { setSaveError("The transaction could not be completed. Check the ledger before retrying."); }
+    finally { savingLock.current = false; setSaving(false); }
+  };
   const [ownerUseOpen, setOwnerUseOpen] = useState(false);
   const [servicePeriodOpen, setServicePeriodOpen] = useState(false);
   const [recurringManagerOpen, setRecurringManagerOpen] = useState(false);
@@ -365,7 +395,11 @@ export function QuickAddWorkspace({
   };
 
   return (
-    <div className="space-y-3">
+    <div onChangeCapture={guard.markEdited} className="space-y-3">
+      {guard.prompt}
+      {saving && <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm">Saving transaction…</p>}
+      {saveError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm"><p>{saveError}</p><Button size="sm" variant="secondary" disabled={saving} onClick={() => submit(lastSaveMode.current)}>Retry save</Button></div>}
+      <DraftRecoveryControls draftKey={draftKey} draft={form} onRestore={(saved) => { guard.markEdited(); setForm({ ...form, ...saved }); setRentAmountTouched(true); }} />
       <div className="space-y-3">
         {editingTxnId ? (
           <div className="rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-2 text-sm font-medium text-blue-900">
@@ -382,7 +416,7 @@ export function QuickAddWorkspace({
                   ? activeTone
                   : "border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50/40"
               }`}
-              onClick={() => applyPreset(key)}
+              onClick={() => { guard.markEdited(); applyPreset(key); }}
             >
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${active ? activeTone : tone}`}>
                 <Icon className="h-4 w-4" aria-hidden="true" />
@@ -749,9 +783,9 @@ export function QuickAddWorkspace({
               ) : null}
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                 <div className="flex flex-wrap gap-2">
-                  <Button onClick={() => saveTransaction(false)} disabled={saveDisabled}>{pendingDocumentExpenseSource?.documentId ? "Save transaction and attach document" : "Save transaction"}</Button>
-                  <Button variant="secondary" onClick={() => saveTransaction(true)} disabled={saveDisabled}>{pendingDocumentExpenseSource?.nextDocumentId ? "Save, attach + next bill" : "Save + add next"}</Button>
-                  <Button variant="secondary" onClick={clearTransactionForm} disabled={properties.length === 0}>Clear form</Button>
+                  <Button aria-keyshortcuts="Control+s Meta+s" title="Save transaction (Ctrl+S)" onClick={() => submit(false)} disabled={saveDisabled || saving}>{pendingDocumentExpenseSource?.documentId ? "Save transaction and attach document" : "Save transaction"}</Button>
+                  <Button variant="secondary" onClick={() => submit(true)} disabled={saveDisabled || saving}>{pendingDocumentExpenseSource?.nextDocumentId ? "Save, attach + next bill" : "Save + add next"}</Button>
+                  <Button variant="secondary" onClick={() => { guard.clear(); setSaveError(""); }} disabled={properties.length === 0 || saving}>Clear form</Button>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
                   {!amountEntered

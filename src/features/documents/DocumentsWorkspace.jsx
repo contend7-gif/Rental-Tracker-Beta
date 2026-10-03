@@ -1,3 +1,4 @@
+import { SavedViews } from "../shared/SavedViews.jsx";
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
@@ -804,9 +805,10 @@ export function DocumentsWorkspace({
         <div className={WORKSPACE_FILTER_PANEL_CLASS}>
           {documentPage.pageCount > 1 && <p className="mb-2 text-xs text-slate-500">Bulk actions use all files matching the Search and Show filters, across every page.</p>}
           <div className="grid gap-2 md:grid-cols-4">
+            <SavedViews viewKey="documents" filters={{ search: documentSearch, status: documentStatusFilter, sort: documentSort, tab: documentsTab, subview: documentSubview, group: documentGroupMode }} onApply={(saved) => { setDocumentSearch(String(saved.search || "")); setDocumentStatusFilter(saved.status || "all"); setDocumentSort(saved.sort || "uploaded_desc"); setDocumentsTab(saved.tab || "inbox"); setDocumentSubview(saved.subview || "all"); setDocumentGroupMode(saved.group || "none"); }} />
             <div>
               <Label className="text-xs text-slate-600">Search</Label>
-              <Input className="mt-1" placeholder="Search files, tags, extracted text, tenant, vendor, work order, property, or unit" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} />
+              <Input aria-label="Search documents" className="mt-1" placeholder="Search files, tags, extracted text, tenant, vendor, work order, property, or unit" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} />
             </div>
             <div>
               <Label className="text-xs text-slate-600">Show</Label>

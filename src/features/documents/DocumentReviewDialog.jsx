@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import { Eye, FileWarning, Link2, Sparkles, X } from "lucide-react";
+import { RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
+import { useEffect, useMemo, useState } from "react";
+import { FileWarning, Link2, Sparkles, X } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { DialogAction, DialogClose, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
@@ -19,50 +20,103 @@ import {
 } from "./documentPresentation.js";
 import { sortDocumentAttachOptions } from "./documentWorkflow.js";
 
-import { getDocumentPreviewKind } from "./documentPresentation.js";
 
-function DocumentInlinePreview({ document, hasIndexedText, openDocumentPreview }) {
-  const previewKind = getDocumentPreviewKind(document);
-  if (!document?.dataUrl) {
-    return (
-      <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-        <div className="font-medium text-slate-800">Preview not loaded</div>
-        <div className="mt-1 text-xs">Try opening the saved file. If it cannot be read, the app will show the reason.</div>
-        <Button size="sm" variant="secondary" className="mt-2" onClick={() => openDocumentPreview(document)}>View file</Button>
-      </div>
-    );
-  }
-  if (previewKind === "image") {
-    return (
-      <button type="button" className="block w-full rounded-lg border border-slate-200 bg-slate-50 p-2 text-left" onClick={() => openDocumentPreview(document)}>
-        <img src={document.dataUrl} alt={document.name || "Document preview"} className="max-h-72 w-full rounded object-contain" />
-        <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-teal-700"><Eye className="h-3.5 w-3.5" />Open full preview</span>
-      </button>
-    );
-  }
+function ReviewSection({ children, className = "", defaultOpen = false, title }) {
+  const [opened, setOpened] = useState(defaultOpen);
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-      <div className="font-medium text-slate-800">{previewKind === "unsupported" ? "Preview externally" : "Preview available"}</div>
-      <div className="mt-1 text-xs">
-        {previewKind === "unsupported"
-          ? "This file type is saved, but inline preview is not supported here."
-          : hasIndexedText
-            ? "Text has been extracted. Open the full preview for the document frame."
-            : "Open the full preview to inspect this file."}
-      </div>
-      <Button size="sm" variant="secondary" className="mt-2" onClick={() => openDocumentPreview(document)}>
-        View file
-      </Button>
-    </div>
+    <details onToggle={(event) => { if (event.currentTarget.open) setOpened(true); }} open={defaultOpen} className={`rounded-lg border border-slate-200 bg-white p-3 ${className}`}>
+      <summary className="cursor-pointer text-sm font-semibold text-slate-900">{title}</summary>
+      <div className="mt-3">{opened ? children : null}</div>
+    </details>
   );
 }
 
-function ReviewSection({ children, className = "", defaultOpen = false, title }) {
+function ManualAttachmentPicker({ document, leases, transactions, workOrders, applyDocumentLinkSuggestion, documentLinkSuggestionKindLabel }) {
+  const [manualLinkKind, setManualLinkKind] = useState("transaction");
+  const [manualLinkId, setManualLinkId] = useState("");
+  const manualLinkOptions = useMemo(() => {
+    if (manualLinkKind === "lease") {
+      return sortDocumentAttachOptions(document, leases.map((lease) => ({
+        id: lease.id,
+        label: `${lease.tenantName || "Tenant"} | ${formatDocumentUnitLabel(lease.unit || "Shared")}`,
+        propertyId: lease.propertyId,
+        unit: lease.unit,
+        tenantName: lease.tenantName,
+        startDate: lease.startDate,
+      })));
+    }
+    if (manualLinkKind === "workOrder") {
+      return sortDocumentAttachOptions(document, workOrders.map((workOrder) => ({
+        id: workOrder.id,
+        label: `${workOrder.title || "Work order"} | ${formatDocumentUnitLabel(workOrder.unit || "Shared")}${workOrder.reportedOn ? ` | ${workOrder.reportedOn}` : ""}`,
+        propertyId: workOrder.propertyId,
+        unit: workOrder.unit,
+        title: workOrder.title,
+        vendor: workOrder.vendorName || workOrder.vendor,
+        reportedOn: workOrder.reportedOn,
+      })));
+    }
+    return sortDocumentAttachOptions(
+      document,
+      transactions.map((transaction) => ({
+        id: transaction.id,
+        label: `${transaction.date || "No date"} | ${transaction.vendor || transaction.category || transaction.description || "Transaction"}${transaction.unit ? ` | ${formatDocumentUnitLabel(transaction.unit)}` : ""}`,
+        propertyId: transaction.propertyId,
+        unit: transaction.unit,
+        date: transaction.date,
+        vendor: transaction.vendor,
+        description: transaction.description,
+      })),
+    ).slice(0, 300);
+  }, [document, leases, transactions, workOrders, manualLinkKind]);
+  const selectedManualLink = manualLinkOptions.find((option) => option.id === manualLinkId) || null;
+  const applyManualLink = () => {
+    if (!selectedManualLink) return;
+    applyDocumentLinkSuggestion(document, {
+      kind: manualLinkKind,
+      id: selectedManualLink.id,
+      label: selectedManualLink.label,
+      propertyId: selectedManualLink.propertyId,
+      unit: selectedManualLink.unit,
+      confidence: "high",
+      sources: ["context"],
+    });
+  };
   return (
-    <details open={defaultOpen} className={`rounded-lg border border-slate-200 bg-white p-3 ${className}`}>
-      <summary className="cursor-pointer text-sm font-semibold text-slate-900">{title}</summary>
-      <div className="mt-3">{children}</div>
-    </details>
+            <div className="rounded border border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Attach later</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-[11rem_1fr_auto]">
+                <Select
+                  value={manualLinkKind}
+                  onValueChange={(value) => {
+                    setManualLinkKind(value);
+                    setManualLinkId("");
+                  }}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="transaction">Transaction</SelectItem>
+                    <SelectItem value="lease">Lease</SelectItem>
+                    <SelectItem value="workOrder">Work order</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={manualLinkId || "__none__"} onValueChange={(value) => setManualLinkId(value === "__none__" ? "" : value)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Choose {documentLinkSuggestionKindLabel(manualLinkKind).toLowerCase()}</SelectItem>
+                    {manualLinkOptions.map((option) => (
+                      <SelectItem key={`${manualLinkKind}-${option.id}`} value={option.id}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" onClick={applyManualLink} disabled={!selectedManualLink}>
+                  Attach
+                </Button>
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Use this when the document was saved before the related record existed or before OCR found the right match.
+              </div>
+            </div>
   );
 }
 
@@ -182,9 +236,9 @@ function DocumentFixPanel({
       ) : null}
 
       {document?.transactionId ? (
-        <Button size="sm" variant="secondary" className="w-full" onClick={() => openDocumentLinkedRecord(document, "transaction")}>
+        <DialogAction size="sm" variant="secondary" className="w-full" onProceed={() => openDocumentLinkedRecord(document, "transaction")}>
           Open linked transaction
-        </Button>
+        </DialogAction>
       ) : null}
     </aside>
   );
@@ -247,21 +301,20 @@ export function DocumentReviewDialog({
   workOrders = [],
 }) {
   const currentExtractedFields = document ? getDocumentExtractedFields(document) : null;
-  const [manualLinkKind, setManualLinkKind] = useState("transaction");
-  const [manualLinkId, setManualLinkId] = useState("");
   const [ocrCorrectionDraft, setOcrCorrectionDraft] = useState({ vendorName: "", totalAmount: "", servicePeriodStart: "", servicePeriodEnd: "", unit: "Shared" });
+  const [savedCorrections, setSavedCorrections] = useState("");
   const [textEditorOpen, setTextEditorOpen] = useState(false);
   useEffect(() => {
-    setManualLinkKind("transaction");
-    setManualLinkId("");
     setTextEditorOpen(false);
-    setOcrCorrectionDraft({
+    const initialCorrections = {
       vendorName: currentExtractedFields?.vendorName || "",
       totalAmount: currentExtractedFields?.totalAmount != null ? String(currentExtractedFields.totalAmount) : "",
       servicePeriodStart: currentExtractedFields?.servicePeriodStart || "",
       servicePeriodEnd: currentExtractedFields?.servicePeriodEnd || "",
       unit: currentExtractedFields?.unit || document?.unit || "Shared",
-    });
+    };
+    setOcrCorrectionDraft(initialCorrections);
+    setSavedCorrections(JSON.stringify(initialCorrections));
   }, [document?.id]);
   if (!document) return null;
 
@@ -348,54 +401,6 @@ export function DocumentReviewDialog({
     extractedFields?.unit,
     ...units.filter((unit) => !document.propertyId || unit.propertyId === document.propertyId).map((unit) => unit.name),
   ].map((unit) => String(unit || "").trim()).filter(Boolean)));
-  const manualLinkOptions = (() => {
-    if (manualLinkKind === "lease") {
-      return sortDocumentAttachOptions(document, leases.map((lease) => ({
-        id: lease.id,
-        label: `${lease.tenantName || "Tenant"} | ${formatDocumentUnitLabel(lease.unit || "Shared")}`,
-        propertyId: lease.propertyId,
-        unit: lease.unit,
-        tenantName: lease.tenantName,
-        startDate: lease.startDate,
-      })));
-    }
-    if (manualLinkKind === "workOrder") {
-      return sortDocumentAttachOptions(document, workOrders.map((workOrder) => ({
-        id: workOrder.id,
-        label: `${workOrder.title || "Work order"} | ${formatDocumentUnitLabel(workOrder.unit || "Shared")}${workOrder.reportedOn ? ` | ${workOrder.reportedOn}` : ""}`,
-        propertyId: workOrder.propertyId,
-        unit: workOrder.unit,
-        title: workOrder.title,
-        vendor: workOrder.vendorName || workOrder.vendor,
-        reportedOn: workOrder.reportedOn,
-      })));
-    }
-    return sortDocumentAttachOptions(
-      document,
-      transactions.map((transaction) => ({
-        id: transaction.id,
-        label: `${transaction.date || "No date"} | ${transaction.vendor || transaction.category || transaction.description || "Transaction"}${transaction.unit ? ` | ${formatDocumentUnitLabel(transaction.unit)}` : ""}`,
-        propertyId: transaction.propertyId,
-        unit: transaction.unit,
-        date: transaction.date,
-        vendor: transaction.vendor,
-        description: transaction.description,
-      })),
-    ).slice(0, 300);
-  })();
-  const selectedManualLink = manualLinkOptions.find((option) => option.id === manualLinkId) || null;
-  const applyManualLink = () => {
-    if (!selectedManualLink) return;
-    applyDocumentLinkSuggestion(document, {
-      kind: manualLinkKind,
-      id: selectedManualLink.id,
-      label: selectedManualLink.label,
-      propertyId: selectedManualLink.propertyId,
-      unit: selectedManualLink.unit,
-      confidence: "high",
-      sources: ["context"],
-    });
-  };
   const safeTransactionLinkSuggestion = suggestedLinks.find((suggestion) => suggestion.kind === "transaction" && suggestion.confidence === "high") || null;
   const focusExtractedTextEditor = () => {
     setTextEditorOpen(true);
@@ -428,6 +433,7 @@ export function DocumentReviewDialog({
         title: "Review expense draft",
         body: `${expenseSuggestion.category}${expenseSuggestion.amount != null ? ` | ${currency(expenseSuggestion.amount)}` : ""}${expenseSuggestion.date ? ` | ${expenseSuggestion.date}` : ""}. Saving the reviewed transaction attaches this document automatically.`,
         button: "Review bill and auto-attach",
+        leavesRecord: true,
         onClick: () => openExpenseDraftFromDocument(document, expenseSuggestion),
       }
     : workOrderSuggestion
@@ -435,6 +441,7 @@ export function DocumentReviewDialog({
           title: "Review work order draft",
           body: `${workOrderSuggestion.title}${workOrderSuggestion.estimatedCost != null ? ` | ${currency(workOrderSuggestion.estimatedCost)}` : ""}`,
           button: "Review work order draft",
+          leavesRecord: true,
           onClick: () => openWorkOrderDraftFromDocument(document, workOrderSuggestion),
         }
       : safeLinkSuggestion
@@ -457,6 +464,7 @@ export function DocumentReviewDialog({
                 title: "Linked record",
                 body: getDocumentLinkedSummary?.(document) || "This document is already attached to a rental record.",
                 button: "View linked record",
+                leavesRecord: true,
                 onClick: () => openDocumentLinkedRecord(document, currentLinks[0]?.kind || "transaction"),
               }
             : {
@@ -466,23 +474,23 @@ export function DocumentReviewDialog({
                 onClick: supportingOnly ? undefined : () => markSupportingOnly(document),
               };
 
+  const RecommendedActionButton = recommendedAction.leavesRecord ? DialogAction : Button;
+  const recommendedActionProps = recommendedAction.leavesRecord ? { onProceed: recommendedAction.onClick } : { onClick: recommendedAction.onClick };
   return (
-    <Dialog open={Boolean(document)} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-4xl">
+    <RecordDetailPanel onDiscardChanges={() => setOcrCorrectionDraft(JSON.parse(savedCorrections))} dirty={Boolean(savedCorrections && savedCorrections !== JSON.stringify(ocrCorrectionDraft))} open={Boolean(document)} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }} className="flex flex-col overflow-hidden">
         <DialogHeader className="-mx-6 -mt-6 shrink-0 border-b border-slate-200 bg-white px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <DialogTitle className="min-w-0 truncate pr-2">{document.name}</DialogTitle>
-            <Button
+            <DialogClose
               type="button"
               size="sm"
               variant="secondary"
               className="h-8 w-8 shrink-0 p-0"
-              onClick={onClose}
               aria-label="Close document review"
               title="Close"
             >
               <X className="h-4 w-4" />
-            </Button>
+            </DialogClose>
           </div>
         </DialogHeader>
 
@@ -497,7 +505,7 @@ export function DocumentReviewDialog({
             </div>
             {hasIndexedText ? <Badge variant="secondary">Text extracted</Badge> : <Badge variant="outline">No text yet</Badge>}
           </div>
-          <DocumentInlinePreview document={document} hasIndexedText={hasIndexedText} openDocumentPreview={openDocumentPreview} />
+          <RecordFilePreview document={document} onOpenFull={openDocumentPreview} />
         </section>
 
         {qualityWarnings.length > 0 ? (
@@ -540,9 +548,9 @@ export function DocumentReviewDialog({
                   Use these when the receipt is already attached and the ledger record is the source you trust.
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => openDocumentLinkedRecord(document, "transaction")}>
+                  <DialogAction size="sm" variant="secondary" onProceed={() => openDocumentLinkedRecord(document, "transaction")}>
                     Open linked transaction
-                  </Button>
+                  </DialogAction>
                   <Button size="sm" variant="secondary" onClick={updateLinkedTransactionFromOcr}>
                     Update transaction from OCR
                   </Button>
@@ -563,13 +571,13 @@ export function DocumentReviewDialog({
               <div className="mt-1 text-sm text-slate-700">{recommendedAction.body}</div>
             </div>
             {recommendedAction.onClick ? (
-              <Button
+              <RecommendedActionButton
                 size="sm"
-                onClick={recommendedAction.onClick}
+                {...recommendedActionProps}
                 disabled={recommendedAction.disabled || (qualityWarnings.length > 0 && (safeLinkSuggestion || safeTagSuggestions.length > 0))}
               >
                 {qualityWarnings.length > 0 && (safeLinkSuggestion || safeTagSuggestions.length > 0) ? "Review flagged changes" : recommendedAction.button}
-              </Button>
+              </RecommendedActionButton>
             ) : null}
           </div>
         </section>
@@ -658,7 +666,7 @@ export function DocumentReviewDialog({
                 </div>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => openExpenseDraftFromDocument(document, expenseSuggestion)}>Save transaction and attach document</Button>
+                <DialogAction size="sm" onProceed={() => openExpenseDraftFromDocument(document, expenseSuggestion)}>Save transaction and attach document</DialogAction>
                 {document.expenseReviewDismissedAt ? (
                   <Button size="sm" variant="secondary" onClick={() => reopenDocumentExpenseReview(document)}>Reopen review</Button>
                 ) : null}
@@ -676,7 +684,7 @@ export function DocumentReviewDialog({
               <div className="mt-2">{workOrderSuggestion.title}{workOrderSuggestion.estimatedCost != null ? ` | ${currency(workOrderSuggestion.estimatedCost)}` : ""}</div>
               <div className="mt-1 text-xs text-slate-600">{workOrderSuggestionReasonSummary(workOrderSuggestion)}</div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => openWorkOrderDraftFromDocument(document, workOrderSuggestion)}>Review work order draft</Button>
+                <DialogAction size="sm" onProceed={() => openWorkOrderDraftFromDocument(document, workOrderSuggestion)}>Review work order draft</DialogAction>
                 {document.workOrderReviewDismissedAt ? (
                   <Button size="sm" variant="secondary" onClick={() => reopenDocumentWorkOrderReview(document)}>Reopen review</Button>
                 ) : null}
@@ -739,7 +747,7 @@ export function DocumentReviewDialog({
             </div>
           </div>
           <div className="mt-3 flex justify-end">
-            <Button size="sm" onClick={() => saveDocumentOcrFieldCorrections(document, ocrCorrectionDraft)}>
+            <Button size="sm" onClick={() => { if (saveDocumentOcrFieldCorrections(document, ocrCorrectionDraft)) setSavedCorrections(JSON.stringify(ocrCorrectionDraft)); }}>
               Save corrections
             </Button>
           </div>
@@ -788,9 +796,9 @@ export function DocumentReviewDialog({
                   {!link.removable ? <div className="text-xs text-slate-500">Remove the linked transaction to change this implied work-order link.</div> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="secondary" onClick={() => openDocumentLinkedRecord(link.related ? { ...document, transactionId: link.id } : document, link.kind)}>
+                  <DialogAction size="sm" variant="secondary" onProceed={() => openDocumentLinkedRecord(link.related ? { ...document, transactionId: link.id } : document, link.kind)}>
                     View
-                  </Button>
+                  </DialogAction>
                   {link.removable ? (
                     <Button size="sm" variant="secondary" onClick={() => removeDocumentRecordLink(document, link.kind, link.related ? { relatedTransactionId: link.id } : undefined)}>
                       Remove link
@@ -804,40 +812,9 @@ export function DocumentReviewDialog({
                 No likely record match yet. Add extracted text or use suggestions when they appear.
               </div>
             ) : null}
-            <div className="rounded border border-slate-200 bg-slate-50 px-3 py-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-slate-500">Attach later</div>
-              <div className="mt-2 grid gap-2 md:grid-cols-[11rem_1fr_auto]">
-                <Select
-                  value={manualLinkKind}
-                  onValueChange={(value) => {
-                    setManualLinkKind(value);
-                    setManualLinkId("");
-                  }}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="transaction">Transaction</SelectItem>
-                    <SelectItem value="lease">Lease</SelectItem>
-                    <SelectItem value="workOrder">Work order</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={manualLinkId || "__none__"} onValueChange={(value) => setManualLinkId(value === "__none__" ? "" : value)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Choose {documentLinkSuggestionKindLabel(manualLinkKind).toLowerCase()}</SelectItem>
-                    {manualLinkOptions.map((option) => (
-                      <SelectItem key={`${manualLinkKind}-${option.id}`} value={option.id}>{option.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" onClick={applyManualLink} disabled={!selectedManualLink}>
-                  Attach
-                </Button>
-              </div>
-              <div className="mt-2 text-xs text-slate-500">
-                Use this when the document was saved before the related record existed or before OCR found the right match.
-              </div>
-            </div>
+            <ReviewSection title="Attach manually">
+              <ManualAttachmentPicker key={document.id} {...{ document, leases, transactions, workOrders, applyDocumentLinkSuggestion, documentLinkSuggestionKindLabel }} />
+            </ReviewSection>
           </div>
         </ReviewSection>
 
@@ -917,16 +894,15 @@ export function DocumentReviewDialog({
         <div className="-mx-6 -mb-6 shrink-0 border-t border-slate-200 bg-white px-6 py-3">
           <div className="flex flex-wrap justify-end gap-2">
           {nextDocumentName ? (
-            <Button type="button" onClick={onNextDocument}>
+            <DialogAction type="button" onProceed={onNextDocument}>
               Next inbox item
-            </Button>
+            </DialogAction>
           ) : null}
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <DialogClose type="button" variant="secondary">
             Close
-          </Button>
+          </DialogClose>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </RecordDetailPanel>
   );
 }

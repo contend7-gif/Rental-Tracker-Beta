@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
 import { Archive, CalendarRange, CheckCircle2, FilePlus2, Hammer, Landmark, Trash2 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -184,6 +186,8 @@ export function TransactionDetailsDialog({
   view,
   confirmAndDeleteDocument,
 }) {
+  const [selectedFileId, setSelectedFileId] = useState("");
+  const previewFile = selectedTransactionDocuments.find((file) => file.id === selectedFileId) || selectedTransactionDocuments[0];
   const selectedIssueKeys = new Set((selectedTxnReview?.issues || []).map((issue) => issue.key));
   const selectedTxnIsTaxRelevant = selectedTxn ? isTaxReviewRelevantTransaction(selectedTxn) : false;
   const selectedTxnDocumentCount = selectedTransactionDocuments?.length || 0;
@@ -246,17 +250,18 @@ export function TransactionDetailsDialog({
   };
 
   return (
-    <Dialog
+    <RecordDetailPanel
       open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen) setSelectedTxn(null);
       }}
     >
-      <DialogContent className={dialogContentLgClass}>
+
         {!selectedTxn ? (
           <DialogLoadFallback message="We could not load this transaction. Close and try opening it again." onClose={() => setSelectedTxn(null)} />
         ) : (
-          <>
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,.9fr)]">
+          <section className="min-w-0">
             <DialogHeader>
               <DialogTitle>{selectedTxn.description}</DialogTitle>
             </DialogHeader>
@@ -374,7 +379,7 @@ export function TransactionDetailsDialog({
                 <div key={document.id} className="mt-2 flex items-center justify-between rounded border p-2 text-sm">
                   <span>{document.name}</span>
                   <div className="flex items-center gap-2">
-                    <Button size="sm" variant="secondary" onClick={() => openDocumentPreview(document)}>View</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setSelectedFileId(document.id)}>Preview</Button>
                     <Button size="sm" variant="destructive" onClick={() => confirmAndDeleteDocument(document)}>Remove</Button>
                   </div>
                 </div>
@@ -416,10 +421,11 @@ export function TransactionDetailsDialog({
               </div>
             )}
             <div className="mt-2 text-xs text-slate-500">Void keeps a historical record. Delete permanently removes the transaction.</div>
-          </>
+          </section>
+          <aside className="min-w-0 lg:sticky lg:top-0 lg:self-start"><RecordFilePreview document={previewFile} onOpenFull={openDocumentPreview} /></aside>
+          </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </RecordDetailPanel>
   );
 }
 
