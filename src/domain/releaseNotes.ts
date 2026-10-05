@@ -8,7 +8,7 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
-    version: "1.9.8",
+    version: "1.9.9",
     releaseDate: "2026-10-04",
     title: "A clearer, more colorful property workspace",
     summary: "Use a compact Home overview, focused record panels, and consistent workspace controls with clearer color, card borders, and next actions.",

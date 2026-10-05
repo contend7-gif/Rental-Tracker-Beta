@@ -6,7 +6,7 @@ Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, 
 
 ## Fresh App Flow
 
-### v1.9.8 refresh checks
+### v1.9.9 refresh checks
 
 - At 1920×1200 and the smaller checked laptop sizes, confirm Home's bounded previews fit without scrolling; verify scope controls align with the header actions.
 - Confirm light-theme card outlines, header dividers, and balanced blue/lavender/cream accents remain readable; check dark theme and narrow-window navigation.

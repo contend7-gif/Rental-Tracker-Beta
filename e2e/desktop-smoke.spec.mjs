@@ -26,6 +26,10 @@ async function launchDesktopApp(profilePath) {
     },
   });
   const page = await electronApp.firstWindow();
+  // CI displays can clamp the native window below the desktop sidebar breakpoint.
+  // Start desktop workflows at a fixed size; responsive tests resize explicitly.
+  await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 960));
+  await page.setViewportSize({ width: 1440, height: 960 });
   page.on("pageerror", (error) => rendererErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") rendererErrors.push(message.text());
