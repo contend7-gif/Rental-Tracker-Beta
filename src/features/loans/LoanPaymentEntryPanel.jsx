@@ -79,8 +79,13 @@ export function LoanPaymentEntryPanel({
 
   useEffect(() => {
     if (!activeLoanValue || activeLoanValue === loanPaymentDraft.loanSelectorValue) return;
+    if (selectedOption?.value === activeLoanValue && String(selectedOption.loan.id ?? "") === String(loanPaymentDraft.loanId ?? "")) {
+      // Canonicalize the picker value without replacing an existing payment draft.
+      setLoanPaymentDraft((current) => ({ ...current, loanSelectorValue: activeLoanValue }));
+      return;
+    }
     selectLoan(activeLoanValue);
-  }, [activeLoanValue]);
+  }, [activeLoanValue, loanPaymentDraft.loanSelectorValue, loanPaymentDraft.loanId]);
 
   return (
     <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 md:grid-cols-3">

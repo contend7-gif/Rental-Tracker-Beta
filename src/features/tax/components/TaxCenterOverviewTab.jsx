@@ -16,7 +16,7 @@ import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { readinessCounts, supportBuckets as buildSupportBuckets } from "../taxPresentation.js";
 
-const SUMMARY_TILE_CLASS = "rounded-lg border border-slate-200 bg-white px-3 py-3";
+const SUMMARY_TILE_CLASS = "rt-summary-stat rounded-lg border border-slate-200 bg-white px-3 py-3";
 const SECTION_CLASS = "rounded-xl border border-slate-200 bg-white";
 const SOFT_SECTION_CLASS = "rounded-xl border border-slate-200 bg-slate-50/70";
 const IRS_SCHEDULE_E_URL = "https://www.irs.gov/instructions/i1040se";
@@ -215,17 +215,17 @@ export function TaxCenterOverviewTab({
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_300px]">
       <div className="space-y-3">
-        <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+        <div className={`rounded-xl border p-4 ${hasOpenReviewWork || taxReportingSummary?.status === "preliminary" ? "border-amber-200 bg-amber-50/40" : "border-teal-200 bg-teal-50/40"}`}>
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_1.8fr]">
             <div className="flex min-w-0 gap-3">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-amber-200 bg-white text-amber-600">
-                <AlertTriangle className="h-6 w-6" />
+                {hasOpenReviewWork ? <AlertTriangle className="h-6 w-6" /> : <ClipboardCheck className="h-6 w-6 text-teal-700" />}
               </div>
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase text-slate-600">Tax package status</div>
                 <div className="mt-0.5 text-lg font-semibold leading-tight text-amber-700">{counts.packageStatus}</div>
                 <div className="mt-1 text-sm text-slate-600">
-                  {counts.blockingIssues > 0 ? "Resolve blocking issues to finalize your tax package." : "Review warnings before sending the package."}
+                  {counts.blockingIssues > 0 ? "Resolve blocking issues to finalize your tax package." : hasOpenReviewWork ? "Review warnings before sending the package." : "Review computed totals and handoff details before sending the package."}
                 </div>
                 {hasOpenReviewWork ? (
                   <Button size="sm" variant="secondary" className="mt-3 gap-2" onClick={() => navigateWithDashboardContext("review")}>
@@ -257,7 +257,7 @@ export function TaxCenterOverviewTab({
 
         <div className={`${SECTION_CLASS} p-4`}>
           <div className="text-base font-semibold text-slate-900">Schedule E summary (computed)</div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             <MetricTile label="Rental income" value={currency(totals.rentalIncome || 0)} helper={`${(details.rentalIncome || []).length} source rows`} tone="text-emerald-700" />
             <MetricTile label="Other income" value={currency(totals.otherIncome || 0)} helper={`${(details.otherIncome || []).length} source rows`} />
             <MetricTile label="Total expenses" value={currency(taxReportingSummary?.totalExpenses || 0)} helper={`${expenseRowCount} source rows`} tone="text-rose-700" />
@@ -362,6 +362,26 @@ export function TaxCenterOverviewTab({
       </div>
 
       <aside className="space-y-3">
+        <div className={`rounded-xl border border-teal-200 bg-teal-50/50 p-4`}>
+          <div className="font-semibold text-slate-900">Next best actions</div>
+          <div className="mt-3 space-y-3">
+            {nextActions.map((action, index) => (
+              <button key={action.key} type="button" className="flex w-full gap-3 rounded-lg text-left transition hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2" onClick={() => runAction(action.action)}>
+                <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-xs font-medium text-slate-700">{index + 1}</div>
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-slate-900">{action.title}</div>
+                  <div className="text-xs text-slate-500">{action.helper}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          {hasOpenReviewWork ? (
+            <button type="button" className="mt-4 flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-800" onClick={() => navigateWithDashboardContext("review")}>
+              View all open checks
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
         <div className={`${SOFT_SECTION_CLASS} p-4`}>
           <div className="text-base font-semibold text-slate-900">Readiness checklist</div>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -392,26 +412,7 @@ export function TaxCenterOverviewTab({
           </div>
         </div>
 
-        <div className={`${SOFT_SECTION_CLASS} p-4`}>
-          <div className="font-semibold text-slate-900">Next best actions</div>
-          <div className="mt-3 space-y-3">
-            {nextActions.map((action, index) => (
-              <button key={action.key} type="button" className="flex w-full gap-3 rounded-lg text-left transition hover:bg-white/80 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2" onClick={() => runAction(action.action)}>
-                <div className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-xs font-medium text-slate-700">{index + 1}</div>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium text-slate-900">{action.title}</div>
-                  <div className="text-xs text-slate-500">{action.helper}</div>
-                </div>
-              </button>
-            ))}
-          </div>
-          {hasOpenReviewWork ? (
-            <button type="button" className="mt-4 flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-800" onClick={() => navigateWithDashboardContext("review")}>
-              View all open checks
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          ) : null}
-        </div>
+
       </aside>
     </div>
   );

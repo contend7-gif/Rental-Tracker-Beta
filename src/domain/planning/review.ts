@@ -82,12 +82,17 @@ export function buildPlanningHealthSummary(args: {
   capitalTargets?: PlanningCapitalTarget[];
   goalStatus?: PlanningGoalStatus[];
   projectedCashFlow?: number;
+  horizonMonths?: number;
 }): PlanningHealthSummary {
   const factors: PlanningHealthFactor[] = [];
-  const projectedCashFlow = Number.isFinite(Number(args.projectedCashFlow))
+  const hasProjectedCashFlow = Number.isFinite(Number(args.projectedCashFlow));
+  const projectedCashFlow = hasProjectedCashFlow
     ? Number(args.projectedCashFlow || 0)
     : Number(args.summary.firstYearCashFlow || 0);
-  const avgMonthlyCashFlow = projectedCashFlow / 12;
+  const requestedMonths = Number(args.horizonMonths);
+  // The fallback is a first-year amount; only horizon totals use the selected period.
+  const cashFlowMonths = hasProjectedCashFlow && Number.isFinite(requestedMonths) && requestedMonths > 0 ? requestedMonths : 12;
+  const avgMonthlyCashFlow = projectedCashFlow / cashFlowMonths;
   const reserveMonths = Number(args.reserve.firstYearCoverageMonths || 0);
   const dscr = Number(args.summary.adjustedMonthlyDebtService || 0) > 0
     ? Number(args.summary.firstYearNetOperatingIncome || 0) / (Number(args.summary.adjustedMonthlyDebtService || 0) * 12)

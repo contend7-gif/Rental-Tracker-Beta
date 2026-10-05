@@ -10,7 +10,7 @@ import { PlanningInsightsTab } from "./PlanningInsightsTab.jsx";
 import { PlanningOverviewTab } from "./PlanningOverviewTab.jsx";
 import { PlanningRentTab } from "./PlanningRentTab.jsx";
 import { PlanningScenariosTab } from "./PlanningScenariosTab.jsx";
-import { PlanningView } from "./PlanningView.jsx";
+import { PlanningView, PlanningHorizonControl } from "./PlanningView.jsx";
 import { normalizePlanningScenarioEvents } from "./planningState.js";
 import { ResponsiveTableFrame } from "../shared/uiHelpers.jsx";
 import { selectableProperties } from "../../domain/propertyLifecycle.js";
@@ -187,6 +187,7 @@ export function PlanningWorkspace({
             <Badge variant="outline">Starts {todayIso}</Badge>
           </div>
           <div className="flex max-w-full flex-wrap items-center justify-end gap-2">
+            <PlanningHorizonControl assumptions={planningAssumptions} onAssumptionsChange={setPlanningAssumptions} />
             <Button size="sm" variant="secondary" className="gap-2" onClick={copyPlanningMemo}>
               <FileText className="h-4 w-4" aria-hidden="true" />
               Copy memo
@@ -217,49 +218,29 @@ export function PlanningWorkspace({
             Planning is property and portfolio level for now, so the current unit filter is ignored in this workspace.
           </div>
         )}
-        <Tabs value={activeToolTab ? "" : planningSubtab} onValueChange={setPrimaryPlanningTab} className="mt-3">
-          <TabsList className="h-auto w-full flex-wrap justify-start rounded-lg border border-slate-200 bg-white/80 p-1">
-            {PRIMARY_PLANNING_TABS.map((tab) => (
-              <TabsTrigger key={`planning-primary-${tab.key}`} value={tab.key}>{tab.label}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <div className="mt-3 grid gap-3 xl:grid-cols-[1fr_minmax(340px,520px)]">
-          <div className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-blue-100 bg-white/80 p-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">{planningSubtabGuide.title}</div>
-              <div className="mt-1 line-clamp-1 text-xs text-slate-500">{planningSubtabGuide.detail}</div>
-            </div>
-            <Badge variant="outline">{planningSubtabGuide.badge}</Badge>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white/80 p-1.5">
+          <Tabs value={activeToolTab ? "" : planningSubtab} onValueChange={setPrimaryPlanningTab}>
+            <TabsList className="h-auto flex-wrap justify-start !border-0 !bg-transparent !p-0">
+              {PRIMARY_PLANNING_TABS.map((tab) => (
+                <TabsTrigger key={`planning-primary-${tab.key}`} value={tab.key} className={planningSubtab === tab.key ? "!rounded-md !bg-teal-700 !px-3 !py-2 !text-white" : "!rounded-md !px-3 !py-2"}>{tab.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Planning tools">
+            {PLANNING_TOOL_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const selected = planningSubtab === tab.key;
+              return <button key={tab.key} type="button" aria-pressed={selected} title={tab.detail}
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-2 text-xs font-semibold transition focus-visible:outline-teal-600 ${selected ? "border-teal-700 bg-teal-700 text-white" : "border-transparent text-slate-600 hover:bg-slate-50 hover:text-teal-800"}`}
+                onClick={() => setPlanningSubtab(tab.key)}>
+                <Icon className="h-3.5 w-3.5" aria-hidden="true" />{tab.label}
+              </button>;
+            })}
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white/80 p-2">
-            <div className="mb-2 flex items-center justify-between gap-2 px-1">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Planning tools</div>
-              {activeToolTab ? <Badge variant="secondary">{activeToolTab.label}</Badge> : <Badge variant="outline">Optional</Badge>}
-            </div>
-            <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-              {PLANNING_TOOL_TABS.map((tab) => {
-                const Icon = tab.icon;
-                const selected = planningSubtab === tab.key;
-                return (
-                  <button
-                    key={`planning-tool-${tab.key}`}
-                    type="button"
-                    className={`flex min-h-[58px] items-start gap-2 rounded-md border p-2 text-left transition ${selected ? "border-teal-300 bg-teal-50 text-teal-950" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                    onClick={() => setPlanningSubtab(tab.key)}
-                  >
-                    <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${selected ? tab.tone : tab.tone}`}>
-                      <Icon className="h-4 w-4" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">{tab.label}</span>
-                      <span className="mt-0.5 block text-xs text-slate-500">{tab.detail}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1 py-1">
+          <p className="text-xs text-slate-500"><span className="font-semibold text-slate-700">{planningSubtabGuide.title}</span> · {planningSubtabGuide.detail}</p>
+          <Badge variant="outline">{planningSubtabGuide.badge}</Badge>
         </div>
         {planningSubtab === "scenarios" && (
           <PlanningScenariosTab

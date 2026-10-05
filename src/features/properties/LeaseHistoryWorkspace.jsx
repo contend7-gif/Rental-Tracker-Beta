@@ -1,33 +1,22 @@
 import React, { useMemo, useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
 import { Card, CardContent } from "../../components/ui/card";
-import {
-  CalendarClock, ChevronDown, CircleAlert, ClipboardCheck, CreditCard, FileText, History, House,
-  Play, Settings2, Users,
-} from "lucide-react";
-import { AuditReadinessBadge } from "../shared/AuditReadinessBadge.jsx";
-import { deriveLeaseRoll, groupLeaseCleanup, leaseRollCleanupLabel, leaseRollOccupantLabel, summarizeLeaseRoll } from "./leaseWorkspacePresentation.js";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "../../components/ui/dialog";
+import { ChevronDown, FileText, House, Play, Plus, Search, Settings2 } from "lucide-react";
+import { deriveLeaseList, deriveLeaseRoll } from "./leaseWorkspacePresentation.js";
 import { formatUnitLabel } from "../../domain/unitLabels.js";
 import { leaseBillingCadenceLabel, leaseRentSummaryLabel, leaseTermSummaryLabel } from "../../domain/leaseTerms.js";
+import { RecordPager, useRecordPage } from "../shared/RecordPager.jsx";
 
 const STATUS_TONE = {
   Occupied: "border-emerald-200 bg-emerald-50 text-emerald-700",
   "Owner occupied": "border-slate-200 bg-slate-50 text-slate-600",
   Vacant: "border-amber-200 bg-amber-50 text-amber-700",
-  Future: "border-slate-200 bg-slate-50 text-slate-600",
+  Future: "border-blue-200 bg-blue-50 text-blue-700",
   "Out of service": "border-slate-200 bg-slate-100 text-slate-500",
 };
-
-const SUMMARY_ICONS = [Users, House, CalendarClock, CircleAlert, Settings2];
-
-function SummaryTile({ icon: Icon, label, value, detail, tone = "teal" }) {
-  const iconTone = tone === "amber" ? "bg-amber-50 text-amber-600" : tone === "blue" ? "bg-blue-50 text-blue-600" : tone === "rose" ? "bg-rose-50 text-rose-600" : "bg-teal-50 text-teal-700";
-  return <div className="flex min-h-20 items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${iconTone}`}><Icon className="h-4 w-4" aria-hidden="true" /></span>
-    <span className="min-w-0"><span className="block text-[10px] font-medium uppercase text-slate-500">{label}</span><span className="block text-base font-semibold text-slate-950">{value}</span><span className="block truncate text-[10px] text-slate-500">{detail}</span></span>
-  </div>;
-}
 
 function MonthGrid({ item, property, yearFilter, selectedMonthDetail, setSelectedMonthDetail }) {
   const row = item.row;
@@ -56,92 +45,79 @@ export function LeaseHistoryWorkspace(props) {
     leaseAutomationLastRunLabel, leaseCoverageByProperty, leaseReminderToneClass,
     leaseStatusForDate, occupancyReviewInbox, openLease, openNewLeaseForUnit,
     openOccupancyEditor, openReviewCenter, runLeaseAutomationNow, scopedLeaseAutomationReminders,
-    tenantLedgerReviewInbox, todayIso, yearFilter,
+    tenantLedgerReviewInbox, todayIso, yearFilter, leases, properties, propertyFilter, unitFilter,
   } = props;
   const [selectedMonthDetail, setSelectedMonthDetail] = useState(null);
   const [auditExpanded, setAuditExpanded] = useState({});
-  const [leaseView, setLeaseView] = useState("current");
+  const [workspaceView, setWorkspaceView] = useState("leases");
+  const [leaseFilter, setLeaseFilter] = useState("active");
+  const [search, setSearch] = useState("");
+  const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   const roll = useMemo(() => deriveLeaseRoll({ leaseCoverageByProperty, occupancyReviewInbox, tenantLedgerReviewInbox, todayIso }), [leaseCoverageByProperty, occupancyReviewInbox, tenantLedgerReviewInbox, todayIso]);
-  const cleanupCount = (occupancyReviewInbox?.records?.length || 0) + (tenantLedgerReviewInbox?.records?.length || 0);
-  const summary = summarizeLeaseRoll(roll, cleanupCount, appSettings.leaseAutomationEnabled);
-  const cleanupGroups = groupLeaseCleanup({ occupancyReviewInbox, tenantLedgerReviewInbox });
-  const summaryItems = [
-    ["Currently occupied", summary.occupied, `${summary.ownerOccupied} currently owner occupied | ${roll.length} total`, "teal"],
-    ["Currently vacant", summary.vacant, `of ${roll.length} units`, "amber"], ["Leases expiring", summary.upcomingExpirations, "in next 60 days", "blue"],
-    ["Cleanup items", summary.cleanupItems, summary.cleanupItems ? "need review" : "all clear", "rose"], ["Automation", summary.automationLabel, `Last run ${leaseAutomationLastRunLabel || "not yet"}`, "teal"],
-  ];
-  const leaseViews = [
-    { key: "current", label: "Current leases", icon: Users, detail: "Who is in each unit and what agreement applies." },
-    { key: "payments", label: "Payments & reminders", icon: CreditCard, detail: "Billing schedule, charges, and follow-up." },
-    { key: "history", label: "History & coverage", icon: History, detail: "Past terms and occupancy gaps." },
-  ];
+  const agreements = useMemo(() => deriveLeaseList({ leases, properties, propertyFilter, unitFilter, todayIso, tenantLedgerReviewInbox }), [leases, properties, propertyFilter, unitFilter, todayIso, tenantLedgerReviewInbox]);
+  const counts = Object.fromEntries(["active", "upcoming", "past", "review"].map((key) => [key, agreements.filter((item) => item.category === key).length]));
+  const expiringCount = agreements.filter((item) => item.expirationDays != null && item.expirationDays >= 0 && item.expirationDays <= 60).length;
+  const query = search.trim().toLowerCase();
+  const visible = agreements.filter((item) => (leaseFilter === "all" || item.category === leaseFilter)
+    && (!query || `${item.lease.tenantName || ""} ${item.property?.name || ""} ${item.lease.unit} ${item.lease.startDate} ${item.lease.endDate || ""}`.toLowerCase().includes(query)));
+  const pager = useRecordPage(visible, `${propertyFilter}:${unitFilter}:${leaseFilter}:${query}`, 30, "lease-agreements");
+  const addLease = () => {
+    const selected = roll.find((item) => item.property.id === propertyFilter && item.row.unit.name === unitFilter);
+    if (selected) openNewLeaseForUnit(selected.property.id, selected.row.unit.name);
+    else setUnitPickerOpen(true);
+  };
+  const filters = [["active", "Active"], ["upcoming", "Upcoming"], ["past", "Past"], ...(counts.review ? [["review", "Dates need review"]] : []), ["all", "All"]];
 
-  return <div className="space-y-4">
-    {roll.length === 0 ? <Card><CardContent className="py-6 text-sm text-slate-500">No units match the current property and unit filters.</CardContent></Card> : null}
+  return <div className="rt-leases-workspace space-y-3">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500" aria-label="Lease summary">
+        <span><strong className="text-slate-900">{counts.active}</strong> active</span>
+        <span><strong className="text-slate-900">{counts.upcoming}</strong> upcoming</span>
+        {expiringCount ? <span className="font-medium text-amber-700">{expiringCount} ending within 60 days</span> : null}
+        <span>As of {todayIso}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="secondary" aria-pressed={workspaceView === "occupancy"} onClick={() => setWorkspaceView((current) => current === "leases" ? "occupancy" : "leases")}><House className="h-3.5 w-3.5" />{workspaceView === "leases" ? "Occupancy & coverage" : "Back to leases"}</Button>
+        <Button size="sm" onClick={addLease} disabled={!roll.length}><Plus className="h-3.5 w-3.5" />Add lease</Button>
+      </div>
+    </div>
 
-    <section aria-label="Lease summary" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-      {summaryItems.map(([label, value, detail, tone], index) => <SummaryTile key={label} icon={SUMMARY_ICONS[index]} label={label} value={value} detail={detail} tone={tone} />)}
-    </section>
-
-    <section aria-label="Lease workspace views" className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 md:grid-cols-3">
-      {leaseViews.map(({ key, label, icon: Icon, detail }) => <button key={key} type="button" onClick={() => setLeaseView(key)} className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition ${leaseView === key ? "border-teal-300 bg-white shadow-sm" : "border-transparent hover:border-slate-200 hover:bg-white/70"}`}>
-        <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full ${leaseView === key ? "bg-teal-50 text-teal-700" : "bg-white text-slate-500"}`}><Icon className="h-4 w-4" /></span>
-        <span><span className="block text-sm font-semibold text-slate-900">{label}</span><span className="mt-0.5 block text-[11px] text-slate-500">{detail}</span></span>
-      </button>)}
-    </section>
-
-    {leaseView === "payments" ? <div className="grid gap-3 lg:grid-cols-[1fr_1.35fr]">
-      <Card className="shadow-none"><CardContent className="p-4 !pt-4">
-        <div className="flex items-center justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><CalendarClock className="h-4 w-4 text-slate-500" />Lease automation <Badge variant="secondary" className={appSettings.leaseAutomationEnabled ? "!bg-emerald-50 !text-emerald-700" : "!bg-slate-100 !text-slate-600"}>{summary.automationLabel}</Badge></div><p className="mt-1 text-xs text-slate-500">{LEASE_AUTOMATION_HELPER_TEXT}</p></div><Button size="sm" variant="secondary" className="shrink-0 whitespace-nowrap" onClick={runLeaseAutomationNow}><Play className="mr-1 h-3.5 w-3.5" />Run now</Button></div>
-        <div className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">Last run: {leaseAutomationLastRunLabel || "Not run yet"}</div>
-        {scopedLeaseAutomationReminders.length === 0 ? <div className="mt-2 text-xs text-slate-500">No reminders in the current filter scope.</div> : <div className="mt-2 space-y-1.5">{scopedLeaseAutomationReminders.map((reminder) => <div key={reminder.id} className={`rounded border px-2 py-1.5 text-xs ${leaseReminderToneClass(reminder.kind)}`}><span className="font-medium">{reminder.title}</span><span className="block">{reminder.message}</span></div>)}</div>}
-      </CardContent></Card>
-
-      <Card className="shadow-none"><CardContent className="p-4 !pt-4">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-semibold text-slate-950"><ClipboardCheck className="h-4 w-4 text-slate-500" />Cleanup & coverage status</div></div><Button size="sm" className="shrink-0 whitespace-nowrap" onClick={openReviewCenter}>Open Work Queue</Button></div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">{cleanupGroups.map((group) => <button key={group.key} type="button" onClick={openReviewCenter} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left"><span className="block text-xs font-medium text-slate-700">{group.label}</span><span className={`mt-1 block text-xs ${group.count ? "text-amber-700" : "text-emerald-700"}`}>{group.count ? `${group.count} need review` : "Ready"}</span></button>)}</div>
-      </CardContent></Card>
-    </div> : null}
-
-    {leaseView === "payments" ? <Card className="shadow-none"><CardContent className="p-0">
-      <div className="border-b border-slate-200 px-4 py-3"><h2 className="text-base font-semibold text-slate-950">Rent schedules</h2><p className="mt-0.5 text-xs text-slate-500">Open a lease to see charges, payments, credits, and the remaining balance.</p></div>
-      <div className="divide-y divide-slate-200">{roll.map((item) => {
-        const lease = item.activeLease || item.futureLease;
-        if (!lease) return null;
-        const reminders = scopedLeaseAutomationReminders.filter((reminder) => reminder.leaseId === lease.id);
-        return <div key={`payment-${lease.id}`} className="grid gap-2 px-4 py-3 md:grid-cols-[minmax(180px,1fr)_minmax(210px,1.2fr)_minmax(180px,1fr)_auto] md:items-center">
-          <div><div className="text-sm font-semibold text-slate-900">{lease.tenantName || "No tenant name"}</div><div className="text-xs text-slate-500">{item.property.name} | {formatUnitLabel(item.row.unit.name)}</div></div>
-          <div><div className="text-sm font-medium text-slate-900">{leaseRentSummaryLabel(lease, currency)}</div><div className="text-[11px] text-slate-500">{leaseBillingCadenceLabel(lease)} | first due {lease.firstRentDueDate || lease.startDate}</div></div>
-          <div className="text-xs text-slate-600">{reminders.length ? reminders.map((reminder) => <span key={reminder.id} className={`mr-1 inline-block rounded border px-2 py-1 ${leaseReminderToneClass(reminder.kind)}`}>{reminder.message}</span>) : "No payment reminder right now."}</div>
-          <Button size="sm" variant="secondary" onClick={() => openLease(lease)}>Open ledger</Button>
-        </div>;
-      })}</div>
-    </CardContent></Card> : null}
-
-    {leaseView !== "payments" ? <Card className="min-w-0 max-w-full overflow-x-auto shadow-none">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-4 py-3"><div><h2 className="text-base font-semibold text-slate-950">{leaseView === "history" ? "Lease History & Occupancy Coverage" : "Current Lease Roll"}</h2><p className="mt-0.5 text-xs text-slate-500">{leaseView === "history" ? "Review prior agreements, owner use, vacancy, overlaps, and gaps." : "Current and upcoming agreements by unit."}</p></div><div className="flex flex-wrap gap-1.5 text-[10px]">{["Occupied", "Owner occupied", "Vacant", "Future"].map((status) => <Badge key={status} variant="outline" className={STATUS_TONE[status]}>{status}</Badge>)}</div></div>
-      <div className="hidden grid-cols-[minmax(180px,1.25fr)_110px_minmax(120px,1fr)_130px_190px_115px_100px_170px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[10px] font-medium uppercase text-slate-500 2xl:grid"><span>Property / unit</span><span>Status</span><span>Tenant / occupant</span><span>Rent schedule</span><span>Lease term</span><span>Occupancy coverage</span><span>Record cleanup</span><span>Actions</span></div>
-      <div className="divide-y divide-slate-200">{roll.map((item) => {
-        const { property, row, activeLease, futureLease, currentPeriod } = item;
+    {workspaceView === "leases" ? <>
+      <Card className="overflow-hidden shadow-none">
+        <header className="rt-lease-toolbar flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+          <div className="flex flex-wrap gap-1" aria-label="Agreement filters">{filters.map(([key, label]) => <button key={key} type="button" aria-pressed={leaseFilter === key} onClick={() => setLeaseFilter(key)} className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium ${leaseFilter === key ? "bg-teal-50 text-teal-900" : "text-slate-500 hover:bg-white"}`}>{label}<span className="rounded bg-white px-1.5 text-xs text-slate-500">{key === "all" ? agreements.length : counts[key]}</span></button>)}</div>
+          <label className="relative w-full sm:w-64"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" /><Input aria-label="Search leases" placeholder="Search tenant or unit" value={search} onChange={(event) => setSearch(event.target.value)} className="!h-9 !pl-9" /></label>
+        </header>
+        <div className="rt-lease-list-heading rt-lease-list-row border-b border-slate-100 bg-slate-50/60 px-4 py-2 text-xs font-medium text-slate-500"><span>Tenant / residence</span><span>Agreement</span><span>Rent arrangement</span><span>Next event / review</span><span /></div>
+        <div className="divide-y divide-slate-100">{pager.records.map(({ lease, property, category, expirationDays, reviewIssues }) => {
+          const reminders = scopedLeaseAutomationReminders.filter((item) => item.leaseId === lease.id);
+          const eventLabel = category === "upcoming" ? `Starts ${lease.startDate}` : category === "past" ? `Ended ${leaseActualEndLabel(lease)}` : category === "review" ? "Dates need review" : expirationDays != null ? (expirationDays <= 60 ? `Ends in ${expirationDays} days` : `Ends ${leaseActualEndLabel(lease)}`) : "Ongoing agreement";
+          const reviewLabel = reviewIssues[0]?.label || reminders[0]?.title;
+          return <article key={lease.id} className="rt-lease-list-row px-4 py-3 transition hover:bg-slate-50/70">
+            <div className="flex min-w-0 items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-teal-50 text-sm font-semibold text-teal-700" aria-hidden="true">{(lease.tenantName || "?").trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}</span><div className="min-w-0"><button type="button" className="block max-w-full truncate text-left text-sm font-semibold text-slate-900 hover:text-teal-700" onClick={() => openLease(lease)}>{lease.tenantName || "Tenant name missing"}</button><div className="truncate text-xs text-slate-500" title={`${property?.name || lease.propertyId} / ${formatUnitLabel(lease.unit)}`}>{property?.name || "Property not found"} / {formatUnitLabel(lease.unit)}</div></div></div>
+            <div className="min-w-0 text-xs"><div className="font-medium text-slate-800">{leaseTermSummaryLabel(lease)}</div><div className="mt-0.5 text-slate-500">{lease.startDate || "Start missing"} to {leaseActualEndLabel(lease) || "End missing"}</div></div>
+            <div className="min-w-0 text-xs"><div className="font-semibold text-slate-900">{leaseRentSummaryLabel(lease, currency)}</div><div className="mt-0.5 text-slate-500">{leaseBillingCadenceLabel(lease)}</div></div>
+            <div className="min-w-0 text-xs"><div className={category === "review" || (expirationDays != null && expirationDays <= 60) ? "font-medium text-amber-700" : "text-slate-600"}>{eventLabel}</div>{reviewLabel ? <button type="button" title={[...reviewIssues.map((issue) => issue.label), ...reminders.map((reminder) => reminder.title)].join("; ")} className="mt-1 block max-w-full truncate text-left font-medium text-amber-700 hover:underline" onClick={() => openLease(lease)}>{reviewLabel}</button> : null}</div>
+            <Button size="sm" variant="secondary" aria-label={`Open lease for ${lease.tenantName || formatUnitLabel(lease.unit)}`} onClick={() => openLease(lease)}>Open</Button>
+          </article>;
+        })}</div>
+        {!visible.length ? <CardContent className="!p-6 text-center"><div className="text-sm font-semibold text-slate-800">{query ? "No matching leases" : `No ${leaseFilter === "all" ? "" : leaseFilter} leases in this scope`}</div><p className="mt-1 text-xs text-slate-500">{query ? "Try another tenant, property, or unit." : "Choose another filter, add an agreement, or check occupancy and coverage."}</p></CardContent> : null}
+      </Card>
+      <RecordPager {...pager} label="Leases" />
+      <div className="text-xs text-slate-500">Current agreements are shown as of today. The header year applies to occupancy coverage and record review.</div>
+    </> : <Card className="overflow-hidden shadow-none">
+      <header className="border-b border-slate-200 bg-slate-50/70 px-4 py-3"><h2 className="text-base font-semibold text-slate-900">Occupancy & coverage</h2><p className="mt-0.5 text-xs text-slate-500">Owner use, vacancy and occupancy records for {yearFilter}. Open a unit to inspect its timeline.</p></header>
+      {!roll.length ? <CardContent className="!p-6 text-sm text-slate-500">No units match the current scope.</CardContent> : null}
+      <div className="divide-y divide-slate-100">{roll.map((item) => {
+        const { property, row } = item;
         const key = `${property.id}:${row.unit.name}`;
-        const expanded = auditExpanded[key] ?? (leaseView === "history" || item.hasCoverageIssues);
-        const displayedLease = activeLease || futureLease;
-        const tenantOrOccupant = leaseRollOccupantLabel(item);
-        const cleanupLabel = leaseRollCleanupLabel(item);
-        const primaryAction = activeLease ? () => openLease(activeLease) : item.status === "Owner occupied" ? () => openOccupancyEditor(property.id, row.unit.name) : () => openNewLeaseForUnit(property.id, row.unit.name);
-        const primaryLabel = activeLease ? "View lease" : item.status === "Owner occupied" ? "Manage occupancy" : "Add lease";
+        const expanded = Boolean(auditExpanded[key]);
+        const occupancyStatus = row.statusAsOfAuditEnd === "Rental" ? "Occupied" : row.statusAsOfAuditEnd === "Owner-Occupied" ? "Owner occupied" : row.statusAsOfAuditEnd || item.status;
         return <div key={key}>
-          <div className={`grid gap-3 px-4 py-2.5 2xl:grid-cols-[minmax(180px,1.25fr)_110px_minmax(120px,1fr)_130px_190px_115px_100px_170px] 2xl:items-center ${item.status === "Owner occupied" ? "bg-slate-50/40" : ""}`}>
-            <div className="min-w-0"><div className="font-medium text-slate-900">{property.name}</div><div className="text-xs text-slate-500">{formatUnitLabel(row.unit.name)}{property.address ? ` | ${property.address}` : ""}</div></div>
-            <div><Badge variant="outline" className={STATUS_TONE[item.status]}>{item.status}</Badge><span className="mt-1 block text-[10px] text-slate-500">{activeLease ? "Active lease" : item.status === "Future" ? "Upcoming lease" : "No active lease"}</span></div>
-            <div className="text-sm text-slate-800">{tenantOrOccupant}{currentPeriod ? <span className="block text-[10px] text-slate-500">Since {currentPeriod.startDate}</span> : null}</div>
-            <div className="text-sm font-medium text-slate-900">{displayedLease ? leaseRentSummaryLabel(displayedLease, currency) : "No rent scheduled"}{displayedLease ? <span className="block text-[10px] font-normal text-slate-500">{leaseBillingCadenceLabel(displayedLease)}</span> : null}</div>
-            <div className="text-xs text-slate-700">{displayedLease ? <><span className="font-medium text-slate-800">{leaseTermSummaryLabel(displayedLease)}</span><span className="mt-0.5 block">{displayedLease.startDate || "Start date not entered"} to {leaseActualEndLabel(displayedLease) || "No lease end date"}</span>{item.expirationDays != null && item.expirationDays <= 60 ? <span className="mt-1 block font-medium text-amber-700">{item.expirationDays >= 0 ? `Ends in ${item.expirationDays} days` : "Lease ended"}</span> : null}</> : currentPeriod ? `${currentPeriod.startDate} to ${currentPeriod.endDate || "present"}` : "No active lease"}</div>
-            <div><AuditReadinessBadge status={row.isCoverageComplete ? { key: "ready", label: "Complete" } : { key: "needs_review", label: "Review" }} /><span className="mt-1 block text-[10px] text-slate-500">Occupancy timeline | {item.coveragePct}% tracked</span></div>
-            <div className={item.cleanupCount ? "text-xs font-medium text-amber-700" : "text-xs text-slate-500"}>{cleanupLabel}</div>
-            <div className="flex flex-nowrap items-center gap-1"><Button size="sm" variant="secondary" className="whitespace-nowrap" onClick={primaryAction}>{primaryLabel}</Button><Button size="sm" variant="ghost" className="shrink-0" aria-expanded={expanded} onClick={() => setAuditExpanded((current) => ({ ...current, [key]: !expanded }))}><ChevronDown className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`} /><span className="sr-only">Toggle coverage audit</span></Button></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3"><House className="h-5 w-5 shrink-0 text-teal-700" /><div><div className="text-sm font-semibold text-slate-900">{property.name} / {formatUnitLabel(row.unit.name)}</div><div className="mt-0.5 text-xs text-slate-500">{item.coveragePct}% of {yearFilter} audit days tracked{row.gaps.length ? ` / ${row.gaps.length} gaps` : ""}{row.overlaps.length ? ` / ${row.overlaps.length} overlaps` : ""}</div></div></div>
+            <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" title={`Status as of ${row.auditEnd}`} className={STATUS_TONE[occupancyStatus]}>{occupancyStatus}</Badge><Button size="sm" variant="secondary" onClick={() => openOccupancyEditor(property.id, row.unit.name)}>Manage occupancy</Button><Button size="sm" variant="ghost" aria-label={`Coverage for ${formatUnitLabel(row.unit.name)}`} aria-expanded={expanded} onClick={() => setAuditExpanded((current) => ({ ...current, [key]: !expanded }))}>Timeline<ChevronDown className={`h-4 w-4 ${expanded ? "rotate-180" : ""}`} /></Button></div>
           </div>
-
           {expanded ? <div className="border-t border-slate-100 bg-slate-50/60 p-3">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
               <section className="rounded-lg border border-slate-200 bg-white p-3"><div className="mb-2 flex items-center justify-between gap-2"><div><h3 className="text-sm font-semibold text-slate-900">Coverage audit - {formatUnitLabel(row.unit.name)}</h3><p className="text-[10px] text-slate-500">Occupancy history for {yearFilter} | {row.auditStart} to {row.auditEnd} | {row.coveredDays}/{row.totalDays} days tracked</p></div>{row.gaps.length || row.overlaps.length ? <Badge className="bg-amber-100 text-amber-800">Needs review</Badge> : <Badge className="bg-emerald-100 text-emerald-700">Complete</Badge>}</div><MonthGrid item={item} property={property} yearFilter={yearFilter} selectedMonthDetail={selectedMonthDetail} setSelectedMonthDetail={setSelectedMonthDetail} />{row.gaps.length > 0 ? <div className="mt-2 text-xs text-rose-700">Gaps: {row.gaps.map((gap) => `${gap.start} to ${gap.end}`).join(", ")}</div> : null}{row.overlaps.length > 0 ? <div className="mt-1 text-xs text-amber-700">Overlaps: {row.overlaps.length}</div> : null}</section>
@@ -159,6 +135,14 @@ export function LeaseHistoryWorkspace(props) {
           </div> : null}
         </div>;
       })}</div>
-    </Card> : null}
+    </Card>}
+
+    <details className="rounded-lg border border-slate-200 bg-white">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-2 text-xs text-slate-600"><span className="inline-flex items-center gap-2"><Settings2 className="h-3.5 w-3.5" />Lease management</span><span>Automation {appSettings.leaseAutomationEnabled ? "enabled" : "paused"}<ChevronDown className="ml-2 inline h-3.5 w-3.5" /></span></summary>
+      <div className="space-y-3 border-t border-slate-100 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="max-w-xl"><p className="text-xs text-slate-500">{LEASE_AUTOMATION_HELPER_TEXT}</p><p className="mt-1 text-xs text-slate-500">Last run: {leaseAutomationLastRunLabel || "Not run yet"}</p></div><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={openReviewCenter}>Open Work Queue</Button><Button size="sm" variant="secondary" onClick={runLeaseAutomationNow}><Play className="h-3.5 w-3.5" />Run now</Button></div></div>{scopedLeaseAutomationReminders.length ? <div className="space-y-2">{scopedLeaseAutomationReminders.map((reminder) => <div key={reminder.id} className={`rounded border px-3 py-2 text-xs ${leaseReminderToneClass(reminder.kind)}`}><strong>{reminder.title}</strong><p className="mt-1">{reminder.message}</p></div>)}</div> : <p className="text-xs text-slate-500">No reminders in this scope.</p>}</div>
+    </details>
+    <Dialog open={unitPickerOpen} onOpenChange={setUnitPickerOpen}>
+      <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Choose a unit for the new lease</DialogTitle></DialogHeader><div className="mt-3 space-y-2">{roll.map(({ property, row }) => <button type="button" key={`${property.id}:${row.unit.name}`} className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-3 text-left hover:bg-teal-50" onClick={() => { setUnitPickerOpen(false); openNewLeaseForUnit(property.id, row.unit.name); }}><span className="text-sm font-medium">{property.name} / {formatUnitLabel(row.unit.name)}</span><Plus className="h-4 w-4 text-teal-700" /></button>)}</div><DialogClose variant="secondary" className="mt-3">Cancel</DialogClose></DialogContent>
+    </Dialog>
   </div>;
 }

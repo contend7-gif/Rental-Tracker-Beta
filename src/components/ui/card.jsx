@@ -6,7 +6,7 @@ function cn(...parts) {
 
 export function Card({ children, className, ...props }) {
   return (
-    <section className={cn("rounded-lg border border-slate-200 bg-white shadow-sm", className)} {...props}>
+    <section className={cn("rt-card rounded-lg border border-slate-200 bg-white shadow-sm", className)} {...props}>
       {children}
     </section>
   );
@@ -14,7 +14,7 @@ export function Card({ children, className, ...props }) {
 
 export function CardHeader({ children, className, ...props }) {
   return (
-    <header className={cn("space-y-1.5 px-4 py-3", className)} {...props}>
+    <header className={cn("rt-card-header space-y-1.5 px-4 py-3", className)} {...props}>
       {children}
     </header>
   );

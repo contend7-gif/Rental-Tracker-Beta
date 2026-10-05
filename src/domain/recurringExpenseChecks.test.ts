@@ -103,3 +103,17 @@ test("old inferred monthly patterns stop producing overdue checks", () => {
   assert.equal(buildRecurringExpenseChecks({ transactions, todayIso: "2026-05-20" }).length, 1);
   assert.deepEqual(buildRecurringExpenseChecks({ transactions, todayIso: "2026-09-24" }), []);
 });
+
+test("a matching bill reassigned from Shared to a unit does not create a missing-payment check", () => {
+  const transactions = [
+    expense("june", "2026-06-17"), expense("july", "2026-07-17"),
+    expense("august", "2026-08-17", { servicePeriodStart: "2026-08-17", servicePeriodEnd: "2026-09-16" }),
+    expense("september", "2026-09-17", { unit: "614", servicePeriodStart: "2026-09-17", servicePeriodEnd: "2026-10-16" }),
+  ];
+  assert.deepEqual(buildRecurringExpenseChecks({ transactions, todayIso: "2026-10-03" }), []);
+  // Separate bills, unsupported coverage, and other properties must still be reviewed.
+  for (const changes of [{ amount: 200 }, { propertyId: "p2" }, { servicePeriodStart: "2026-09-18" }, { status: "voided" }]) {
+    assert.equal(buildRecurringExpenseChecks({ transactions: [...transactions.slice(0, 3), { ...transactions[3], ...changes } as Transaction], todayIso: "2026-10-03" }).length, 1);
+  }
+  assert.equal(buildRecurringExpenseChecks({ transactions: transactions.map((transaction) => ({ ...transaction, unit: transaction.unit === "Shared" ? "616" : "614" })), todayIso: "2026-10-03" }).length, 1);
+});

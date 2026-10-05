@@ -109,3 +109,25 @@ export function leaseRollCleanupLabel(item) {
   if (occupancy > 0) return `${occupancy} occupancy item${occupancy === 1 ? "" : "s"}`;
   return "No cleanup items";
 }
+
+// Agreement lists are scoped by property/unit, and classified as of today rather than the audit year.
+export function deriveLeaseList({ leases = [], properties = [], propertyFilter = "all", unitFilter = "all", todayIso, tenantLedgerReviewInbox } = {}) {
+  const propertyById = new Map(properties.map((property) => [property.id, property]));
+  const reviewById = new Map((tenantLedgerReviewInbox?.records || []).map((record) => [record.lease.id, record.issues || []]));
+  return leases.filter((lease) => (propertyFilter === "all" || lease.propertyId === propertyFilter)
+    && (unitFilter === "all" || lease.unit === unitFilter)).map((lease) => {
+      const end = effectiveLeaseEnd(lease);
+      const datesComplete = Boolean(lease.startDate && end && end >= lease.startDate);
+      const category = !datesComplete ? "review" : activeOn(lease, todayIso) ? "active" : lease.startDate > todayIso ? "upcoming" : "past";
+      return {
+        lease, property: propertyById.get(lease.propertyId), category,
+        expirationDays: category === "active" && end !== FAR_FUTURE_DATE ? dayDifference(todayIso, end) : null,
+        reviewIssues: reviewById.get(lease.id) || [],
+      };
+    }).sort((a, b) => {
+      const leftDate = a.category === "past" ? effectiveLeaseEnd(a.lease) : a.lease.startDate || "";
+      const rightDate = b.category === "past" ? effectiveLeaseEnd(b.lease) : b.lease.startDate || "";
+      return (a.category === "past" && b.category === "past" ? rightDate.localeCompare(leftDate) : leftDate.localeCompare(rightDate))
+        || String(a.lease.tenantName || "").localeCompare(String(b.lease.tenantName || ""));
+    });
+}

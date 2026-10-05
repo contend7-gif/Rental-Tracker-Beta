@@ -6,6 +6,8 @@ This app is not a tax filing product. Keep your own backups and confirm tax fili
 
 ## Main Workflows
 
+The v1.9.8 refresh brings a compact Home overview checked without scrolling at 1920×1200, integrated scope controls, focused record details, and balanced colors with defined card headers. Loans, Tax Center, Planning, and Depreciation share compact controls. Saved PDF previews show loading feedback, loan payment edits preserve the existing payment, and Planning health uses the selected horizon for its monthly warning.
+
 - `Search` / `Ctrl+K`: find transactions, documents, leases, maintenance, properties, screens, and create actions across all properties and years. Use arrow keys and Enter to open a result, or Escape to close.
 - Transactions and the Documents inbox/library display 50 matching records per page. Filters reset paging; totals and existing bulk actions retain their full matching scope.
 - Back/Forward buttons and `Alt+Left` / `Alt+Right` restore visited screens and their year/property/unit scope. Tabs, searches, list pages, property selections, document reviews, and scroll positions are remembered while the app stays open.

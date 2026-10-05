@@ -8,6 +8,22 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.8",
+    releaseDate: "2026-10-04",
+    title: "A clearer, more colorful property workspace",
+    summary: "Use a compact Home overview, focused record panels, and consistent workspace controls with clearer color, card borders, and next actions.",
+    changes: [
+      "Keep Home's key totals, cash flow, rent collection, action items, and recent records visible without scrolling at the checked laptop sizes, including 1920 by 1200.",
+      "Bring year, property, and unit scope beside the workspace title; simplify navigation while preserving search, history, and smaller-window access.",
+      "Refresh Leases, Documents, Transactions, Properties, and Maintenance with focused lists, searchable records, and overview, history, and file details on demand.",
+      "Separate Work Queue tasks from tax cross-check summaries and make Calendar attention items and selected dates easier to scan.",
+      "Use compact Loans, Tax Center, Planning, and Depreciation controls, with clearer readiness, scenario navigation, loan history, and amortization details.",
+      "Add balanced blue, lavender, cream, and teal accents, readable tinted headers, and clearer card outlines while retaining white record-reading areas.",
+      "Keep Smart Check review within the selected context and recognize matching shared bills reassigned to a unit when their service coverage is continuous.",
+      "Show saved PDF loading and retry feedback; preserve loan payment edits and make older payment dates accessible; calculate Planning's monthly health warning using the selected 12-, 24-, or 36-month horizon.",
+    ],
+  },
+  {
     version: "1.9.7",
     releaseDate: "2026-10-03",
     title: "Faster review and a more comfortable desktop",

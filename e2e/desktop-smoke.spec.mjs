@@ -315,6 +315,7 @@ test("global search opens historical records and large lists page without losing
     await expect(page.getByRole("listbox", { name: "Search results" }).getByRole("option")).toHaveCount(1);
     await search.press("Enter");
     await expect(page.getByRole("heading", { name: "Example paging document 122", exact: true })).toBeVisible();
+    await page.getByRole("dialog", { name: "Example paging document 122", exact: true }).getByRole("button", { name: "Links", exact: true }).click();
     await page.getByRole("button", { name: "View", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Maintenance", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Go back", exact: true }).click();
@@ -368,6 +369,147 @@ test("navigation restores property and unit scope and remembered property tabs",
   }
 });
 
+test("refreshed Home and navigation remain coherent at desktop and narrow sizes", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-ui-refresh-"));
+  const run = await launchDesktopApp(profilePath);
+  try {
+    const { page, electronApp } = run;
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Portfolio overview" }).getByRole("button")).toHaveCount(4);
+    await expect(page.getByRole("button", { name: /^Gross Rent YTD:/ })).toBeVisible();
+    for (const [width, height] of [[1920, 1200], [1440, 900], [1280, 800]]) {
+      await electronApp.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size), [width, height]);
+      await page.setViewportSize({ width, height });
+      await expect(page.locator(".rt-home-bottom-panels")).toBeVisible();
+      await expect.poll(() => page.evaluate(() => Math.max(0, document.documentElement.scrollHeight - window.innerHeight)), { message: `Home overflow at ${width} x ${height}` }).toBe(0);
+      const alignment = await page.evaluate(() => {
+        const fields = document.querySelector(".rt-scope-fields").getBoundingClientRect();
+        const actions = document.querySelector(".rt-header-actions").getBoundingClientRect();
+        const heading = document.querySelector(".rt-header-heading").getBoundingClientRect();
+        return {
+          centered: Math.abs((fields.top + fields.bottom - actions.top - actions.bottom) / 2) <= 1,
+          between: fields.left >= heading.right && fields.right <= actions.left,
+          contained: [...document.querySelectorAll(".rt-scope-field")].every((field) => {
+            const parent = field.getBoundingClientRect();
+            const select = field.querySelector("select").getBoundingClientRect();
+            return select.top >= parent.top && select.bottom <= parent.bottom && select.left >= parent.left && select.right <= parent.right;
+          }),
+        };
+      });
+      expect(alignment).toEqual({ centered: true, between: true, contained: true });
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `compact-home-${width}.png`) });
+    }
+    for (const width of [1440, 1024, 720]) {
+      await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 1000), width);
+      await page.setViewportSize({ width, height: 1000 });
+      await expect(page.getByRole("combobox", { name: "Property", exact: true })).toHaveCount(1);
+      await expect(page.getByRole("combobox", { name: "Unit", exact: true })).toHaveCount(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `refresh-home-${width}.png`) });
+    }
+    await page.getByRole("button", { name: "Navigation", exact: true }).click();
+    const navigation = page.getByRole("dialog", { name: "Navigation", exact: true });
+    await expect(navigation).toBeVisible();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "refresh-navigation-720.png") });
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Navigation", exact: true })).toBeFocused();
+    await page.getByRole("button", { name: "Navigation", exact: true }).click();
+    await navigation.getByRole("button", { name: "Transactions", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
+    await expect(navigation).toHaveCount(0);
+    await page.getByRole("button", { name: "Table", exact: true }).click();
+    await expect(page.getByRole("table", { name: "Transactions table", exact: true })).toBeVisible();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "refresh-transactions-720.png") });
+    await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 1000));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "refresh-transactions-1440.png") });
+    await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(720, 1000));
+    await page.setViewportSize({ width: 720, height: 1000 });
+    await page.getByRole("button", { name: "Navigation", exact: true }).click();
+    await navigation.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      backup.settings.theme = "dark";
+      await window.desktopPersistence.saveAppData(backup);
+    });
+    await page.reload();
+    await expect(page.locator(".rt-app-shell")).toHaveClass(/theme-dark/);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "refresh-home-dark-720.png") });
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("Smart Check review preserves dashboard scope and recognizes reassigned bills", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-smart-scope-"));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const propertyId = backup.data.properties[0].id;
+      const now = new Date();
+      const billingDay = Math.min(now.getDate(), 28);
+      const dateAt = (offset, day) => new Date(Date.UTC(now.getFullYear(), now.getMonth() + offset, day)).toISOString().slice(0, 10);
+      const base = backup.data.transactions.find((transaction) => transaction.type === "Expense") || backup.data.transactions[0];
+      for (const vendor of ["Example Missing Energy", "Example Reassigned Energy"]) {
+        for (const offset of [-4, -3, -2]) backup.data.transactions.push({ ...base, id: `${vendor}-${offset}`, propertyId, unit: "Shared", vendor, description: vendor, date: dateAt(offset, billingDay), amount: 40, status: "active", type: "Expense", category: "Utilities", servicePeriodStart: dateAt(offset, billingDay), servicePeriodEnd: dateAt(offset + 1, billingDay - 1) });
+      }
+      backup.data.transactions.push({ ...base, id: "example-reassigned-current", propertyId, unit: "614", vendor: "Example Reassigned Energy", description: "Example Reassigned Energy", date: dateAt(-1, billingDay), amount: 40, status: "active", type: "Expense", category: "Utilities", servicePeriodStart: dateAt(-1, billingDay), servicePeriodEnd: dateAt(0, billingDay - 1) });
+      backup.settings.leaseAutomationEnabled = false;
+      await window.desktopPersistence.saveAppData(backup);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    const { page } = run;
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await page.getByRole("tab", { name: /^Recurring/ }).click();
+    await page.getByRole("button", { name: "Calendar", exact: true }).click();
+    const property = page.locator("main").getByLabel("Property", { exact: true });
+    const unit = page.locator("main").getByLabel("Unit", { exact: true });
+    await expect(property).toHaveValue("all");
+    await expect(unit).toHaveValue("all");
+    await expect(page.getByText("Check missing payment: Example Reassigned Energy", { exact: true })).toHaveCount(0);
+    const row = page.locator("div.rounded-lg.border.border-slate-200.bg-white.p-3").filter({ has: page.getByText("Check missing payment: Example Missing Energy", { exact: true }) });
+    await expect(row.getByText("Suggested check", { exact: true })).toBeVisible();
+    await expect(row.getByText(/overdue/i)).toHaveCount(0);
+    await page.getByRole("combobox", { name: "Calendar source", exact: true }).selectOption("smart_check");
+    await page.getByRole("combobox", { name: "Calendar horizon", exact: true }).selectOption("180");
+    await expect(row).toBeVisible();
+    for (const width of [1920, 1440, 720]) {
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `calendar-refresh-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole("button", { name: "Month", exact: true }).click();
+    await expect(page.getByLabel("Jump to month", { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Calendar horizon", exact: true })).toHaveCount(0);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "calendar-month-refresh-1440.png") });
+    await page.getByRole("button", { name: "Agenda", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Calendar source", exact: true })).toHaveValue("smart_check");
+    await expect(page.getByRole("combobox", { name: "Calendar horizon", exact: true })).toHaveValue("180");
+    await row.getByRole("button", { name: "Review transactions", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("textbox", { name: "Search transactions", exact: true })).toHaveValue("Example Missing Energy");
+    await expect(property).toHaveValue("all");
+    await expect(unit).toHaveValue("all");
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(property).toHaveValue("all");
+    await expect(unit).toHaveValue("all");
+    await expect(page.getByText("No units or properties match the selected scope.", { exact: true })).toHaveCount(0);
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test("packaged desktop supports the core Documents workflow", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-documents-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
@@ -378,6 +520,9 @@ test("packaged desktop supports the core Documents workflow", async () => {
     await page.getByRole("button", { name: "Documents", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
     await expect(page.getByText("4 files", { exact: true })).toBeVisible();
+    const processingTools = page.locator("details.rt-document-processing");
+    await expect(processingTools).toBeVisible();
+    expect(await processingTools.evaluate((element) => element.open)).toBe(false);
     await page.getByRole("button", { name: "Library (4)", exact: true }).click();
 
     const search = page.getByRole("textbox", { name: "Search documents", exact: true });
@@ -386,10 +531,33 @@ test("packaged desktop supports the core Documents workflow", async () => {
     await expect(page.getByText("Example Hardware roof receipt", { exact: true })).toHaveCount(0);
 
     const plumbingCard = page.getByRole("group", { name: "Document Example Plumbing receipt", exact: true });
-    await plumbingCard.getByTitle("More actions", { exact: true }).click();
-    await plumbingCard.getByRole("button", { name: "Review details", exact: true }).click();
+    await plumbingCard.getByRole("button", { name: "Example Plumbing receipt", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Example Plumbing receipt", exact: true })).toBeVisible();
     await expect(page.getByText("Extracted fields", { exact: true })).toBeVisible();
+    const review = page.getByRole("dialog", { name: "Example Plumbing receipt", exact: true });
+    await expect(review.getByRole("button", { name: "View linked record", exact: true })).toBeEnabled();
+    await review.getByRole("button", { name: "Links", exact: true }).click();
+    await expect(review.getByText("Record links", { exact: true })).toBeVisible();
+    await expect(review.getByText("Extracted fields", { exact: true })).toBeHidden();
+    await review.getByRole("button", { name: "Text & tools", exact: true }).click();
+    await expect(review.getByText("Extracted text editor", { exact: true })).toBeVisible();
+    await review.getByRole("button", { name: "Review", exact: true }).click();
+    await review.getByRole("button", { name: "Edit extracted text", exact: true }).first().click();
+    await expect(review.getByRole("button", { name: "Text & tools", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(review.locator("textarea")).toBeFocused();
+    await review.getByRole("button", { name: "Review", exact: true }).click();
+    for (const width of [1440, 720]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await review.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `documents-review-${width}.png`) });
+    }
+    await review.getByRole("button", { name: "Close document review", exact: true }).click();
+    await search.fill("");
+    for (const width of [1920, 1440, 720]) {
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `documents-list-${width}.png`) });
+    }
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -431,8 +599,14 @@ test("saved PDF review retains its preview after a complete desktop restart", as
     await card.getByRole("button", { name: "Review details", exact: true }).click();
     await expect(page.getByText("Preview available", { exact: true })).toBeVisible();
     await expect(page.getByText("Preview not loaded", { exact: true })).toHaveCount(0);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(page.locator('iframe[title="Preview of saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
+    // Native PDF pages paint after the frame's load event; allow the visual capture to show the page.
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "documents-pdf-review-1440.png") });
     await page.getByRole("button", { name: "View file", exact: true }).first().click();
     await expect(page.locator('iframe[title="saved-lease.pdf"]')).toBeVisible();
+    await expect(page.locator('iframe[title="saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "saved-lease.pdf", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "View file", exact: true }).first()).toBeFocused();
@@ -441,15 +615,21 @@ test("saved PDF review retains its preview after a complete desktop restart", as
     if (!await correctionSection.evaluate((element) => element.open)) await correctionSection.locator("summary").click();
     const originalVendor = await page.getByLabel("Vendor", { exact: true }).inputValue();
     await page.getByLabel("Vendor", { exact: true }).fill("Example unsaved OCR vendor");
+    const documentPanel = page.getByRole("dialog", { name: "saved-lease.pdf", exact: true });
+    await documentPanel.getByRole("button", { name: "Links", exact: true }).click();
+    await documentPanel.getByRole("button", { name: "Review", exact: true }).click();
+    await expect(page.getByLabel("Vendor", { exact: true })).toHaveValue("Example unsaved OCR vendor");
     await page.getByRole("button", { name: "Open linked transaction", exact: true }).click();
     await page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true }).getByRole("button", { name: "Discard changes", exact: true }).click();
     const transactionPanel = page.getByRole("dialog", { name: "Example linked panel transaction", exact: true });
     await expect(transactionPanel.locator('iframe[title="Preview of saved-lease.pdf"]')).toBeVisible();
+    await expect(transactionPanel.locator('iframe[title="Preview of saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
     await page.screenshot({ path: path.join(rootDir, "output", "playwright", "record-panel-preview.png") });
     await page.keyboard.press("Escape");
     await expect(transactionPanel).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Open linked transaction", exact: true })).toBeFocused();
     await expect(page.getByLabel("Vendor", { exact: true })).toHaveValue(originalVendor);
+    await documentPanel.getByRole("button", { name: "Links", exact: true }).click();
     const manualAttachment = page.locator("summary").filter({ hasText: /^Attach manually$/ }).locator("..");
     await manualAttachment.locator("summary").click();
     await expect(manualAttachment.getByRole("combobox")).toHaveCount(2);
@@ -474,6 +654,7 @@ test("document upload buttons save a document type rather than the click event",
     });
     await page.getByRole("button", { name: "Documents", exact: true }).click();
     for (const [index, button] of ["Upload document", "Upload bill"].entries()) {
+      if (button === "Upload bill") await page.locator("details.rt-document-processing > summary").click();
       const chooserPromise = page.waitForEvent("filechooser");
       await page.getByRole("button", { name: button, exact: true }).click();
       const chooser = await chooserPromise;
@@ -560,6 +741,27 @@ test("packaged planning coordination supports the primary planning views", async
       await expect(tab).toHaveAttribute("aria-pressed", "true");
     }
     await expect(page.getByText("Signed rent roll now", { exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Planning horizon", exact: true }).selectOption("24");
+    for (const name of ["Scenarios", "Insights", "Exit / refinance"]) {
+      const tool = page.getByRole("group", { name: "Planning tools", exact: true }).getByRole("button", { name, exact: true });
+      await tool.click();
+      await expect(tool).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("combobox", { name: "Planning horizon", exact: true })).toHaveValue("24");
+    }
+    await page.getByRole("button", { name: "Overview", exact: true }).click();
+    for (const horizon of ["24", "36"]) {
+      await page.getByRole("combobox", { name: "Planning horizon", exact: true }).selectOption(horizon);
+      const averageText = await page.getByText("Planned monthly average", { exact: true }).locator("..").innerText();
+      const average = Number(averageText.match(/-?\$[\d,]+\.\d{2}/)[0].replace(/[$,]/g, ""));
+      await expect(page.getByText(new RegExp(`about ${Math.round(average)} per month`)).first()).toBeVisible();
+    }
+    await page.getByRole("combobox", { name: "Planning horizon", exact: true }).selectOption("24");
+    for (const width of [1920, 1440, 1024, 720]) {
+      await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, width === 1920 ? 1200 : 900), width);
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `planning-refresh-${width}.png`) });
+    }
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -597,28 +799,92 @@ test("SQLite data survives a complete packaged-app restart", async () => {
   }
 });
 
-test("packaged desktop exposes clear lease term and billing views", async () => {
+test("leases keep agreements focused and occupancy audits on demand", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-leases-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
-
   try {
+    await page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const base = backup.data.leases[0];
+      const today = new Date();
+      const dateAt = (offset) => new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate() + offset)).toISOString().slice(0, 10);
+      backup.data.leases.push({ ...base, id: "example-upcoming", tenantName: "Example Upcoming Tenant", startDate: dateAt(30), endDate: dateAt(90), actualEndDate: "", extensions: [] });
+      backup.data.leases.push({ ...base, id: "example-past", tenantName: "Example Past Tenant", startDate: dateAt(-120), endDate: dateAt(-60), actualEndDate: "", extensions: [] });
+      for (let index = 0; index < 35; index += 1) backup.data.leases.push({ ...base, id: `example-archive-${index}`, tenantName: `Example Archive ${index}`, startDate: dateAt(-200), endDate: dateAt(-140), actualEndDate: "", extensions: [] });
+      backup.settings.leaseAutomationEnabled = false;
+      await window.desktopPersistence.saveAppData(backup);
+    });
+    await page.reload();
     await page.getByRole("button", { name: "Leases", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Leases", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Current leases/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Payments & reminders/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /History & coverage/i })).toBeVisible();
-
-    await page.getByRole("button", { name: /Payments & reminders/i }).click();
-    await expect(page.getByRole("heading", { name: "Rent schedules", exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Open ledger", exact: true }).first().click();
+    await expect(page.getByRole("button", { name: /^Active \d/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("heading", { name: /^Coverage audit/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Example Upcoming Tenant", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Upcoming \d/ }).click();
+    await expect(page.getByRole("button", { name: "Example Upcoming Tenant", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: /^Past \d/ }).click();
+    await expect(page.getByRole("button", { name: "Example Past Tenant", exact: true })).toBeVisible();
+    await expect(page.locator("article.rt-lease-list-row")).toHaveCount(30);
+    await page.getByRole("navigation", { name: "Leases pages", exact: true }).getByRole("button", { name: "Next", exact: true }).click();
+    await expect(page.locator("article.rt-lease-list-row")).toHaveCount(6);
+    await page.getByRole("textbox", { name: "Search leases", exact: true }).fill("Example Past");
+    await expect(page.locator("article.rt-lease-list-row")).toHaveCount(1);
+    await page.getByRole("textbox", { name: "Search leases", exact: true }).fill("");
+    await page.getByRole("button", { name: /^Active \d/ }).click();
+    for (const width of [1440, 1280, 720]) {
+      await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, 900), width);
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `leases-refresh-${width}.png`) });
+    }
+    await page.getByRole("button", { name: /^Open lease for / }).first().click();
+    const leasePanel = page.getByRole("dialog");
+    await expect(leasePanel.getByRole("region", { name: "Lease overview", exact: true })).toBeVisible();
+    await expect(leasePanel.getByRole("button", { name: "Save lease", exact: true })).toHaveCount(0);
+    await expect(leasePanel.getByLabel("Tenant", { exact: true })).toBeHidden();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "lease-detail-overview-720.png") });
+    await leasePanel.getByRole("button", { name: "Payments", exact: true }).click();
+    await expect(leasePanel.getByRole("button", { name: "Add entry", exact: true })).toBeVisible();
+    await leasePanel.getByPlaceholder("Memo", { exact: true }).fill("Example retained payment draft");
+    await leasePanel.getByRole("button", { name: "Documents", exact: true }).click();
+    await expect(leasePanel.getByRole("button", { name: "Add PDF", exact: true })).toBeVisible();
+    await leasePanel.getByRole("button", { name: "History", exact: true }).click();
+    await expect(leasePanel.getByRole("heading", { name: "Recorded extensions", exact: true })).toBeVisible();
+    await leasePanel.getByRole("button", { name: "Payments", exact: true }).click();
+    await expect(leasePanel.getByPlaceholder("Memo", { exact: true })).toHaveValue("Example retained payment draft");
+    await leasePanel.getByRole("button", { name: "Edit agreement", exact: true }).click();
     await expect(page.getByText("Term and billing are tracked separately", { exact: true })).toBeVisible();
     await expect(page.getByText("Stay length", { exact: true })).toBeVisible();
-    await expect(page.getByText("Agreement", { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog").getByText("Agreement", { exact: true })).toBeVisible();
     await expect(page.getByText("Billing schedule", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Extend lease", exact: true })).toBeVisible();
+    await leasePanel.getByLabel("Tenant", { exact: true }).fill("Example unsaved agreement edit");
+    await leasePanel.getByRole("button", { name: "Documents", exact: true }).click();
+    await expect(leasePanel.getByRole("button", { name: "Save lease", exact: true })).toBeVisible();
+    await leasePanel.getByRole("button", { name: "Overview", exact: true }).click();
+    await expect(leasePanel.getByLabel("Tenant", { exact: true })).toHaveValue("Example unsaved agreement edit");
     await page.getByRole("button", { name: "Close", exact: true }).click();
-
-    await page.getByRole("button", { name: /History & coverage/i }).click();
-    await expect(page.getByRole("heading", { name: "Lease History & Occupancy Coverage", exact: true })).toBeVisible();
+    await expect(page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(leasePanel.getByLabel("Tenant", { exact: true })).toHaveValue("Example unsaved agreement edit");
+    await page.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Example unsaved agreement edit", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Occupancy & coverage", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Occupancy & coverage", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Coverage audit/ })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Coverage for / }).first().click();
+    await expect(page.getByRole("heading", { name: /^Coverage audit/ })).toBeVisible();
+    await page.getByRole("button", { name: "Back to leases", exact: true }).click();
+    await page.getByRole("button", { name: "Add lease", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Choose a unit for the new lease", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Add lease", exact: true }).click();
+    await page.getByRole("dialog", { name: "Choose a unit for the new lease", exact: true }).getByRole("button").first().click();
+    await expect(page.getByRole("dialog").getByLabel("Tenant", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save lease", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete lease", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Close", exact: true }).click();
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -638,6 +904,17 @@ test("packaged desktop separates Work Queue records from tax cross-checks", asyn
     await expect(page.getByRole("region", { name: "Selected task", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /All tasks/i })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open Tax Overview", exact: true })).toBeVisible();
+    for (const width of [1920, 1440, 720]) {
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expect(page.getByRole("region", { name: "Selected task", exact: true })).toBeVisible();
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `work-queue-refresh-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole("button", { name: "Open calendar", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Operations Calendar", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Open Work Queue", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Work Queue", exact: true })).toBeVisible();
     await page.getByLabel("Find a task").fill("no-matching-task-xyz");
     await expect(page.getByText("No tasks match these filters", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Reset filters", exact: true }).click();
@@ -665,6 +942,33 @@ test("packaged desktop gives each Transactions mode one clear job", async () => 
     const importsTab = page.getByRole("tab", { name: /Imports & matching/ });
     await expect(activityTab).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("heading", { name: "Transaction activity", exact: true })).toBeVisible();
+
+    await expect(page.getByRole("combobox", { name: "Category", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Sort", exact: true })).toBeVisible();
+    await page.getByRole("textbox", { name: "Search transactions", exact: true }).fill("Example Plumbing Co. sink repair");
+    await page.getByRole("button", { name: "Example Plumbing Co. sink repair", exact: true }).click();
+    const transactionDetail = page.getByRole("dialog", { name: "Example Plumbing Co. sink repair", exact: true });
+    await expect(transactionDetail.getByRole("button", { name: "Overview", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(transactionDetail.getByText("Guided review", { exact: true })).toBeHidden();
+    await transactionDetail.getByRole("button", { name: /^Review \(/ }).click();
+    await expect(transactionDetail.getByText("Guided review", { exact: true })).toBeVisible();
+    await transactionDetail.getByRole("button", { name: /^Files \(/ }).click();
+    await expect(transactionDetail.getByRole("button", { name: "Attach receipt/PDF", exact: true })).toBeVisible();
+    await transactionDetail.getByRole("button", { name: "Overview", exact: true }).click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "transactions-detail-1440.png") });
+    await transactionDetail.getByRole("button", { name: "Close", exact: true }).click();
+    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    for (const width of [1920, 1440, 720]) {
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `transactions-activity-${width}.png`) });
+    }
+    await page.getByRole("button", { name: "Table", exact: true }).click();
+    await expect(page.getByRole("table", { name: "Transactions table", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "transactions-table-1440.png") });
 
     await attentionTab.click();
     await expect(page.getByRole("heading", { name: "Transactions needing attention", exact: true })).toBeVisible();
@@ -727,6 +1031,17 @@ test("packaged desktop gives each Properties mode one clear job", async () => {
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
 
   try {
+    const propertyId = await page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const property = backup.data.properties[0];
+      backup.data.properties.push({ ...property, id: "example-cottage-property", name: "Example Cottage", photos: [], propertyValuations: [], operationNotes: [] });
+      backup.data.units.push({ id: "example-studio-unit", propertyId: property.id, name: "Example Studio", status: "Vacant" });
+      backup.data.workOrders.push({ id: "example-studio-work", propertyId: property.id, unit: "Example Studio", title: "Example studio repair", status: "Open", priority: "High", reportedOn: "2026-10-03" });
+      const result = await window.desktopPersistence.saveAppData(backup);
+      if (result.ok === false) throw new Error(result.message);
+      return property.id;
+    });
+    await page.reload();
     await page.getByRole("button", { name: "Properties", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Properties", exact: true })).toBeVisible();
 
@@ -736,10 +1051,50 @@ test("packaged desktop gives each Properties mode one clear job", async () => {
     const photosTab = page.getByRole("tab", { name: /Photos/ });
     await expect(overviewTab).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Property readiness", { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 1920, height: 1200 });
+    await page.getByRole("button", { name: /Example Cottage.*Occupancy/ }).click();
+    await expect(page.getByRole("heading", { name: "Example Cottage", exact: true })).toBeVisible();
+    await page.getByRole("combobox", { name: "Property", exact: true }).selectOption(propertyId);
+    await expect(page.getByText("Unit snapshot", { exact: true })).toBeVisible();
+    for (const [width, height] of [[1920, 1200], [1440, 900], [1024, 900], [720, 900]]) {
+      await page.setViewportSize({ width, height });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `properties-refresh-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const unitButton = page.getByRole("button", { name: /^Unit Example Studio/ });
+    await unitButton.click();
+    const unitPanel = page.getByRole("dialog");
+    await expect(unitPanel.getByRole("heading", { name: "Unit Example Studio", exact: true })).toBeVisible();
+    await expect(unitPanel.getByRole("heading", { name: "Current agreement", exact: true })).toBeVisible();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "unit-overview-refresh.png") });
+    await unitPanel.getByRole("button", { name: "Occupancy history", exact: true }).click();
+    await expect(unitPanel.getByText("Lease & occupancy", { exact: true })).toBeVisible();
+    await unitPanel.getByRole("button", { name: "Files & work", exact: true }).click();
+    await expect(unitPanel.getByRole("button", { name: "Example studio repair", exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 720, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "unit-records-refresh-720.png") });
+    await unitPanel.getByTitle("Close unit details").click();
+    await expect(unitButton).toBeFocused();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await unitButton.click();
+    await unitPanel.getByRole("button", { name: "Files & work", exact: true }).click();
+    await unitPanel.getByRole("button", { name: "Example studio repair", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Maintenance", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Property", exact: true })).toHaveValue(propertyId);
+    await expect(page.getByRole("combobox", { name: "Unit", exact: true })).toHaveValue("Example Studio");
+    await expect(page.locator("#workspace-focus-work-order-example-studio-work")).toBeVisible();
+    await page.getByRole("button", { name: "Properties", exact: true }).click();
 
     await unitsTab.click();
     await expect(page.getByText("Current status, active agreements, and occupancy history for each unit.", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open lease workspace", exact: true })).toBeVisible();
+    const unitRow = page.getByRole("button", { name: "Unit Example Studio", exact: true });
+    await unitRow.click();
+    await expect(unitPanel.getByRole("heading", { name: "Unit Example Studio", exact: true })).toBeVisible();
+    await unitPanel.getByTitle("Close unit details").click();
+    await expect(unitRow).toBeFocused();
 
     await recordsTab.click();
     await expect(page.getByText("Choose valuation, documents, or operating notes without mixing in unit occupancy.", { exact: true })).toBeVisible();
@@ -776,12 +1131,41 @@ test("packaged desktop gives each Maintenance mode one clear job", async () => {
     await expect(activeTab).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Active work orders", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "New Work Order", exact: true })).toBeVisible();
-    const recordButton = page.getByRole("button", { name: "Open record", exact: true }).first();
+    const maintenanceRow = page.locator("#workspace-focus-work-order-example-panel-work");
+    const recordButton = maintenanceRow.getByRole("button", { name: "Open record", exact: true });
+    for (const [width, height] of [[1920, 1200], [1440, 900], [1024, 900], [720, 900]]) {
+      await page.setViewportSize({ width, height });
+      await expect(maintenanceRow).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `maintenance-refresh-${width}.png`) });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.getByRole("textbox", { name: "Search work orders" }).fill("no matching maintenance example");
+    await expect(page.getByText("No matching work orders.", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Clear search", exact: true }).click();
     await recordButton.click();
     const recordPanel = page.getByRole("dialog");
     await expect(recordPanel.getByRole("button", { name: "Edit details", exact: true })).toBeVisible();
+    await recordPanel.getByRole("button", { name: "Edit details", exact: true }).click();
+    await recordPanel.getByRole("button", { name: "Start", exact: true }).click();
+    await expect(recordPanel.getByRole("combobox", { name: "Work order status" })).toHaveValue("In Progress");
+    await recordPanel.getByRole("spinbutton", { name: "Work order actual cost" }).fill("87");
+    await expect.poll(async () => page.evaluate(async () => {
+      const result = await window.desktopPersistence.loadAppData();
+      const order = result.backup.data.workOrders.find((record) => record.id === "example-panel-work");
+      return [order.status, order.actualCost];
+    })).toEqual(["In Progress", 87]);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "maintenance-update-refresh.png") });
+    await page.setViewportSize({ width: 720, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "maintenance-update-refresh-720.png") });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await recordPanel.getByRole("button", { name: /^Files \(/ }).click();
+    await expect(recordPanel.getByRole("button", { name: "Attach file", exact: true })).toBeVisible();
     await recordPanel.getByRole("button", { name: "Close", exact: true }).click();
     await expect(recordButton).toBeFocused();
+    await page.getByRole("combobox", { name: "Work order filter" }).selectOption("in_progress");
+    await expect(maintenanceRow).toContainText("In Progress");
 
     await historyTab.click();
     await expect(page.getByText("Maintenance history", { exact: true })).toBeVisible();
@@ -794,6 +1178,11 @@ test("packaged desktop gives each Maintenance mode one clear job", async () => {
     await vendorsTab.click();
     await expect(page.getByText("Vendor Directory", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add Vendor", exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "Maintenance", exact: true }).click();
+    await activeTab.click();
+    await expect(maintenanceRow).toContainText("In Progress");
+    await expect(maintenanceRow).toContainText("$87.00");
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -816,10 +1205,47 @@ test("packaged desktop gives each Loans mode one clear job", async () => {
     await expect(overviewTab).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("heading", { name: "Loan portfolio", exact: true })).toBeVisible();
     await expect(page.getByText("Property debt summary", { exact: true })).toBeVisible();
+    for (const width of [1920, 1440, 1024, 720]) {
+      await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, width === 1920 ? 1200 : 900), width);
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `loans-refresh-${width}.png`) });
+    }
+    await overviewTab.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(paymentsTab).toHaveAttribute("aria-selected", "true");
+    await expect(paymentsTab).toBeFocused();
 
     await paymentsTab.click();
     await expect(page.getByRole("heading", { name: "Payment management", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Record payment", exact: true }).first()).toBeVisible();
+    const historyButton = page.getByRole("button", { name: "View history", exact: true }).first();
+    await historyButton.click();
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "Payment history", exact: true })).toBeVisible();
+    expect(await page.getByRole("dialog").evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "loan-history-720.png") });
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(historyButton).toBeFocused();
+    await historyButton.click();
+    await page.getByRole("dialog").getByRole("button", { name: /^Show older payments/ }).click();
+    await expect(page.getByRole("dialog").getByRole("button", { name: /^Show older payments/ })).toHaveCount(0);
+    const originalPayment = await page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      return { id: backup.data.loanPayments.find((payment) => payment.paymentDate === "2026-10-01").id, count: backup.data.loanPayments.length };
+    });
+    await page.getByRole("dialog").getByRole("button", { name: "Edit", exact: true }).first().click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByText("Edit loan payment", { exact: true })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: "Payment date", exact: true })).toHaveValue("2026-10-01");
+    await expect(page.getByRole("spinbutton", { name: "Interest", exact: true })).toHaveValue("853");
+    await page.getByRole("spinbutton", { name: "Interest", exact: true }).fill("854");
+    await page.getByRole("button", { name: "Save payment changes", exact: true }).click();
+    await expect.poll(async () => page.evaluate(async (id) => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      return { count: backup.data.loanPayments.length, interest: Number(backup.data.loanPayments.find((payment) => payment.id === id)?.interest) };
+    }, originalPayment.id)).toEqual({ count: originalPayment.count, interest: 854 });
+    await expect(page.getByText("Edit loan payment", { exact: true })).toHaveCount(0);
 
     await taxTab.click();
     await expect(page.getByText("Loan review status", { exact: true })).toBeVisible();
@@ -829,6 +1255,21 @@ test("packaged desktop gives each Loans mode one clear job", async () => {
     await detailsTab.click();
     await expect(page.getByRole("heading", { name: "Loan records and schedules", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit loan", exact: true }).first()).toBeVisible();
+    await page.getByRole("button", { name: "View schedule", exact: true }).first().click();
+    const loanPanel = page.getByRole("dialog");
+    await loanPanel.getByRole("button", { name: "Show next 12 payments", exact: true }).click();
+    await expect(loanPanel.getByRole("columnheader", { name: "End balance", exact: true })).toBeVisible();
+    await loanPanel.getByRole("button", { name: "Edit loan", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(2);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(loanPanel.getByRole("button", { name: "Edit loan", exact: true })).toBeFocused();
+    await loanPanel.getByRole("button", { name: "Close loan details", exact: true }).click();
+    await overviewTab.click();
+    await page.getByRole("button", { name: "Manage loan", exact: true }).first().click();
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "Overview", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(detailsTab).toBeFocused();
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
@@ -888,6 +1329,12 @@ test("packaged desktop gives each Tax Center mode one clear job", async () => {
     await expect(summaryTab).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("Tax package status", { exact: true })).toBeVisible();
     await expect(page.getByText("Schedule E summary (computed)", { exact: true })).toBeVisible();
+    for (const width of [1920, 1440, 1024, 720]) {
+      await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, width === 1920 ? 1200 : 900), width);
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `tax-center-refresh-${width}.png`) });
+    }
 
     await scheduleTab.click();
     const lineTotalsTab = page.getByRole("tab", { name: /^Line totals/ });
@@ -945,8 +1392,8 @@ test("guided lease extension survives SQLite restart with linked payment and can
   let run = await launchDesktopApp(profilePath);
   const openExtension = async () => {
     await run.page.getByRole("button", { name: "Leases", exact: true }).click();
-    await run.page.getByRole("button", { name: /History & coverage/i }).click();
-    await run.page.getByRole("button", { name: /Extension Test Tenant/ }).click();
+    await run.page.getByRole("button", { name: /^All \d/ }).click();
+    await run.page.getByRole("button", { name: "Extension Test Tenant", exact: true }).click();
     await run.page.getByRole("button", { name: "Extend lease", exact: true }).click();
   };
   try {
@@ -1169,6 +1616,8 @@ test("Work Queue reaches every task and confirms a reviewed service-period corre
     await expect(list.getByRole("button", { name: /Queue utility/ })).toHaveCount(1);
     await detail.getByRole("button", { name: "Set service period", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Monthly utility bill", exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Monthly utility bill", exact: true }).getByRole("button", { name: /^Review \(/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText("Guided review", { exact: true })).toBeVisible();
     const storedDate = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.find((t) => t.id === "queue-test-24").servicePeriodStart);
     expect(storedDate || "").toBe("");
     await page.getByRole("button", { name: "Close", exact: true }).click();

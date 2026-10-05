@@ -1,4 +1,5 @@
 import { SavedViews, useListPreference } from "../shared/SavedViews.jsx";
+import { TransactionActivityRow } from "./TransactionActivityRow.jsx";
 import { TransactionTable, OPTIONAL_TRANSACTION_COLUMNS } from "./TransactionTable.jsx";
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useEffect, useMemo, useState } from "react";
@@ -127,6 +128,16 @@ export function LedgerWorkspace({
   const [focusedRecurringTemplateId, setFocusedRecurringTemplateId] = useState("");
   const recurringFocusRequestId = workspaceFocus?.source === "recurring" ? workspaceFocus.requestId : "";
   const mileageFocusRequestId = workspaceFocus?.source === "mileage" ? workspaceFocus.requestId : "";
+  const transactionSearchRequestId = workspaceFocus?.source === "transaction_search" ? workspaceFocus.requestId : "";
+  useEffect(() => {
+    if (!transactionSearchRequestId) return;
+    setWorkspaceMode("activity");
+    setLedgerView("all");
+    setLedgerCategoryFilter("all");
+    setLedgerReconciliationFilter("all");
+    setSelectedReviewIds([]);
+    clearWorkspaceFocus?.();
+  }, [transactionSearchRequestId]);
   useEffect(() => {
     if (!mileageFocusRequestId) return;
     setWorkspaceMode("mileage");
@@ -308,8 +319,8 @@ export function LedgerWorkspace({
 
   return (
     <Card className="overflow-hidden shadow-none">
-      <CardContent className="space-y-3 !p-4">
-        <div role="tablist" aria-label="Transaction workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+      <CardContent className="rt-transactions-workspace space-y-3 !p-4">
+        <div role="tablist" aria-label="Transaction workspace modes" className="flex flex-wrap gap-1 border-b border-slate-200 pb-3">
           {workspaceModes.map((mode) => {
             const ModeIcon = TRANSACTION_MODE_ICONS[mode.key];
             const selected = workspaceMode === mode.key;
@@ -319,17 +330,18 @@ export function LedgerWorkspace({
                 type="button"
                 role="tab"
                 aria-selected={selected}
-                className={`rounded-xl border p-3 text-left transition ${selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/60"}`}
+                title={mode.description}
+                className={`rounded-md border px-3 py-2 text-left transition ${selected ? "border-teal-200 bg-teal-50 text-teal-900" : "border-transparent bg-white hover:bg-slate-50"}`}
                 onClick={() => changeWorkspaceMode(mode.key)}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-semibold">
-                    <ModeIcon className={`h-4 w-4 ${selected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />
+                    <ModeIcon className={`h-4 w-4 ${selected ? "text-teal-700" : "text-slate-600"}`} aria-hidden="true" />
                     {mode.label}
                   </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.count}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selected ? "bg-teal-100 text-teal-800" : "bg-slate-100 text-slate-700"}`}>{mode.count}</span>
                 </div>
-                <div className={`mt-2 text-xs leading-4 ${selected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+
               </button>
             );
           })}
@@ -343,7 +355,7 @@ export function LedgerWorkspace({
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
               <div className="text-xs text-slate-500">
-                Choose whether activity totals stop at today or include every entry in the selected year.
+                Totals for matching records · {summaryView === "posted" ? `Posted through ${todayIso}` : "Includes future-dated entries"}
               </div>
               <div className="flex rounded-md border border-slate-200 bg-white p-0.5">
                 <Button size="sm" variant={summaryView === "posted" ? "default" : "ghost"} onClick={() => setSummaryView("posted")}>
@@ -363,7 +375,7 @@ export function LedgerWorkspace({
                       <div className="min-w-0">
                         <div className="text-xs uppercase text-slate-500">{card.label}</div>
                         <div className={`mt-1 text-base font-semibold leading-tight text-slate-900 ${card.tone || ""}`}>{card.value}</div>
-                        {card.helper ? <div className="mt-1 text-[11px] leading-4 text-slate-500">{card.helper}</div> : null}
+
                       </div>
                       <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${card.iconTone}`}>
                         <SummaryIcon className="h-4 w-4" aria-hidden="true" />
@@ -376,6 +388,15 @@ export function LedgerWorkspace({
           </>
         ) : null}
 
+        <div className="rt-ledger-view-controls flex flex-wrap items-start justify-between gap-2">
+          <div className="rt-ledger-saved-views min-w-0">
+            <SavedViews viewKey="transactions" filters={{ search, category: ledgerCategoryFilter, status: ledgerReconciliationFilter, sort: ledgerSort, view: ledgerView }} onApply={(saved) => { setSearch(String(saved.search || "")); setLedgerCategoryFilter(ledgerCategories.some((category) => category.id === saved.category) ? saved.category : "all"); setLedgerReconciliationFilter(["all", "unreconciled", "reconciled"].includes(saved.status) ? saved.status : "all"); setLedgerSort(["date_desc", "date_asc", "amount_desc", "amount_asc", "category_asc"].includes(saved.sort) ? saved.sort : "date_desc"); setLedgerView(saved.view || "all"); }} />
+          </div>
+        {workspaceMode === "activity" && <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Transaction list layout"><Button size="sm" variant={listLayout === "cards" ? "default" : "secondary"} aria-pressed={listLayout === "cards"} onClick={() => setListLayout("cards")}>Cards</Button><Button size="sm" variant={listLayout === "table" ? "default" : "secondary"} aria-pressed={listLayout === "table"} onClick={() => setListLayout("table")}>Table</Button></div>
+          {listLayout === "table" && <details className="text-sm"><summary className="cursor-pointer">Columns</summary><div className="mt-2 flex flex-wrap gap-3">{OPTIONAL_TRANSACTION_COLUMNS.map((column) => <label key={column} className="flex items-center gap-1"><input type="checkbox" checked={listColumns.includes(column)} onChange={(event) => setListColumns((previous) => event.target.checked ? [...previous, column] : previous.filter((item) => item !== column))} />{column}</label>)}</div></details>}
+        </div>}
+        </div>
         <div className={LEDGER_MUTED_PANEL_CLASS + " p-3"}>
           <div className="mb-2 flex flex-wrap gap-2">
             {quickFilters.map((filter) => (
@@ -389,11 +410,11 @@ export function LedgerWorkspace({
               Future-dated transactions are in the selected year but occur after the current as-of date. They remain visible in Full-year view and may be excluded from posted-to-date cashflow.
             </div>
           ) : null}
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            <SavedViews viewKey="transactions" filters={{ search, category: ledgerCategoryFilter, status: ledgerReconciliationFilter, sort: ledgerSort, view: ledgerView }} onApply={(saved) => { setSearch(String(saved.search || "")); setLedgerCategoryFilter(ledgerCategories.some((category) => category.id === saved.category) ? saved.category : "all"); setLedgerReconciliationFilter(["all", "unreconciled", "reconciled"].includes(saved.status) ? saved.status : "all"); setLedgerSort(["date_desc", "date_asc", "amount_desc", "amount_asc", "category_asc"].includes(saved.sort) ? saved.sort : "date_desc"); setLedgerView(saved.view || "all"); }} />
-            <Input aria-label="Search transactions" placeholder="Search" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Select value={ledgerCategoryFilter} onValueChange={setLedgerCategoryFilter}>
-              <SelectTrigger>
+          <div className="rt-ledger-filter-fields grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(16rem,2fr)_1fr_1fr_1fr_auto]">
+
+            <div><Label htmlFor="ledger-search">Search</Label><Input id="ledger-search" aria-label="Search transactions" placeholder="Search" className="mt-1" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
+            <div><Label htmlFor="ledger-category">Category</Label><Select value={ledgerCategoryFilter} onValueChange={setLedgerCategoryFilter}>
+              <SelectTrigger id="ledger-category" className="mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -403,9 +424,9 @@ export function LedgerWorkspace({
                   </SelectItem>
                 ))}
               </SelectContent>
-            </Select>
-            <Select value={ledgerSort} onValueChange={setLedgerSort}>
-              <SelectTrigger>
+            </Select></div>
+            <div><Label htmlFor="ledger-sort">Sort</Label><Select value={ledgerSort} onValueChange={setLedgerSort}>
+              <SelectTrigger id="ledger-sort" className="mt-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -415,10 +436,10 @@ export function LedgerWorkspace({
                 <SelectItem value="amount_asc">Amount low to high</SelectItem>
                 <SelectItem value="category_asc">Category A-Z</SelectItem>
               </SelectContent>
-            </Select>
+            </Select></div>
             {workspaceMode === "activity" || workspaceMode === "imports" ? (
-              <Select value={ledgerReconciliationFilter} onValueChange={setLedgerReconciliationFilter}>
-                <SelectTrigger>
+              <div><Label htmlFor="ledger-bank-match">Bank match</Label><Select value={ledgerReconciliationFilter} onValueChange={setLedgerReconciliationFilter}>
+                <SelectTrigger id="ledger-bank-match" className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -426,11 +447,11 @@ export function LedgerWorkspace({
                   <SelectItem value="unreconciled">Needs bank match</SelectItem>
                   <SelectItem value="reconciled">Bank matched / accepted</SelectItem>
                 </SelectContent>
-              </Select>
+              </Select></div>
             ) : null}
             {workspaceMode === "attention" ? (
-              <Select value={reviewReasonFilter} onValueChange={setReviewReasonFilter}>
-                <SelectTrigger>
+              <div><Label htmlFor="ledger-review-reason">Review reason</Label><Select value={reviewReasonFilter} onValueChange={setReviewReasonFilter}>
+                <SelectTrigger id="ledger-review-reason" className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -441,11 +462,11 @@ export function LedgerWorkspace({
                     </SelectItem>
                   ))}
                 </SelectContent>
-              </Select>
+              </Select></div>
             ) : null}
             <Button
               variant="secondary"
-              className="whitespace-nowrap xl:justify-self-start"
+              className="whitespace-nowrap self-end xl:justify-self-start"
               onClick={() => {
                 setSearch("");
                 setLedgerCategoryFilter("all");
@@ -781,10 +802,6 @@ export function LedgerWorkspace({
           </div>
         ) : null}
 
-        {workspaceMode === "activity" && <div className="my-3 flex flex-wrap items-center gap-3">
-          <div role="group" aria-label="Transaction list layout"><Button size="sm" variant={listLayout === "cards" ? "default" : "secondary"} aria-pressed={listLayout === "cards"} onClick={() => setListLayout("cards")}>Cards</Button><Button size="sm" variant={listLayout === "table" ? "default" : "secondary"} aria-pressed={listLayout === "table"} onClick={() => setListLayout("table")}>Table</Button></div>
-          {listLayout === "table" && <details className="text-sm"><summary className="cursor-pointer">Columns</summary><div className="mt-2 flex flex-wrap gap-3">{OPTIONAL_TRANSACTION_COLUMNS.map((column) => <label key={column} className="flex items-center gap-1"><input type="checkbox" checked={listColumns.includes(column)} onChange={(event) => setListColumns((previous) => event.target.checked ? [...previous, column] : previous.filter((item) => item !== column))} />{column}</label>)}</div></details>}
-        </div>}
         {displayedTransactions.length === 0 ? (
           <div className={LEDGER_MUTED_PANEL_CLASS + " p-3 text-sm text-slate-600"}>
             {ledgerView === "review"
@@ -804,7 +821,7 @@ export function LedgerWorkspace({
                       : "No transactions in this view."}
           </div>
         ) : (
-          workspaceMode === "activity" && listLayout === "table" ? <TransactionTable records={transactionPage.records} columns={listColumns} sort={ledgerSort} onSort={setLedgerSort} onOpen={openTransaction} currency={currency} documentCount={linkedDocumentCount} reviews={transactionReviewById} isTaxReviewRelevantTransaction={isTaxReviewRelevantTransaction} /> : transactionPage.records.map((t) => (
+          workspaceMode === "activity" && listLayout === "table" ? <TransactionTable records={transactionPage.records} columns={listColumns} sort={ledgerSort} onSort={setLedgerSort} onOpen={openTransaction} currency={currency} documentCount={linkedDocumentCount} reviews={transactionReviewById} isTaxReviewRelevantTransaction={isTaxReviewRelevantTransaction} propertyNameById={propertyNameById} todayIso={todayIso} /> : workspaceMode === "activity" ? transactionPage.records.map((transaction) => <TransactionActivityRow key={transaction.id} transaction={transaction} review={transactionReviewById[transaction.id]} documentCount={linkedDocumentCount(transaction)} propertyLabel={propertyNameById[transaction.propertyId] || transaction.propertyId} todayIso={todayIso} currency={currency} onOpen={openTransaction} onPrefetch={prefetchTransactionDialog} />) : transactionPage.records.map((t) => (
             (() => {
               const review = transactionReviewById[t.id] || { issues: [], readiness: { key: "ready", label: "Ready" } };
               const { Icon, iconClass, amountClass } = getTransactionVisual(t);

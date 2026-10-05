@@ -1,4 +1,5 @@
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
+import { formatUnitLabel } from "../../domain/unitLabels.js";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
@@ -112,7 +113,7 @@ function ActionRows({ items, emptyText = "No open items here." }) {
   return items.map((item) => {
     const ItemIcon = REVIEW_SECTION_ICONS[item.sectionKey] || ListChecks;
     return (
-    <div key={item.key} className="rounded-lg border border-slate-200 bg-white p-2.5 text-sm">
+    <div key={item.key} className="rt-selected-task rounded-lg border border-slate-200 bg-white p-4 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-start gap-2">
           <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${itemUrgencyIconTone(item)}`}>
@@ -136,7 +137,7 @@ function ActionRows({ items, emptyText = "No open items here." }) {
           </div>
         </div>
         {item.onAction ? (
-          <Button size="sm" variant={item.primary ? "default" : "secondary"} className="shrink-0 gap-2" onClick={item.onAction}>
+          <Button size="sm" variant="default" className="shrink-0 gap-2" onClick={item.onAction}>
             <ItemIcon className="h-4 w-4" aria-hidden="true" />
             {item.actionLabel || "Open"}
           </Button>
@@ -151,22 +152,8 @@ function ActionRows({ items, emptyText = "No open items here." }) {
           ))}
         </div>
       ) : null}
-      {item.fix || item.why ? (
-        <div className="mt-2 grid gap-1 rounded-md border border-slate-100 bg-slate-50 px-2 py-1.5 text-[11px] leading-4 text-slate-600 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          {item.fix ? (
-            <div>
-              <span className="font-semibold text-slate-700">Next step: </span>
-              {item.fix}
-            </div>
-          ) : null}
-          {item.why ? (
-            <div>
-              <span className="font-semibold text-slate-700">Why: </span>
-              {item.why}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {item.fix ? <div className="mt-3 rounded-lg border border-teal-100 bg-teal-50/60 p-3 text-sm leading-5 text-slate-700"><div className="mb-1 text-xs font-semibold text-teal-700">Next step</div>{item.fix}</div> : null}
+      {item.why ? <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><summary className="cursor-pointer text-xs font-medium text-slate-600">Why this matters</summary><p className="mt-2 text-xs leading-5 text-slate-600">{item.why}</p></details> : null}
       {item.secondaryActions?.length > 0 ? (
         <details className="mt-3"><summary className="cursor-pointer text-xs font-medium text-slate-600">Other actions</summary><div className="mt-2 flex flex-wrap gap-1.5">
           {item.secondaryActions.map((action) => (
@@ -398,7 +385,7 @@ export function ReviewCenterWorkspace({
       groupActionLabel: "Review first",
       sectionKey: "transactions",
       title: transaction.vendor || transaction.description || transaction.category || "Transaction",
-      subtitle: `${propertyNameById[transaction.propertyId] || "Property not set"} | ${transaction.date || "No date"}${transaction.unit ? ` | Unit ${transaction.unit}` : ""} | ${currency?.(Number(transaction.amount || 0))}`,
+      subtitle: `${propertyNameById[transaction.propertyId] || "Property not set"} | ${transaction.date || "No date"}${transaction.unit ? ` | ${formatUnitLabel(transaction.unit)}` : ""} | ${currency?.(Number(transaction.amount || 0))}`,
       what: issueSummary(record.issues),
       issueLabels: summarizeIssueLabels(record.issues),
       issueKeys: [...issueKeys],
@@ -465,7 +452,7 @@ export function ReviewCenterWorkspace({
       key: `maintenance-${workOrder.id}`,
       sectionKey: "maintenance",
       title: workOrder.title || "Work order",
-      subtitle: `${propertyNameById[workOrder.propertyId] || workOrder.propertyId} | Unit ${workOrder.unit || "Shared"} | ${workOrder.status || "Open"} | ${vendorLabel}`,
+      subtitle: `${propertyNameById[workOrder.propertyId] || workOrder.propertyId} | ${formatUnitLabel(workOrder.unit || "Shared")} | ${workOrder.status || "Open"} | ${vendorLabel}`,
       what: issueSummary(record.issues),
       why: firstIssueHelp(record.issues, "Maintenance records need support and accounting treatment before they are reliable source records."),
       fix: maintenanceActionLabel(record),
@@ -628,7 +615,7 @@ export function ReviewCenterWorkspace({
   const filteredItems = filterWorkQueue(groupedAllItems, { section: activeSection, priority, query });
   const visibleItems = filteredItems.slice(0, visibleLimit);
   const selectedItem = filteredItems.find((item) => item.key === selectedKey) || visibleItems[0] || null;
-  const priorityCount = groupedAllItems.filter((item) => item.urgency === "high").length;
+  const priorityCount = groupedAllItems.filter((item) => item.urgency === "high" || item.urgency === "critical").length;
   const selectedSignature = (item) => JSON.stringify(item?.memberItems
     ? item.memberItems.map((member) => [member.key, member.what])
     : [item?.what, item?.subtitle]);
@@ -664,22 +651,22 @@ export function ReviewCenterWorkspace({
   return (
     <>
       <Card className="overflow-hidden shadow-none">
-        <CardContent className="space-y-4 !p-4">
+        <CardContent className="rt-work-queue space-y-3 !p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">{groupedAllItems.length ? `${groupedAllItems.length} task${groupedAllItems.length === 1 ? "" : "s"} to work through` : "Your work queue is clear"}</h2>
-              <p className="mt-1 text-sm text-slate-600">Choose a task, review the issue, and fix its source record. Completed checks leave the queue automatically.</p>
-              <p className="mt-1 text-xs text-slate-500">{priorityCount} to review first · Related recurring records stay together. Counts show tasks, not individual checks.</p>
+              <p className="mt-1 text-sm text-slate-600">Review a task and fix its source record. Resolved checks leave the queue automatically.</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">{priorityCount} to review first</span><span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-slate-600">Related records grouped · Counts show tasks</span></div>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
             <span>Tax Center has {taxCrossCheckCount} cross-check{taxCrossCheckCount === 1 ? "" : "s"}. These summarize your records separately.</span>
-            <Button variant="ghost" size="sm" onClick={() => executeReviewRoute(routeForReviewSection("tax"))}>Open Tax Overview</Button>
+            <div className="flex flex-wrap gap-1"><Button variant="ghost" size="sm" onClick={() => executeReviewRoute(routeForReviewSection("tax"))}>Open Tax Overview</Button><Button size="sm" variant="ghost" onClick={() => navigateWithDashboardContext ? navigateWithDashboardContext({ view: "operations" }) : setView?.("operations")}>Open calendar</Button></div>
           </div>
           {reviewNotice ? <div role="status" className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">{reviewNotice}</div> : null}
-          <div className="flex flex-wrap gap-2" aria-label="Task areas">
+          <div className="flex flex-wrap gap-1 border-b border-slate-200 pb-3" aria-label="Task areas">
             {sectionTabs.map((tab) => (
-              <Button key={tab.key} size="sm" variant={activeSection === tab.key ? "default" : "secondary"}
+              <Button key={tab.key} size="sm" variant={activeSection === tab.key ? "default" : "ghost"}
                 aria-pressed={activeSection === tab.key} onClick={() => setActiveSection(tab.key)}>
                 {tab.label} ({tab.count})
               </Button>
@@ -697,22 +684,22 @@ export function ReviewCenterWorkspace({
           </div>
           <div className="text-xs text-slate-500">Review first covers accounting decisions and missing records. It does not mean a payment is overdue.</div>
           {filteredItems.length ? (
-            <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)]">
-              <section aria-label="Open tasks" className="space-y-2">
+            <div className="rt-queue-layout grid items-start gap-4 lg:grid-cols-[minmax(280px,.85fr)_minmax(0,1.15fr)]">
+              <section aria-label="Open tasks" className="rt-queue-list space-y-2">
                 <div className="text-xs text-slate-500">Showing {visibleItems.length} of {filteredItems.length} tasks</div>
-                <div className="max-h-[65vh] space-y-2 overflow-y-auto pr-1">
+                <div className="rt-queue-scroll space-y-2 overflow-y-auto pr-1">
                   {visibleItems.map((item) => (
                     <button type="button" key={item.key} aria-pressed={selectedItem?.key === item.key} onClick={() => setSelectedKey(item.key)}
                       className={`w-full rounded-lg border p-3 text-left ${selectedItem?.key === item.key ? "border-teal-600 bg-teal-50 ring-1 ring-teal-600" : "border-slate-200 bg-white hover:bg-slate-50"}`}>
-                      <div className="flex items-start justify-between gap-2"><span className="font-semibold text-slate-900">{item.title}</span><span className="shrink-0 text-xs text-slate-600">{itemUrgencyLabel(item)}</span></div>
-                      <div className="mt-1 text-xs text-slate-500">{item.subtitle}</div>
-                      <div className="mt-2 text-sm text-slate-700">{item.what}</div>
+                      <div className="flex items-start justify-between gap-2"><span className="font-semibold text-slate-900">{item.title}</span><span className={`shrink-0 rounded-md border px-2 py-0.5 text-xs ${itemUrgencyClass(item)}`}>{itemUrgencyLabel(item)}</span></div>
+                      <div className="mt-1 line-clamp-1 text-xs text-slate-500">{item.subtitle}</div>
+                      <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{item.what}</div>
                     </button>
                   ))}
                 </div>
                 {visibleItems.length < filteredItems.length ? <Button variant="secondary" onClick={() => setVisibleLimit((count) => count + 20)}>Show more tasks ({filteredItems.length - visibleItems.length} remaining)</Button> : null}
               </section>
-              <section aria-label="Selected task" className="min-w-0 space-y-2 lg:sticky lg:top-4">
+              <section aria-label="Selected task" className="rt-queue-selected min-w-0 space-y-2 lg:sticky lg:top-4">
                 <h3 className="text-sm font-semibold text-slate-700">Review and resolve</h3>
                 <ActionRows items={[detailItem]} />
                 <p className="text-xs text-slate-500">Opening a record does not complete this task. Save the correction, then check what remains.</p>

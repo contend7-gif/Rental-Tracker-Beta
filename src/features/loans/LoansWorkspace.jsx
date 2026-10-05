@@ -1,4 +1,5 @@
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
+import { WorkspaceModeNav } from "../shared/WorkspaceModeNav.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,15 @@ export function LoansWorkspace({
 }) {
   const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("loans:workspaceMode", "overview");
   const [paymentPanelOpen, setPaymentPanelOpen] = useState(false);
+  useEffect(() => {
+    if (!paymentPanelOpen) return;
+    const frame = requestAnimationFrame(() => {
+      const form = document.getElementById("loan-payment-form");
+      form?.querySelector("input, select, button")?.focus({ preventScroll: true });
+      form?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [paymentPanelOpen, editingLoanPaymentId]);
   const inboxReviewCount = loanReviewInbox?.counts?.total || 0;
   const debtTotals = useMemo(
     () => sumVisibleLoanValues({ visibleLoans, observedLoanDefaultsById, loanPayments, leases, units, usePeriods, asOfDate: recurringThroughDate }),
@@ -207,28 +217,7 @@ export function LoansWorkspace({
 
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Loan workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {workspaceModes.map((mode) => {
-          const modeSelected = workspaceMode === mode.key;
-          const ModeIcon = loanWorkspaceModeIcons[mode.key] || Landmark;
-          return (
-            <button
-              key={`loan-mode-${mode.key}`}
-              type="button"
-              role="tab"
-              aria-selected={modeSelected}
-              className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/60"}`}
-              onClick={() => setWorkspaceMode(mode.key)}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
-              </div>
-              <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
-            </button>
-          );
-        })}
-      </div>
+      <WorkspaceModeNav label="Loan workspace modes" modes={workspaceModes} value={workspaceMode} onChange={setWorkspaceMode} icons={loanWorkspaceModeIcons} />
 
       <section aria-labelledby="debt-summary-title">
         <div className="mb-2 flex items-center justify-between gap-3">
@@ -238,11 +227,11 @@ export function LoansWorkspace({
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {summaryItems.map(({ label, value, helper, icon: Icon }) => (
-            <Card key={label} className="shadow-none">
-              <CardContent className="flex min-h-28 items-start gap-3 !px-4 !py-4">
+            <Card key={label} className="rt-summary-stat shadow-none">
+              <CardContent className="flex items-start gap-3 !px-4 !py-3">
                 <div className="mt-1 rounded-md border border-teal-100 bg-teal-50 p-1.5 text-teal-700"><Icon className="h-4 w-4" aria-hidden="true" /></div>
                 <div className="min-w-0 flex-1">
-                  <div className="flex min-h-10 items-start text-[11px] font-medium uppercase leading-4 text-slate-500">{label}</div>
+                  <div className="flex items-start text-[11px] font-medium uppercase leading-4 text-slate-500">{label}</div>
                   <div className="mt-1 text-base font-semibold leading-tight text-slate-950" title={value}>{value}</div>
                   {helper ? <div className="mt-1 text-[11px] leading-4 text-slate-500">{helper}</div> : null}
                 </div>
@@ -288,7 +277,7 @@ export function LoansWorkspace({
       )}
 
       {workspaceMode === "payments" && paymentPanelOpen && (
-        <Card className="h-full shadow-none">
+        <Card id="loan-payment-form" className="h-full shadow-none">
           <CardHeader className="flex-row items-center justify-between border-b border-slate-200 py-3">
             <CardTitle className="text-base">{editingLoanPaymentId ? "Edit loan payment" : "Record loan payment"}</CardTitle>
             <Button size="icon" variant="ghost" onClick={closePaymentPanel} title="Close payment form"><X className="h-4 w-4" /></Button>

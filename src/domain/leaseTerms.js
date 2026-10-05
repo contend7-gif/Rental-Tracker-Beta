@@ -110,7 +110,7 @@ export function leaseAgreementTypeLabel(lease) {
 
 export function leaseBillingCadenceLabel(lease) {
   const cadence = normalizeLeaseBillingCadence(lease);
-  if (cadence === "full_term") return "Full term, paid upfront";
+  if (cadence === "full_term") return "Full term, due upfront";
   if (cadence === "weekly") return "Weekly";
   if (cadence === "biweekly") return "Every two weeks";
   if (cadence === "custom") return `Every ${leaseBillingIntervalDays(lease)} days`;

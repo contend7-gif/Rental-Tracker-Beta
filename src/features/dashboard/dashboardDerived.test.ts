@@ -98,7 +98,7 @@ test("unit snapshot keeps a prepaid full-term lease distinct from monthly rent",
   });
 
   assert.equal(summary.rows[0].rentAmount, 1550);
-  assert.equal(summary.rows[0].rentCadenceLabel, "Full term, paid upfront");
+  assert.equal(summary.rows[0].rentCadenceLabel, "Full term, due upfront");
 });
 
 test("rent collection uses prorated ledger rent charges and ignores security deposits", () => {

@@ -26,7 +26,7 @@ test("legacy 30-day mid-term leases remain one full-term charge", () => {
   const record = lease();
   assert.equal(normalizeLeaseAgreementType(record), "fixed_term");
   assert.equal(normalizeLeaseBillingCadence(record), "full_term");
-  assert.equal(leaseBillingCadenceLabel(record), "Full term, paid upfront");
+  assert.equal(leaseBillingCadenceLabel(record), "Full term, due upfront");
   assert.equal(leaseRentSummaryLabel(record, (value) => `$${value}`), "$1550 full term");
 });
 

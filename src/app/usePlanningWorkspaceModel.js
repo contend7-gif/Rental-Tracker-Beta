@@ -634,8 +634,9 @@ export function usePlanningWorkspaceModel({
         capitalTargets: planningCapitalTargetsMerged,
         goalStatus: planningGoalStatus,
         projectedCashFlow: planningHorizonDisplayMetrics.cashFlow,
+        horizonMonths: planningHorizonMonths,
       }),
-    [todayIso, planningSummary, planningReserveSummary, planningReserveGap, planningMilestones, planningCapitalTargetsMerged, planningGoalStatus, planningHorizonDisplayMetrics.cashFlow],
+    [todayIso, planningSummary, planningReserveSummary, planningReserveGap, planningMilestones, planningCapitalTargetsMerged, planningGoalStatus, planningHorizonDisplayMetrics.cashFlow, planningHorizonMonths],
   );
 
   const planningRecommendedMoves = useMemo(

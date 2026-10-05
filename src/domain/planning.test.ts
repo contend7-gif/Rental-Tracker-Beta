@@ -1178,6 +1178,26 @@ test("buildPlanningHealthSummary marks a negative-cash-flow thin-reserve plan as
   assert.ok(health.factors.some((factor) => factor.status === "weak"));
 });
 
+test("planning health uses the selected horizon for monthly cash-flow warnings", () => {
+  const base = {
+    summary: { firstYearCashFlow: -2400, adjustedMonthlyDebtService: 0 },
+    reserve: { firstYearCoverageMonths: 6 },
+    reserveGap: 0,
+  } as any;
+  for (const horizonMonths of [12, 24, 36]) {
+    const health = buildPlanningHealthSummary({ ...base, projectedCashFlow: -200 * horizonMonths, horizonMonths });
+    const cashFlow = health.factors.find((factor) => factor.id === "cash_flow");
+    assert.equal(cashFlow?.status, "watch");
+    assert.match(cashFlow?.detail || "", /about -200 per month/);
+  }
+  for (const horizonMonths of [undefined, 0, -1, NaN, Infinity]) {
+    const health = buildPlanningHealthSummary({ ...base, projectedCashFlow: -2400, horizonMonths });
+    assert.match(health.factors.find((factor) => factor.id === "cash_flow")?.detail || "", /about -200 per month/);
+  }
+  const fallback = buildPlanningHealthSummary({ ...base, horizonMonths: 36 });
+  assert.match(fallback.factors.find((factor) => factor.id === "cash_flow")?.detail || "", /about -200 per month/);
+});
+
 test("buildPlanningAssumptionAudit summarizes forecast mode and scenario inputs", () => {
   const audit = buildPlanningAssumptionAudit({
     scopeLabel: "Portfolio",

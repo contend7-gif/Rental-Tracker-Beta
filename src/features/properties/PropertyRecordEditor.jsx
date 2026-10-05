@@ -3,7 +3,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
-import { CalendarRange, ChevronRight, Eye, EyeOff, FileText, Pencil, TrendingUp } from "lucide-react";
+import { ChevronRight, Eye, EyeOff, FileText, Pencil, TrendingUp } from "lucide-react";
 import { leaseRentSummaryLabel } from "../../domain/leaseTerms.js";
 import { field } from "../shared/uiHelpers.jsx";
 import {
@@ -649,7 +649,7 @@ export function PropertyRecordEditor({
                   <div className="mt-3 grid gap-2 lg:grid-cols-2">
                     {(property.operationNotes || []).map((note) => (
                       <div key={note.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
-                        <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="truncate font-medium text-slate-900">{note.title}</div>
                             <div className="mt-1 flex flex-wrap gap-1.5">
@@ -700,10 +700,10 @@ export function PropertyRecordEditor({
 
                   return (
                     <div key={unit.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            {openUnitDetail ? <button type="button" className="flex items-center gap-1 font-semibold text-slate-900 hover:text-teal-700" onClick={() => openUnitDetail(unit)}>{formatUnitName(unit.name)}<ChevronRight className="h-3.5 w-3.5" /></button> : <div className="font-semibold text-slate-900">{formatUnitName(unit.name)}</div>}
+                            {openUnitDetail ? <button type="button" className="flex items-center gap-1 font-semibold text-slate-900 hover:text-teal-700" onClick={(event) => openUnitDetail(unit, event)}>{formatUnitName(unit.name)}<ChevronRight className="h-3.5 w-3.5" /></button> : <div className="font-semibold text-slate-900">{formatUnitName(unit.name)}</div>}
                             <Badge variant="secondary">{unitStatusLabel[unitStatus] || unitStatus}</Badge>
                           </div>
                           {activeLease ? (
@@ -716,24 +716,23 @@ export function PropertyRecordEditor({
                         </div>
                         <div className="flex items-center gap-2">
                           {activeLease ? (
-                            <Button size="sm" variant="secondary" className="h-10 px-4" onClick={() => openLease(activeLease)}>
+                            <Button size="sm" variant="secondary" className="h-8 px-3" onClick={() => openLease(activeLease)}>
                               View lease
                             </Button>
                           ) : (
-                            <Button size="sm" variant="secondary" className="h-10 px-4" onClick={() => openLeaseForUnit(property.id, unit.name)}>
+                            <Button size="sm" variant="secondary" className="h-8 px-3" onClick={() => openLeaseForUnit(property.id, unit.name)}>
                               Manage occupancy
                             </Button>
                           )}
                           {openUnitEditor ? (
-                            <Button size="sm" variant="secondary" className="h-10 px-3" title={`Edit ${formatUnitName(unit.name)}`} onClick={() => openUnitEditor(unit)} disabled={!canCreateEditRecords}>
+                            <Button size="sm" variant="secondary" className="h-8 px-3" title={`Edit ${formatUnitName(unit.name)}`} onClick={() => openUnitEditor(unit)} disabled={!canCreateEditRecords}>
                               <Pencil className="h-4 w-4" />
                               <span className="sr-only">Edit {formatUnitName(unit.name)}</span>
                             </Button>
                           ) : null}
                         </div>
                       </div>
-                      <div className="mt-3 border-t border-slate-100 pt-2">
-                        <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium uppercase text-slate-500"><CalendarRange className="h-3.5 w-3.5" />Occupancy history</div>
+                      <details className="mt-3 border-t border-slate-100 pt-2"><summary className="cursor-pointer text-xs font-medium text-slate-500">Occupancy history ({occupancyTimeline.length})</summary>
                         {occupancyTimeline.length ? <div className="divide-y divide-slate-100">{occupancyTimeline.slice(0, 5).map((entry) => (
                           <div key={entry.id} className="grid gap-1 py-1.5 text-xs sm:grid-cols-[12px_minmax(0,1fr)_190px] sm:items-center">
                             <span className={`h-2 w-2 rounded-full ${entry.kind === "lease" ? "bg-teal-500" : entry.kind === "vacancy" ? "bg-amber-400" : "bg-slate-400"}`} />
@@ -741,7 +740,7 @@ export function PropertyRecordEditor({
                             <span className="text-slate-500 sm:text-right">{entry.startDate || "Date not set"} to {entry.endDate || "Present"}</span>
                           </div>
                         ))}{occupancyTimeline.length > 5 ? <div className="py-1.5 text-[11px] text-slate-400">{occupancyTimeline.length - 5} earlier period{occupancyTimeline.length - 5 === 1 ? "" : "s"} not shown</div> : null}</div> : <div className="text-xs text-slate-500">No occupancy or lease history recorded.</div>}
-                      </div>
+                      </details>
                     </div>
                   );
                 })}

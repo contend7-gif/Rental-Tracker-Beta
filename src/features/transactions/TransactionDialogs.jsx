@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
 import { Archive, CalendarRange, CheckCircle2, FilePlus2, Hammer, Landmark, Trash2 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { DialogLoadFallback } from "../shared/CommonDialogs.jsx";
 import { readinessBadgeClass } from "../shared/auditBadges.js";
 import {
+  formatTransactionUnitLabel,
+  formatRentReportingMonth,
   transactionCategoryStatusLabel,
   transactionReconciliationStatusLabel,
   transactionScheduleLabel,
@@ -186,6 +188,11 @@ export function TransactionDetailsDialog({
   view,
   confirmAndDeleteDocument,
 }) {
+  const [detailSection, setDetailSection] = useState("overview");
+  useEffect(() => {
+    setDetailSection(selectedTxnReviewFocusKey ? "review" : "overview");
+    setSelectedFileId("");
+  }, [selectedTxn?.id, selectedTxnReviewFocusKey]);
   const [selectedFileId, setSelectedFileId] = useState("");
   const previewFile = selectedTransactionDocuments.find((file) => file.id === selectedFileId) || selectedTransactionDocuments[0];
   const selectedIssueKeys = new Set((selectedTxnReview?.issues || []).map((issue) => issue.key));
@@ -251,6 +258,7 @@ export function TransactionDetailsDialog({
 
   return (
     <RecordDetailPanel
+      className="rt-transaction-detail"
       open={open}
       onOpenChange={(isOpen) => {
         if (!isOpen) setSelectedTxn(null);
@@ -263,18 +271,25 @@ export function TransactionDetailsDialog({
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,.9fr)]">
           <section className="min-w-0">
             <DialogHeader>
-              <DialogTitle>{selectedTxn.description}</DialogTitle>
+              <DialogTitle>{selectedTxn.description || selectedTxn.vendor || "Transaction"}</DialogTitle>
             </DialogHeader>
             <div className="mt-2 text-sm text-slate-700">
-              {selectedTxn.date} | {propertyNameById[selectedTxn.propertyId] || selectedTxn.propertyId} | Unit {selectedTxn.unit} | {selectedTxn.category}
+              {selectedTxn.date} | {propertyNameById[selectedTxn.propertyId] || selectedTxn.propertyId} | {formatTransactionUnitLabel(selectedTxn.unit)} | {selectedTxn.category}
             </div>
-            <div className="mt-1 text-sm font-semibold">{currency(selectedTxn.amount)}</div>
+            <div className={`mt-1 text-lg font-semibold tabular-nums ${selectedTxn.type === "Expense" ? "text-rose-700" : selectedTxn.type === "Income" ? "text-emerald-700" : "text-slate-900"}`}>{currency(selectedTxn.amount)}</div>
             {selectedTxn.category === "Auto and travel" && Number(selectedTxn.mileageMiles || 0) > 0 ? (
               <div className="mt-1 text-xs text-slate-500">
                 Mileage support: {Number(selectedTxn.mileageMiles || 0)} miles
                 {Number(selectedTxn.mileageRate || 0) > 0 ? ` x ${currency(Number(selectedTxn.mileageRate || 0))}/mi` : ""}
               </div>
             ) : null}
+            <nav aria-label="Transaction detail sections" className="mt-3 flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
+              {[["overview", "Overview"], ["review", `Review (${selectedTxnReview?.issues?.length || 0})`], ["files", `Files (${selectedTransactionDocuments.length})`]].map(([key, label]) => <Button key={key} size="sm" variant={detailSection === key ? "default" : "ghost"} aria-pressed={detailSection === key} onClick={() => setDetailSection(key)}>{label}</Button>)}
+            </nav>
+            <div hidden={detailSection !== "overview"}>
+              <dl className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 text-sm">
+                {[["Vendor / payee", selectedTxn.vendor || selectedTxn.paidFrom || "Not recorded"], ["Service period", selectedTxn.servicePeriodStart && selectedTxn.servicePeriodEnd ? `${selectedTxn.servicePeriodStart} to ${selectedTxn.servicePeriodEnd}` : "Not recorded"], ["Rent reporting month", formatRentReportingMonth(selectedTxn)], ["Notes", selectedTxn.notes]].filter(([, value]) => value).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 break-words text-slate-800">{value}</dd></div>)}
+              </dl>
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {selectedTxnStatusCards.map((card) => (
                 <div key={`txn-status-${card.key}`} className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
@@ -286,6 +301,8 @@ export function TransactionDetailsDialog({
                 </div>
               ))}
             </div>
+            </div>
+            <div hidden={detailSection !== "review"}>
             <div className="mt-3 rounded border border-blue-200 bg-blue-50/70 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -368,6 +385,8 @@ export function TransactionDetailsDialog({
                 </div>
               ) : null}
             </div>
+            </div>
+            <div hidden={detailSection !== "files"}>
             <div className="mt-3 rounded border border-slate-200 p-3">
               <div className="text-sm font-medium">Receipts & files</div>
               <input ref={txnInlineAttachmentInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={onTransactionInlineAttachmentChange} />
@@ -385,9 +404,13 @@ export function TransactionDetailsDialog({
                 </div>
               ))}
             </div>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button onClick={handleEditSelectedTxn}>Edit</Button>
               <Button variant="secondary" onClick={handleDuplicateSelectedTxn}>Duplicate</Button>
+              <details className="w-full order-last rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <summary className="cursor-pointer text-sm font-medium text-slate-700">More actions</summary>
+                <div className="mt-3 flex flex-wrap gap-2">
               <Button
                 variant="secondary"
                 disabled={!canReconcileRecords || selectedTxnToggleReconcileDisabled}
@@ -413,6 +436,9 @@ export function TransactionDetailsDialog({
                 <Trash2 className="mr-1 h-4 w-4" />
                 Delete
               </Button>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">Void keeps a historical record. Delete permanently removes the transaction.</div>
+              </details>
               <Button variant="secondary" onClick={() => setSelectedTxn(null)}>Close</Button>
             </div>
             {selectedTxnReconcileWarning && (
@@ -420,7 +446,6 @@ export function TransactionDetailsDialog({
                 Linked work order is {selectedTxnLinkedWorkOrder?.status}. {selectedTxnReconcileWarningText}
               </div>
             )}
-            <div className="mt-2 text-xs text-slate-500">Void keeps a historical record. Delete permanently removes the transaction.</div>
           </section>
           <aside className="min-w-0 lg:sticky lg:top-0 lg:self-start"><RecordFilePreview document={previewFile} onOpenFull={openDocumentPreview} /></aside>
           </div>

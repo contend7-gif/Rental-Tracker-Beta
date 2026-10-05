@@ -17,6 +17,7 @@ import {
 import { formatDocumentUnitLabel } from "./documentPresentation.js";
 
 import { getDocumentPreviewKind } from "./documentPresentation.js";
+import { PdfFilePreview } from "../shared/PdfFilePreview.jsx";
 
 function DocumentFilePreview({ document, openDocumentExternally }) {
   const [imageFailed, setImageFailed] = useState(false);
@@ -47,7 +48,11 @@ function DocumentFilePreview({ document, openDocumentExternally }) {
     );
   }
 
-  if (previewKind === "pdf" || previewKind === "text") {
+  if (previewKind === "pdf") {
+    return <PdfFilePreview source={document.dataUrl} title={document.name} className="mt-3 h-[70vh] w-full rounded-lg border border-slate-200 bg-white" />;
+  }
+
+  if (previewKind === "text") {
     return (
       <iframe
         className="mt-3 h-[70vh] w-full rounded-lg border border-slate-200 bg-white"

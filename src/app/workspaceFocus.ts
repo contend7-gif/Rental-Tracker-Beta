@@ -1,4 +1,4 @@
-export type WorkspaceFocusSource = "maintenance" | "document" | "recurring";
+export type WorkspaceFocusSource = "maintenance" | "document" | "recurring" | "transaction_search";
 
 export type WorkspaceFocusRequest = {
   source: WorkspaceFocusSource;

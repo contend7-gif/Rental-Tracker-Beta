@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -12,7 +12,6 @@ import {
   FileCheck2,
   Home,
   ListChecks,
-  Minus,
   ReceiptText,
   Wrench,
 } from "lucide-react";
@@ -37,33 +36,33 @@ const DASHBOARD_PREVIEW_LIMITS = {
   detailed: 6,
 };
 
-const DASHBOARD_PANEL_CLASS = "rounded-lg border border-slate-200 bg-white shadow-sm";
+const DASHBOARD_PANEL_CLASS = "rt-home-panel rounded-lg border border-slate-200 bg-white shadow-none";
 const DASHBOARD_MUTED_TILE_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
 
-function Stat({ title, value, subtitle, trend, icon: Icon, onClick }) {
+function Stat({ title, value, subtitle, trend, icon: Icon, onClick, compact = false }) {
   const TrendIcon = trend?.direction === "down" ? ArrowDownRight : ArrowUpRight;
   const valueText = String(value ?? "");
-  const valueClassName = valueText.length > 10 ? "text-base" : "text-lg";
+  const valueClassName = valueText.length > 14 ? "text-lg" : "text-2xl";
   return (
-    <Card className={`h-full shadow-sm ${onClick ? "cursor-pointer transition hover:border-blue-200 hover:bg-blue-50/30" : ""}`} onClick={onClick}>
-      <CardContent className="flex min-h-[118px] flex-col px-3 pb-3 pt-4">
+    <Card className={`rt-home-stat ${compact ? "rt-finance-stat" : ""} h-full shadow-none ${onClick ? "transition hover:border-teal-300" : ""}`}><button type="button" className="block h-full w-full text-left" title={`${title}: ${value}${subtitle ? ` — ${subtitle}` : ""}`} onClick={onClick} disabled={!onClick} aria-label={`${title}: ${value}`}>
+      <CardContent className="flex min-h-[80px] flex-col px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex min-h-7 items-start justify-between gap-2">
-            <div className="min-w-0 text-[10px] font-semibold uppercase leading-4 text-slate-500">
+            <div className="min-w-0 text-xs font-medium leading-4 text-slate-500">
               <span className="line-clamp-2">{title}</span>
             </div>
             {Icon ? <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-teal-100 bg-teal-50 text-teal-700"><Icon className="h-3.5 w-3.5" /></span> : null}
           </div>
           <div className={`mt-1 max-w-full truncate whitespace-nowrap font-semibold leading-tight text-slate-900 ${valueClassName}`}>{value}</div>
-          {subtitle && <div className="mt-0.5 line-clamp-2 max-w-[12rem] text-[11px] leading-4 text-slate-500">{subtitle}</div>}
+          {subtitle && <div className="mt-0.5 line-clamp-2 max-w-[12rem] text-xs leading-4 text-slate-500">{subtitle}</div>}
         </div>
           {trend ? (
-            <div className={`mt-1 inline-flex items-center gap-1 text-[10px] font-medium ${trend.tone === "positive" ? "text-emerald-700" : "text-rose-700"}`}>
+            <div className={`mt-1 inline-flex items-center gap-1 text-xs font-medium ${trend.tone === "positive" ? "text-emerald-700" : "text-rose-700"}`}>
               <TrendIcon className="h-3 w-3" />
               <span>{trend.text}</span>
             </div>
-          ) : <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-medium text-slate-400"><Minus className="h-3 w-3" /><span>vs last year</span></div>}
-      </CardContent>
+          ) : null}
+      </CardContent></button>
     </Card>
   );
 }
@@ -116,7 +115,7 @@ function MiniTrendChart({ rows }) {
 
   return (
     <div className="mt-2 overflow-hidden">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full" role="img" aria-label="Cashflow trend chart">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-28 w-full" role="img" aria-label="Cashflow trend chart">
         {[0, 1, 2, 3].map((line) => {
           const y = padY + (line * (height - padY * 2)) / 3;
           const value = maxValue - (line * range) / 3;
@@ -153,7 +152,7 @@ function CashflowPanel({ cashflowSummary, currency, monthMode, onMonthModeChange
             <CardDescription className="mt-0.5 text-xs">{monthMode === "rent" ? "Rent income by rent month; expenses by posted date." : "Income and expenses by posted date."}</CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[10px] font-medium">
+            <div className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs font-medium">
               <button type="button" className={`rounded px-2 py-1 ${monthMode === "rent" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`} onClick={() => onMonthModeChange("rent")}>Rent month</button>
               <button type="button" className={`rounded px-2 py-1 ${monthMode === "cash" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`} onClick={() => onMonthModeChange("cash")}>Cash date</button>
             </div>
@@ -190,26 +189,26 @@ function CashflowPanel({ cashflowSummary, currency, monthMode, onMonthModeChange
 }
 
 function RentCollectionPanel({ currency, rentSummary, seeAllLeases }) {
-  const visibleRows = rentSummary.rows.slice(0, 4);
+  const visibleRows = rentSummary.rows.slice(0, 3);
   return (
     <Card className={DASHBOARD_PANEL_CLASS}>
       <CardHeader className="px-4 pb-1.5 pt-3">
         <div className="flex items-start justify-between gap-3">
           <CardTitle className="text-base">Rent Collection</CardTitle>
-          <button type="button" className="inline-flex items-center gap-1 text-[11px] font-medium text-teal-700 hover:underline" onClick={seeAllLeases}>Manage leases <ArrowRight className="h-3 w-3" /></button>
+          <button type="button" className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 hover:underline" onClick={seeAllLeases}>Manage leases <ArrowRight className="h-3 w-3" /></button>
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-3 pt-0">
         <div className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-slate-100 pt-2">
-          <div><div className="text-base font-semibold text-slate-950">{currency(rentSummary.collectedYtd)}</div><div className="text-[11px] text-slate-500">Rent recorded YTD</div></div>
-          <div><div className="text-base font-semibold text-slate-950">{currency(rentSummary.expectedYtd)}</div><div className="text-[11px] text-slate-500">Rent scheduled YTD</div></div>
-          <div><div className="text-sm font-semibold text-slate-900">{currency(rentSummary.outstanding)}</div><div className="text-[11px] text-slate-500">Open balance</div></div>
-          <div><div className="text-sm font-semibold text-slate-900">{rentSummary.showCollectionRate ? `${rentSummary.collectionRatePct}%` : "Partial"}</div><div className="text-[11px] text-slate-500">{rentSummary.showCollectionRate ? "Collection rate" : "Schedule coverage"}</div></div>
+          <div><div className="text-base font-semibold text-slate-950">{currency(rentSummary.collectedYtd)}</div><div className="text-xs text-slate-500">Rent recorded YTD</div></div>
+          <div><div className="text-base font-semibold text-slate-950">{currency(rentSummary.expectedYtd)}</div><div className="text-xs text-slate-500">Rent scheduled YTD</div></div>
+          <div><div className="text-sm font-semibold text-slate-900">{currency(rentSummary.outstanding)}</div><div className="text-xs text-slate-500">Open balance</div></div>
+          <div><div className="text-sm font-semibold text-slate-900">{rentSummary.showCollectionRate ? `${rentSummary.collectionRatePct}%` : "Partial"}</div><div className="text-xs text-slate-500">{rentSummary.showCollectionRate ? "Collection rate" : "Schedule coverage"}</div></div>
         </div>
         {rentSummary.hasLeaseSchedule ? (
           <div className="mt-2">
             {rentSummary.showCollectionRate ? <div className="h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-teal-600" style={{ width: `${rentSummary.progressPct}%` }} /></div> : null}
-            {rentSummary.scheduleCoveragePartial ? <div className="text-[10px] leading-4 text-slate-400">Lease schedule is partial for this scope, so recorded rent may exceed visible scheduled rent. Collection rate is not shown.</div> : null}
+            {rentSummary.scheduleCoveragePartial ? <div className="text-xs leading-4 text-slate-400">Lease schedule is partial for this scope, so recorded rent may exceed visible scheduled rent. Collection rate is not shown.</div> : null}
           </div>
         ) : (
           <div className="mt-2 rounded-md border border-dashed border-slate-300 bg-slate-50/70 px-3 py-2 text-xs text-slate-500">Lease schedule is partial for this scope, so recorded rent may exceed visible scheduled rent. Collection rate is not shown.</div>
@@ -217,8 +216,8 @@ function RentCollectionPanel({ currency, rentSummary, seeAllLeases }) {
         <div className="mt-2 divide-y divide-slate-100 border-t border-slate-100">
           {visibleRows.length === 0 ? <div className="py-4 text-center text-xs text-slate-500">No units or properties match the selected scope.</div> : visibleRows.map((row) => (
             <button key={row.id} type="button" className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-1.5 text-left hover:bg-slate-50/80" onClick={seeAllLeases}>
-              <span className="min-w-0"><span className="block truncate text-xs font-semibold text-slate-800">{row.label}</span><span className="block text-[11px] text-slate-500">{rentSummary.mode === "units" ? `${row.status === "Owner" ? "Owner occupied" : row.status}${row.leaseEndDate ? ` - Lease ends ${row.leaseEndDate}` : ""}` : `${row.occupiedUnits}/${row.units} occupied - ${row.occupancyPct}%`}</span></span>
-              <span className="text-right"><span className="block text-xs font-semibold text-slate-800">{row.status === "Owner" || row.status === "Vacant" ? "No current rent scheduled" : currency(row.collectedYtd)}</span><span className={`block text-[10px] ${row.outstanding > 0 ? "text-amber-700" : "text-emerald-700"}`}>{row.status === "Owner" ? (row.collectedYtd > 0 ? `${currency(row.collectedYtd)} recorded YTD` : "Owner occupied") : row.status === "Vacant" ? "Vacant" : row.outstanding > 0 ? `${currency(row.outstanding)} open` : "Recorded"}</span></span>
+              <span className="min-w-0"><span className="block truncate text-xs font-semibold text-slate-800">{row.label}</span><span className="block text-xs text-slate-500">{rentSummary.mode === "units" ? `${row.status === "Owner" ? "Owner occupied" : row.status}${row.leaseEndDate ? ` - Lease ends ${row.leaseEndDate}` : ""}` : `${row.occupiedUnits}/${row.units} occupied - ${row.occupancyPct}%`}</span></span>
+              <span className="text-right"><span className="block text-xs font-semibold text-slate-800">{row.status === "Owner" || row.status === "Vacant" ? "No current rent scheduled" : currency(row.collectedYtd)}</span><span className={`block text-xs ${row.outstanding > 0 ? "text-amber-700" : "text-emerald-700"}`}>{row.status === "Owner" ? (row.collectedYtd > 0 ? `${currency(row.collectedYtd)} recorded YTD` : "Owner occupied") : row.status === "Vacant" ? "Vacant" : row.outstanding > 0 ? `${currency(row.outstanding)} open` : "Recorded"}</span></span>
             </button>
           ))}
         </div>
@@ -229,27 +228,26 @@ function RentCollectionPanel({ currency, rentSummary, seeAllLeases }) {
 
 function ActionCenter({ actionStatus, allClearLabel, healthyAction, rows }) {
   const primaryIssue = rows.find((row) => row.recommendation) || healthyAction;
-  const nextMoveTitle = primaryIssue.recommendation;
-  const nextMoveDetail = primaryIssue.detail;
+
+
   const toneClass = actionStatus.tone === "destructive" ? "border-rose-200 bg-rose-50 text-rose-800" : actionStatus.tone === "warning" ? "border-amber-200 bg-amber-50 text-amber-800" : actionStatus.tone === "watch" ? "border-blue-200 bg-blue-50 text-blue-800" : "border-emerald-200 bg-emerald-50 text-emerald-800";
   return (
     <Card className={DASHBOARD_PANEL_CLASS}>
       <CardHeader className="px-4 pb-1 pt-3">
-        <div className="flex items-start justify-between gap-3"><CardTitle className="text-base">Action Center</CardTitle><span className={`rounded border px-1.5 py-0.5 text-[11px] font-semibold ${toneClass}`}>{actionStatus.label}</span></div>
+        <div className="flex items-start justify-between gap-3"><CardTitle className="text-base">Action Center</CardTitle><span className={`rounded border px-1.5 py-0.5 text-xs font-semibold ${toneClass}`}>{actionStatus.label}</span></div>
       </CardHeader>
       <CardContent className="px-4 pb-2.5 pt-0">
         <div className="border-t border-slate-100 pt-1.5 text-xs leading-4 text-slate-600">{actionStatus.explanation}</div>
         {rows.length ? <div className="mt-1.5 divide-y divide-slate-100 border-y border-slate-100">
           {rows.map(({ Icon, label, rowDetail, value, onClick, tone }) => (
-            <button key={label} type="button" className="flex w-full items-center gap-2 py-1.5 text-left hover:text-teal-800" onClick={onClick}><Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" /><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{label}</span>{rowDetail ? <span className="mt-0.5 block line-clamp-1 text-[10px] leading-3.5 text-slate-500">{rowDetail}</span> : null}</span><span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${tone}`}>{value}</span></button>
+            <button key={label} type="button" className="flex w-full items-center gap-2 py-1 text-left hover:text-teal-800" onClick={onClick}><Icon className="h-3.5 w-3.5 shrink-0 text-slate-500" /><span className="min-w-0 flex-1"><span className="block text-xs font-medium">{label}</span>{rowDetail ? <span title={rowDetail} className="mt-0.5 block line-clamp-1 text-xs leading-3.5 text-slate-500">{rowDetail}</span> : null}</span><span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold ${tone}`}>{value}</span></button>
           ))}
         </div> : null}
-        {allClearLabel ? <div className="flex items-center gap-1.5 border-b border-slate-100 py-1 text-[10px] font-medium text-slate-400"><CheckCircle2 className="h-3 w-3 shrink-0" />{allClearLabel}</div> : null}
+        {allClearLabel ? <div className="flex items-center gap-1.5 border-b border-slate-100 py-1 text-xs font-medium text-slate-400"><CheckCircle2 className="h-3 w-3 shrink-0" />{allClearLabel}</div> : null}
         <div className="mt-1.5 rounded-md border border-slate-200 bg-slate-50/70 px-3 py-1.5">
-          <div className="text-[10px] font-semibold uppercase text-slate-500">Best next move</div>
-          <div className="mt-0.5 text-xs font-semibold text-slate-950">{nextMoveTitle}</div>
-          <div className="mt-0.5 text-[11px] leading-4 text-slate-500">{nextMoveDetail}</div>
-          <button type="button" className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:underline" onClick={primaryIssue.onClick}>{primaryIssue.actionLabel}<ArrowRight className="h-3.5 w-3.5" /></button>
+          <span className="mr-2 text-xs font-medium text-slate-500">Next step</span>
+
+          <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:underline" title={primaryIssue.detail} onClick={primaryIssue.onClick}>{primaryIssue.actionLabel}<ArrowRight className="h-3.5 w-3.5" /></button>
         </div>
       </CardContent>
     </Card>
@@ -295,7 +293,7 @@ function SetupChecklistPanel({
   return (
     <Card className={DASHBOARD_PANEL_CLASS}>
       <details>
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-1.5">
           <span className="flex min-w-0 items-center gap-2"><ListChecks className="h-4 w-4 shrink-0 text-teal-700" /><span><span className="block text-sm font-semibold text-slate-900">Setup progress</span><span className="block text-xs text-slate-500">{setupChecklist.completeCount || 0} complete, {setupChecklist.needsSetupCount || 0} need setup, {setupChecklist.needsReviewCount || 0} need review</span></span></span>
           <Badge variant={setupChecklist.status === "complete" ? "outline" : "secondary"} className={setupChecklist.status === "complete" ? "!bg-emerald-50 !text-emerald-700" : "!bg-blue-50 !text-blue-700"}>{setupChecklist.label || "Setup checklist"}</Badge>
         </summary>
@@ -333,11 +331,18 @@ const TRANSACTION_BADGE_CLASSES = {
 };
 
 function RecentTransactionsPanel({ currency, dashboardTransactions, dashboardDensity, documents, openTransaction, prefetchTransactionDialog, propertyNameById, seeAllTransactions, transactionReviewById }) {
-  const previewLimit = DASHBOARD_PREVIEW_LIMITS[dashboardDensity] || DASHBOARD_PREVIEW_LIMITS.comfortable;
+  const [shortWindow, setShortWindow] = useState(() => window.matchMedia("(min-width: 1280px) and (max-height: 850px)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1280px) and (max-height: 850px)");
+    const update = () => setShortWindow(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  const previewLimit = Math.min(shortWindow ? 2 : 3, DASHBOARD_PREVIEW_LIMITS[dashboardDensity] || DASHBOARD_PREVIEW_LIMITS.comfortable);
   const visibleTransactions = dashboardTransactions.slice(0, previewLimit);
   return (
     <Card className={DASHBOARD_PANEL_CLASS}>
-      <SectionTitle title="Recent Transactions" icon={ReceiptText} actionLabel="See all" onAction={seeAllTransactions} />
+      <SectionTitle title="Recent Transactions" description={`Latest ${visibleTransactions.length} of ${dashboardTransactions.length} in scope`} icon={ReceiptText} actionLabel="See all" onAction={seeAllTransactions} />
       <CardContent className="px-4 pb-2 pt-0">
         {visibleTransactions.length === 0 ? <div className="border-t border-slate-100 py-4 text-center text-xs text-slate-500">No transactions for the current filters.</div> : (
           <div className="border-t border-slate-100">
@@ -348,8 +353,8 @@ function RecentTransactionsPanel({ currency, dashboardTransactions, dashboardDen
               return (
                 <button key={transaction.id} className="flex w-full items-start gap-2.5 border-b border-slate-100 py-2 text-left transition hover:bg-slate-50/80" onClick={() => openTransaction(transaction)} onMouseEnter={prefetchTransactionDialog} onFocus={prefetchTransactionDialog} onTouchStart={prefetchTransactionDialog}>
                   <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${iconClass}`}><Icon className="h-3.5 w-3.5" /></span>
-                  <span className="min-w-0 flex-1"><span className="block line-clamp-1 text-xs font-semibold text-slate-900">{transaction.description}</span><span className="block line-clamp-1 text-[11px] text-slate-500">{transaction.category} - {propertyNameById[transaction.propertyId] || transaction.propertyId} - {formatDashboardUnitLabel(transaction.unit)}{rentPeriodLabel ? ` - ${rentPeriodLabel}` : ""}</span>{badges.length ? <span className="mt-1 flex flex-wrap gap-1">{badges.map((badge) => <Badge key={badge.key} variant="outline" className={`h-4 px-1 py-0 text-[9px] ${TRANSACTION_BADGE_CLASSES[badge.tone]}`}>{badge.label}</Badge>)}</span> : null}</span>
-                  <span className="shrink-0 text-right"><span className="block text-[10px] text-slate-500">{transaction.date}</span><span className={`block text-xs font-semibold ${amountClass}`}>{currency(transaction.amount)}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block line-clamp-1 text-xs font-semibold text-slate-900">{transaction.description}</span><span className="block line-clamp-1 text-xs text-slate-500">{transaction.category} - {propertyNameById[transaction.propertyId] || transaction.propertyId} - {formatDashboardUnitLabel(transaction.unit)}{rentPeriodLabel ? ` - ${rentPeriodLabel}` : ""}</span>{badges.length ? <span className="mt-1 flex flex-wrap gap-1">{badges.map((badge) => <Badge key={badge.key} variant="outline" className={`h-4 px-1 py-0 text-[9px] ${TRANSACTION_BADGE_CLASSES[badge.tone]}`}>{badge.label}</Badge>)}</span> : null}</span>
+                  <span className="shrink-0 text-right"><span className="block text-xs text-slate-500">{transaction.date}</span><span className={`block text-xs font-semibold ${amountClass}`}>{currency(transaction.amount)}</span></span>
                 </button>
               );
             })}
@@ -386,12 +391,12 @@ function PropertySnapshotPanel({ currency, dashboardOpenReviewItems, dashboardPr
   if (mode === "units") {
     const property = dashboardPropertySnapshot[0].property;
     return (
-      <Card className={DASHBOARD_PANEL_CLASS}><SectionTitle title="Unit Snapshot" description={property.name} icon={Home} actionLabel="Manage property" onAction={() => openPropertyFromSnapshot(property.id)} /><CardContent className="px-4 pb-2 pt-0"><div className="border-t border-slate-100">{rentSummary.rows.map((row) => { const reviewCount = reviewCountFor(row.propertyId, row.unitName); const isOwner = row.status === "Owner"; const statusLabel = isOwner ? "Owner occupied" : row.status; const rentLabel = row.rentAmount > 0 ? currency(row.rentAmount) : isOwner ? "No rent scheduled" : "Not set"; const statusTone = isOwner ? "!border-slate-200 !bg-slate-50 !text-slate-600" : row.status === "Occupied" ? "!border-emerald-200 !bg-emerald-50 !text-emerald-700" : "!border-amber-200 !bg-amber-50 !text-amber-700"; return <button key={row.id} type="button" className="grid w-full gap-1.5 border-b border-slate-100 py-2 text-left sm:grid-cols-[minmax(0,1fr)_112px_92px] sm:items-center" onClick={() => openPropertyFromSnapshot(row.propertyId)}><span className="min-w-0"><span className="flex flex-wrap items-center gap-1.5"><span className="text-xs font-semibold text-slate-900">{row.label}</span><Badge variant="outline" className={`h-4 px-1 py-0 text-[9px] ${statusTone}`}>{statusLabel}</Badge></span>{row.leaseEndDate ? <span className="block text-[10px] text-slate-500">Lease ends {row.leaseEndDate}</span> : null}</span><span className="text-left sm:text-right"><span className="block text-xs font-semibold text-slate-800">{rentLabel}</span>{row.rentAmount > 0 ? <span className="block text-[10px] text-slate-500">{row.rentCadenceLabel}</span> : null}</span>{reviewCount > 0 ? <span className="flex items-center sm:justify-end"><Badge variant="secondary" className="h-5 px-1.5 text-[10px]">{reviewCount} open</Badge></span> : <span className="whitespace-nowrap text-[10px] text-slate-400 sm:text-right">No open items</span>}</button>; })}</div></CardContent></Card>
+      <Card className={DASHBOARD_PANEL_CLASS}><SectionTitle title="Unit Snapshot" description={`${property.name} / ${rentSummary.rows.length} units in scope`} icon={Home} actionLabel="Manage property" onAction={() => openPropertyFromSnapshot(property.id)} /><CardContent className="px-4 pb-2 pt-0"><div className="border-t border-slate-100">{rentSummary.rows.slice(0, 3).map((row) => { const reviewCount = reviewCountFor(row.propertyId, row.unitName); const isOwner = row.status === "Owner"; const statusLabel = isOwner ? "Owner occupied" : row.status; const rentLabel = row.rentAmount > 0 ? currency(row.rentAmount) : isOwner ? "No rent scheduled" : "Not set"; const statusTone = isOwner ? "!border-slate-200 !bg-slate-50 !text-slate-600" : row.status === "Occupied" ? "!border-emerald-200 !bg-emerald-50 !text-emerald-700" : "!border-amber-200 !bg-amber-50 !text-amber-700"; return <button key={row.id} type="button" className="grid w-full gap-1.5 border-b border-slate-100 py-2 text-left sm:grid-cols-[minmax(0,1fr)_112px_92px] sm:items-center" onClick={() => openPropertyFromSnapshot(row.propertyId)}><span className="min-w-0"><span className="flex flex-wrap items-center gap-1.5"><span className="text-xs font-semibold text-slate-900">{row.label}</span><Badge variant="outline" className={`h-4 px-1 py-0 text-[9px] ${statusTone}`}>{statusLabel}</Badge></span>{row.leaseEndDate ? <span className="block text-xs text-slate-500">Lease ends {row.leaseEndDate}</span> : null}</span><span className="text-left sm:text-right"><span className="block text-xs font-semibold text-slate-800">{rentLabel}</span>{row.rentAmount > 0 ? <span className="block text-xs text-slate-500">{row.rentCadenceLabel}</span> : null}</span>{reviewCount > 0 ? <span className="flex items-center sm:justify-end"><Badge variant="secondary" className="h-5 px-1.5 text-xs">{reviewCount} open</Badge></span> : <span className="whitespace-nowrap text-xs text-slate-400 sm:text-right">No open items</span>}</button>; })}</div></CardContent></Card>
     );
   }
   const rentByProperty = Object.fromEntries(rentSummary.rows.map((row) => [row.propertyId, row]));
   return (
-    <Card className={DASHBOARD_PANEL_CLASS}><SectionTitle title="Property Summary" icon={Building2} actionLabel="See all" onAction={seeAllProperties} /><CardContent className="px-5 pb-3 pt-0"><div className="overflow-x-auto border-t border-slate-100"><div className="min-w-[640px]"><div className="grid grid-cols-[1.5fr_.55fr_.7fr_1fr_.65fr] gap-3 py-2 text-[11px] font-semibold uppercase text-slate-500"><span>Property</span><span>Units</span><span>Occupancy</span><span>Rent recorded</span><span>Alerts</span></div>{dashboardPropertySnapshot.map((snapshot) => { const rent = rentByProperty[snapshot.property.id]; const alerts = reviewCountFor(snapshot.property.id); return <button key={snapshot.property.id} type="button" className="grid w-full grid-cols-[1.5fr_.55fr_.7fr_1fr_.65fr] gap-3 border-t border-slate-100 py-3 text-left text-sm hover:bg-slate-50/80" onClick={() => openPropertyFromSnapshot(snapshot.property.id)}><span><span className="block font-semibold text-slate-900">{snapshot.property.name}</span><span className="block truncate text-xs text-slate-500">{snapshot.property.address}</span></span><span>{snapshot.unitCount}</span><span>{snapshot.occupancyPct}%</span><span>{currency(rent?.collectedYtd || 0)}</span><span className={alerts > 0 ? "font-semibold text-amber-700" : "text-emerald-700"}>{alerts || "None"}</span></button>; })}</div></div></CardContent></Card>
+    <Card className={DASHBOARD_PANEL_CLASS}><SectionTitle title="Property Summary" description={`${dashboardPropertySnapshot.length} properties in scope`} icon={Building2} actionLabel="See all" onAction={seeAllProperties} /><CardContent className="px-5 pb-3 pt-0"><div className="overflow-x-auto border-t border-slate-100"><div className="min-w-[440px]"><div className="grid grid-cols-[1.5fr_.55fr_.7fr_1fr_.65fr] gap-3 py-2 text-xs font-semibold uppercase text-slate-500"><span>Property</span><span>Units</span><span>Occupancy</span><span>Rent recorded</span><span>Alerts</span></div>{dashboardPropertySnapshot.slice(0, 3).map((snapshot) => { const rent = rentByProperty[snapshot.property.id]; const alerts = reviewCountFor(snapshot.property.id); return <button key={snapshot.property.id} type="button" className="grid w-full grid-cols-[1.5fr_.55fr_.7fr_1fr_.65fr] gap-3 border-t border-slate-100 py-3 text-left text-sm hover:bg-slate-50/80" onClick={() => openPropertyFromSnapshot(snapshot.property.id)}><span><span className="block font-semibold text-slate-900">{snapshot.property.name}</span><span className="block truncate text-xs text-slate-500">{snapshot.property.address}</span></span><span>{snapshot.unitCount}</span><span>{snapshot.occupancyPct}%</span><span>{currency(rent?.collectedYtd || 0)}</span><span className={alerts > 0 ? "font-semibold text-amber-700" : "text-emerald-700"}>{alerts || "None"}</span></button>; })}</div></div></CardContent></Card>
   );
 }
 
@@ -474,11 +479,24 @@ export function DashboardWorkspace({
     onClick: seeAllTransactions,
   };
 
+  const occupiedUnits = rentSummary.mode === "units" ? rentSummary.rows.filter((row) => row.status === "Occupied").length : rentSummary.rows.reduce((sum, row) => sum + row.occupiedUnits, 0);
+  const unitCount = rentSummary.mode === "units" ? rentSummary.rows.length : rentSummary.rows.reduce((sum, row) => sum + row.units, 0);
+  const operationalCards = [
+    { title: "Rent recorded", value: currency(rentSummary.collectedYtd), subtitle: `${yearFilter} through ${dashboardAsOfDate}`, icon: ReceiptText, onClick: seeAllTransactions },
+    { title: "Rent balance", value: rentSummary.scheduleCoveragePartial ? "Review schedule" : currency(rentSummary.outstanding), subtitle: rentSummary.scheduleCoveragePartial ? "Partial lease coverage; review before relying on the balance" : "Scheduled rent less recorded rent", icon: CalendarClock, onClick: seeAllLeases },
+    { title: "Net cashflow", value: currency(cashflowSummary.totals.cashflow), subtitle: `${cashflowMonthMode === "rent" ? "Rent-month" : "Cash-date"} basis Â· ${cashflowSummary.rows.length} recent recorded months`, icon: ChartNoAxesCombined, onClick: seeAllTransactions },
+    { title: "Leased units", value: unitCount ? `${occupiedUnits} of ${unitCount}` : "No units in scope", subtitle: `Active leases as of ${dashboardAsOfDate}`, icon: Home, onClick: seeAllProperties },
+  ];
+
   return (
-    <div className="space-y-2.5">
-      <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-6">
+    <div className="rt-home-overview space-y-2">
+      <section aria-label="Portfolio overview" className="rt-dashboard-metrics grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {operationalCards.map((card) => <Stat key={card.title} {...card} />)}
+      </section>
+      <section aria-label="Financial overview" className="rt-home-finances grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
         {dashboardStatCards.map((card) => (
           <Stat
+            compact
             key={card.id}
             title={card.title}
             value={card.value}
@@ -488,19 +506,13 @@ export function DashboardWorkspace({
             onClick={() => navigateWithDashboardContext(card.nextView)}
           />
         ))}
-        {dashboardStatCards.length === 0 && (
-          <Card className="shadow-none md:col-span-2 xl:col-span-6">
-            <CardContent className="p-4 text-sm text-slate-500">No dashboard metric cards selected. Enable cards in Settings.</CardContent>
-          </Card>
-        )}
-      </div>
-
-      <div className="grid items-start gap-2.5 xl:grid-cols-[.9fr_1.1fr_1fr]">
+        {dashboardStatCards.length === 0 && <div className="text-xs text-slate-500">Enable financial metrics in Settings.</div>}
+      </section>
+      <div className="rt-home-main-panels grid items-stretch gap-3 xl:grid-cols-3">
         <CashflowPanel cashflowSummary={cashflowSummary} currency={currency} monthMode={cashflowMonthMode} onMonthModeChange={setCashflowMonthMode} seeAllTransactions={seeAllTransactions} />
         <RentCollectionPanel currency={currency} rentSummary={rentSummary} seeAllLeases={seeAllLeases} />
         <ActionCenter actionStatus={actionStatus} allClearLabel={allClearLabel} healthyAction={healthyAction} rows={actionRows} />
       </div>
-
       <SetupChecklistPanel
         navigateWithDashboardContext={navigateWithDashboardContext}
         setupChecklist={setupChecklist}
@@ -512,7 +524,7 @@ export function DashboardWorkspace({
         toggleSetupChecklistShowFull={toggleSetupChecklistShowFull}
       />
 
-      <div className="grid items-start gap-2.5 border-t border-slate-200/70 pt-2.5 xl:grid-cols-2">
+      <div className="rt-home-bottom-panels grid items-start gap-3 xl:grid-cols-2">
         <RecentTransactionsPanel currency={currency} dashboardDensity={dashboardDensity} dashboardTransactions={dashboardTransactions} documents={documents} openTransaction={openTransaction} prefetchTransactionDialog={prefetchTransactionDialog} propertyNameById={propertyNameById} seeAllTransactions={seeAllTransactions} transactionReviewById={transactionReviewById} />
         <PropertySnapshotPanel currency={currency} dashboardOpenReviewItems={dashboardOpenReviewItems} dashboardPropertySnapshot={dashboardPropertySnapshot} openPropertyFromSnapshot={openPropertyFromSnapshot} rentSummary={rentSummary} seeAllProperties={seeAllProperties} />
       </div>

@@ -24,7 +24,7 @@ const SOURCE_LABEL = {
   maintenance: "Maintenance",
   document: "Document",
   recurring: "Recurring",
-  smart_check: "Smart check",
+  smart_check: "Suggested check",
   planning: "Planning",
   loan: "Loan",
   backup: "Backup",
@@ -89,7 +89,7 @@ export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFol
                     {dayItems.slice(0, 3).map((item) => (
                       <button key={item.id} type="button" onClick={() => { setSelectedDate(day.date); onOpen(item); }} title={item.title} className="flex w-full items-start gap-1 rounded border border-slate-100 bg-slate-50 px-1.5 py-1 text-left text-[10px] leading-3 text-slate-700 hover:border-teal-200 hover:bg-teal-50">
                         <span className={`mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full ${SOURCE_DOT[item.source] || "bg-slate-400"}`} />
-                        <span className="line-clamp-2">{item.title}</span>
+                        <span className="line-clamp-2">{item.source === "smart_check" ? "Suggested check: " : ""}{item.title}</span>
                       </button>
                     ))}
                     {dayItems.length > 3 ? <button type="button" className="px-1 text-[10px] font-medium text-teal-700 hover:underline" onClick={() => setSelectedDate(day.date)}>+{dayItems.length - 3} more</button> : null}

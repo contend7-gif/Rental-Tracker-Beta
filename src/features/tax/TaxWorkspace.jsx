@@ -1,3 +1,4 @@
+import { WorkspaceModeNav } from "../shared/WorkspaceModeNav.jsx";
 import React, { useState } from "react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -506,28 +507,7 @@ export function TaxWorkspace({
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-4 !p-4">
-        <div role="tablist" aria-label="Tax Center workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-          {taxWorkspaceModes.map((mode) => {
-            const modeSelected = activeWorkspaceMode.key === mode.key;
-            const ModeIcon = workspaceModeIcons[mode.key] || ClipboardCheck;
-            return (
-              <button
-                key={`tax-mode-${mode.key}`}
-                type="button"
-                role="tab"
-                aria-selected={modeSelected}
-                className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/60"}`}
-                onClick={() => openWorkspaceMode(mode.key)}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
-                </div>
-                <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
-              </button>
-            );
-          })}
-        </div>
+        <WorkspaceModeNav label="Tax Center workspace modes" modes={taxWorkspaceModes} value={activeWorkspaceMode.key} onChange={openWorkspaceMode} icons={workspaceModeIcons} />
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
           <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -555,14 +535,13 @@ export function TaxWorkspace({
               role="tab"
               aria-selected={activeTaxTab === key}
               onClick={() => setActiveTaxTab(key)}
-              className={`flex min-h-[48px] items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition ${activeTaxTab === key ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950"}`}
+              className={`flex min-h-10 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition ${activeTaxTab === key ? "border-teal-200 bg-teal-50 text-teal-900 shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-950"}`}
             >
-              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${activeTaxTab === key ? "border-white/20 bg-white/10 text-white" : tab.tone}`}>
+              <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${activeTaxTab === key ? "border-teal-200 bg-white text-teal-700" : tab.tone}`}>
                 <Icon className="h-4 w-4" aria-hidden="true" />
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-[13px] font-semibold">{tab.label}</span>
-                <span className={`block truncate text-[11px] ${activeTaxTab === key ? "text-slate-200" : "text-slate-500"}`}>{tab.description}</span>
               </span>
             </button>
           );})}

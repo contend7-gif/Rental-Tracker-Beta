@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveLeaseRoll, groupLeaseCleanup, leaseRollCleanupLabel, leaseRollOccupantLabel, summarizeLeaseRoll } from "./leaseWorkspacePresentation.js";
+import { deriveLeaseList, deriveLeaseRoll, groupLeaseCleanup, leaseRollCleanupLabel, leaseRollOccupantLabel, summarizeLeaseRoll } from "./leaseWorkspacePresentation.js";
 
 const property = { id: "p1", name: "Duplex" };
 const baseRow = {
@@ -40,4 +40,39 @@ test("lease roll cleanup labels distinguish ledger and occupancy work", () => {
   assert.equal(leaseRollCleanupLabel({ ledgerCleanupCount: 1, occupancyCleanupCount: 0 }), "1 ledger item");
   assert.equal(leaseRollCleanupLabel({ ledgerCleanupCount: 0, occupancyCleanupCount: 2 }), "2 occupancy items");
   assert.equal(leaseRollCleanupLabel({ ledgerCleanupCount: 0, occupancyCleanupCount: 0 }), "No cleanup items");
+});
+
+test("agreement list retains overlapping active leases and every upcoming agreement", () => {
+  const leases = [
+    { id: "a", propertyId: "p1", unit: "A", startDate: "2026-01-01", endDate: "2026-12-31" },
+    { id: "overlap", propertyId: "p1", unit: "A", startDate: "2026-02-01", endDate: "2026-12-31" },
+    { id: "future1", propertyId: "p1", unit: "A", startDate: "2027-01-01", endDate: "2027-03-01" },
+    { id: "future2", propertyId: "p1", unit: "A", startDate: "2027-04-01", endDate: "2027-06-01" },
+  ];
+  const rows = deriveLeaseList({ leases, todayIso: "2026-10-03" });
+  assert.equal(rows.filter((row) => row.category === "active").length, 2);
+  assert.equal(rows.filter((row) => row.category === "upcoming").length, 2);
+});
+
+test("agreement list respects actual departures, open-ended terms and incomplete dates", () => {
+  const rows = deriveLeaseList({ todayIso: "2026-10-03", leases: [
+    { id: "departed", startDate: "2026-01-01", endDate: "2026-12-31", actualEndDate: "2026-09-30" },
+    { id: "open", startDate: "2026-01-01", agreementType: "month_to_month" },
+    { id: "incomplete", startDate: "2026-01-01", agreementType: "fixed_term" },
+  ] });
+  assert.equal(rows.find((row) => row.lease.id === "departed").category, "past");
+  assert.equal(rows.find((row) => row.lease.id === "open").category, "active");
+  assert.equal(rows.find((row) => row.lease.id === "open").expirationDays, null);
+  assert.equal(rows.find((row) => row.lease.id === "incomplete").category, "review");
+});
+
+test("agreement list scopes records and attaches review issues to the exact lease", () => {
+  const leases = [{ id: "old", propertyId: "p1", unit: "A", startDate: "2025-01-01", endDate: "2025-12-31" },
+    { id: "new", propertyId: "p1", unit: "A", startDate: "2026-01-01", endDate: "2026-12-31" },
+    { id: "other", propertyId: "p2", unit: "A", startDate: "2026-01-01", endDate: "2026-12-31" }];
+  const rows = deriveLeaseList({ leases, properties: [property], propertyFilter: "p1", unitFilter: "A", todayIso: "2026-10-03",
+    tenantLedgerReviewInbox: { records: [{ lease: leases[0], issues: [{ label: "Deposit disposition open" }] }] } });
+  assert.equal(rows.length, 2);
+  assert.equal(rows.find((row) => row.lease.id === "old").reviewIssues.length, 1);
+  assert.equal(rows.find((row) => row.lease.id === "new").reviewIssues.length, 0);
 });

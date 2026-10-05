@@ -105,10 +105,6 @@ function issueCount(records, key) {
   return (records || []).filter((record) => record.issues?.some((issue) => issue.key === key)).length;
 }
 
-function amountsMatch(left, right) {
-  return Math.abs(Number(left || 0) - Number(right || 0)) < 0.005;
-}
-
 function IssueGroup({ title, items }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
@@ -181,7 +177,9 @@ export function MaintenanceWorkspace({
   const [createPanelOpen, setCreatePanelOpen] = useState(Boolean(pendingDocumentWorkOrderSource?.documentId));
   const [vendorPanelOpen, setVendorPanelOpen] = useState(false);
   const [optionalCreateOpen, setOptionalCreateOpen] = useState(false);
-  const [expandedOverrides, setExpandedOverrides] = useWorkspaceMemory("maintenance:expandedOverrides", {});
+  const [search, setSearch] = useWorkspaceMemory("maintenance:search", "");
+  const [detailSection, setDetailSection] = useState("overview");
+  const [selectedFileId, setSelectedFileId] = useState("");
   const [workspaceMode, setWorkspaceMode] = useWorkspaceMemory("maintenance:workspaceMode", "active");
   const [queueQuickFilter, setQueueQuickFilter] = useWorkspaceMemory("maintenance:queueQuickFilter", "active");
   const [focusedWorkOrderId, setFocusedWorkOrderId] = useState("");
@@ -189,7 +187,7 @@ export function MaintenanceWorkspace({
   const [detailId, setDetailId] = useState("");
   const detailTrigger = useRef(null);
   const detail = maintenanceVisibleWorkOrders.find((record) => record.id === detailId);
-  const detailFiles = detail ? documents.filter((file) => file.workOrderId === detail.id || (detail.transactionId && file.transactionId === detail.transactionId)) : [];
+  const detailFiles = detail ? documents.filter((file) => file.workOrderId === detail.id || detail.sourceDocumentIds?.includes(file.id) || (detail.transactionId && file.transactionId === detail.transactionId)) : [];
   const propertyOptions = selectableProperties(properties, workOrderDraft.propertyId);
   const reviewContext = {
     transactions: Object.values(transactionById || {}),
@@ -233,7 +231,7 @@ export function MaintenanceWorkspace({
     setWorkspaceMode(CLOSED_STATUSES.has(target.status) ? "history" : "active");
     setQueueQuickFilter(CLOSED_STATUSES.has(target.status) ? "history" : "active");
     setMaintenanceStatusFilter("all");
-    setExpandedOverrides((current) => ({ ...current, [target.id]: true }));
+    setSearch("");
     setFocusedWorkOrderId(target.id);
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -270,16 +268,6 @@ export function MaintenanceWorkspace({
     historyCount: historyWorkOrderCount,
     vendorCount: maintenanceVendors.length,
   });
-  const defaultExpandedIds = useMemo(() => {
-    const priorityRows = maintenanceVisibleWorkOrders
-      .filter((workOrder) => {
-        const issues = getWorkOrderReviewIssues(workOrder, reviewContext);
-        return isWorkOrderOverdue(workOrder, todayIso) || issues.length > 0;
-      })
-      .slice(0, 3)
-      .map((workOrder) => workOrder.id);
-    return new Set(priorityRows);
-  }, [maintenanceVisibleWorkOrders, reviewContext, todayIso]);
   const summaryCards = {
     active: [
       { label: "Open", value: countByStatus(maintenanceStatusSummary, "Open"), icon: Wrench, iconTone: "border-orange-200 bg-orange-50 text-orange-700" },
@@ -301,11 +289,11 @@ export function MaintenanceWorkspace({
     ],
   }[workspaceMode] || [];
 
-  const toggleExpanded = (id) => {
-    setExpandedOverrides((prev) => {
-      const currentlyExpanded = Object.prototype.hasOwnProperty.call(prev, id) ? prev[id] : defaultExpandedIds.has(id);
-      return { ...prev, [id]: !currentlyExpanded };
-    });
+  const openRecord = (event, workOrder, section = "overview") => {
+    detailTrigger.current = event?.currentTarget || document.getElementById(workspaceFocusDomId("work-order", workOrder.id))?.querySelector("button");
+    setDetailSection(section);
+    setSelectedFileId("");
+    setDetailId(workOrder.id);
   };
   const resetDraft = () => {
     setWorkOrderDraft(createBlankWorkOrderDraft(workOrderDraft.propertyId || (properties[0]?.id || ""), workOrderDraft.unit || "Shared"));
@@ -359,6 +347,146 @@ export function MaintenanceWorkspace({
       emptyDetail: "Accounting and support records are clear for the current scope.",
     },
   }[workspaceMode];
+  const visibleQueueWorkOrders = queueWorkOrders.filter((workOrder) => {
+    const term = search.trim().toLowerCase();
+    return !term || [workOrder.title, workOrder.description, workOrder.notes, propertyNameById[workOrder.propertyId], labelForUnit(workOrder.unit), vendorById[workOrder.vendorId]?.name].some((value) => String(value || "").toLowerCase().includes(term));
+  });
+  const renderWorkOrderEditor = (workOrder) => {
+    const meta = workOrderMetaById[workOrder.id];
+    const { linkedTxn, linkedAsset, linkedDocumentCount, issues: workOrderIssues } = meta;
+    const isCapital = workOrder.accountingTreatment === "capital_improvement";
+    return (
+                    <div className="mt-2 space-y-2 border-t border-slate-200 pt-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "In Progress")} disabled={!canCreateEditRecords || workOrder.status === "In Progress"}>Start</Button>
+                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "Waiting on Parts")} disabled={!canCreateEditRecords || workOrder.status === "Waiting on Parts"}>Mark waiting</Button>
+                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "Completed")} disabled={!canCreateEditRecords || workOrder.status === "Completed"}>Mark completed</Button>
+                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "Closed")} disabled={!canCreateEditRecords || workOrder.status === "Closed"}>Close work order</Button>
+                      </div>
+                      <div className={WORKSPACE_MUTED_PANEL_CLASS}>
+                        <div className="mb-2 text-xs font-medium uppercase text-slate-500">Status, vendor, cost, and accounting</div>
+                        <fieldset disabled={!canCreateEditRecords} className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <div>
+                            <Label>Status</Label>
+                            <Select value={workOrder.status} onValueChange={(value) => actions.setWorkOrderStatus(workOrder.id, value)}>
+                              <SelectTrigger aria-label="Work order status"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {WORK_ORDER_STATUS_ORDER.map((status) => <SelectItem key={`${workOrder.id}-status-${status}`} value={status}>{status}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Vendor</Label>
+                            <Select value={workOrder.vendorId || "__none__"} onValueChange={(value) => actions.assignWorkOrderVendor(workOrder.id, value === "__none__" ? "" : value)}>
+                              <SelectTrigger aria-label="Assigned vendor"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Unassigned</SelectItem>
+                                {maintenanceVendors.map((vendor) => <SelectItem key={`${workOrder.id}-vendor-${vendor.id}`} value={vendor.id}>{vendor.name}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label>Estimated cost</Label>
+                            <Input
+                              aria-label="Work order estimated cost"
+                              type="number"
+                              value={workOrder.estimatedCost ?? ""}
+                              onChange={(e) => actions.addOrUpdateWorkOrder({ ...workOrder, estimatedCost: Number(e.target.value || 0) })}
+                            />
+                            <div className="mt-1 text-[11px] text-slate-500">Planning or expected cost.</div>
+                          </div>
+                          <div>
+                            <Label>Actual cost</Label>
+                            <Input
+                              aria-label="Work order actual cost"
+                              type="number"
+                              value={workOrder.actualCost ?? ""}
+                              onChange={(e) => actions.addOrUpdateWorkOrder({ ...workOrder, actualCost: e.target.value ? Number(e.target.value) : undefined })}
+                            />
+                            <div className="mt-1 text-[11px] text-slate-500">Work-order cost before ledger cleanup.</div>
+                          </div>
+                          <div>
+                            <Label>Expense / asset treatment</Label>
+                            <Select value={workOrder.accountingTreatment || "needs_review"} onValueChange={(value) => actions.updateWorkOrderAccounting(workOrder.id, { accountingTreatment: value, accountingReviewed: false })}>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {MAINTENANCE_ACCOUNTING_TREATMENT_OPTIONS.map((option) => <SelectItem key={`${workOrder.id}-treatment-${option.value}`} value={option.value}>{option.label}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
+                            <div className="mt-1 text-[11px] text-slate-500">Use this to decide whether the work order becomes an expense, asset, or review item.</div>
+                          </div>
+                          <div>
+                            <Label>Reviewed</Label>
+                            <label className="mt-1 flex h-10 items-center gap-2 rounded border border-slate-200 bg-white px-3 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(workOrder.accountingReviewed)}
+                                onChange={(event) => actions.updateWorkOrderAccounting(workOrder.id, { accountingReviewed: event.target.checked })}
+                              />
+                              <span>Reviewed</span>
+                            </label>
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label>Accounting notes</Label>
+                            <Input
+                              value={workOrder.accountingReviewNotes || ""}
+                              onChange={(e) => actions.updateWorkOrderAccounting(workOrder.id, { accountingReviewNotes: e.target.value })}
+                            />
+                          </div>
+                        </fieldset>
+                        <p className="mt-2 text-xs text-slate-500">Changes save as you go.</p>
+                      </div>
+
+                      <div className="grid gap-3 lg:grid-cols-2">
+                        <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                          <div className="font-medium text-slate-900">Description and notes</div>
+                          <div className="mt-2">{workOrder.description || "No description entered."}</div>
+                          {workOrder.notes ? <div className="mt-2 text-slate-500">{workOrder.notes}</div> : null}
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+                          <div className="font-medium text-slate-900">Linked records</div>
+                          <div className="mt-2 space-y-1">
+                            <div>Linked expense: {linkedTxn ? `${formatMaintenanceDate(linkedTxn.date)} | ${currency(linkedTxn.amount)}` : "Not linked"}</div>
+                            <div>Linked documents: {linkedDocumentCount}</div>
+                            <div>Linked asset: {linkedAsset ? linkedAsset.description : isCapital ? "Needed for capital improvement" : "Not applicable"}</div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" disabled={!linkedTxn && !canCreateEditRecords} onClick={() => createWorkOrderExpense(workOrder)}>
+                              {linkedTxn ? "View expense" : "Create expense"}
+                            </Button>
+                            <Button size="sm" variant="secondary" disabled={!canCreateEditRecords} onClick={() => openWorkOrderAttachmentPicker(workOrder)}>Attach file</Button>
+                            {linkedDocumentCount > 0 && (
+                              <Button size="sm" variant="secondary" onClick={() => openWorkOrderDocuments(workOrder)}>
+                                Open docs ({linkedDocumentCount})
+                              </Button>
+                            )}
+                            {isCapital && !linkedAsset && (
+                              <Button size="sm" variant="secondary" disabled={!canCreateEditRecords} onClick={() => startCreateAssetFromWorkOrder(workOrder)}>
+                                Create asset
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-1">
+                          {workOrderIssues.length === 0 ? (
+                            <span className="text-xs text-emerald-700">No readiness issues.</span>
+                          ) : (
+                            workOrderIssues.map((issue) => (
+                              <span key={`${workOrder.id}-issue-${issue.key}`} title={issue.help} className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700">
+                                {issue.label}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        <Button size="sm" variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => actions.deleteWorkOrder(workOrder.id)} disabled={!canDeleteRecords}>
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+    );
+  };
   const changeWorkspaceMode = (mode) => {
     setWorkspaceMode(mode);
     setQueueQuickFilter(defaultMaintenanceQuickFilter(mode));
@@ -369,7 +497,7 @@ export function MaintenanceWorkspace({
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="space-y-3 !p-4">
-        <div role="tablist" aria-label="Maintenance workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        <div role="tablist" aria-label="Maintenance workspace modes" className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
           {workspaceModes.map((mode) => {
             const modeSelected = workspaceMode === mode.key;
             const ModeIcon = mode.key === "active" ? Wrench : mode.key === "history" ? BarChart3 : mode.key === "cleanup" ? ClipboardList : Users;
@@ -379,14 +507,14 @@ export function MaintenanceWorkspace({
                 type="button"
                 role="tab"
                 aria-selected={modeSelected}
-                className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-orange-200 hover:bg-orange-50/60"}`}
+                className={`rounded-md border px-3 py-2 text-left transition ${modeSelected ? "border-teal-700 bg-teal-700 text-white" : "border-transparent bg-white hover:bg-slate-50"}`}
                 onClick={() => changeWorkspaceMode(mode.key)}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
                 </div>
-                <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+
               </button>
             );
           })}
@@ -396,7 +524,7 @@ export function MaintenanceWorkspace({
           {summaryCards.map((card) => {
             const SummaryIcon = card.icon;
             return (
-              <div key={card.label} className={`${WORKSPACE_STAT_TILE_CLASS} p-3`}>
+              <div key={card.label} className={`${WORKSPACE_STAT_TILE_CLASS} px-3 py-2`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-xs uppercase text-slate-500">{card.label}</div>
@@ -555,306 +683,52 @@ export function MaintenanceWorkspace({
                 <Plus className="h-4 w-4" aria-hidden="true" />
                 New Work Order
               </Button> : null}
-              <Badge variant="secondary">{queueWorkOrders.length} visible</Badge>
+              <Badge variant="secondary">{visibleQueueWorkOrders.length} visible</Badge>
             </div>
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            {quickFilters.map((filter) => (
-              <Button
-                key={`maintenance-queue-filter-${filter.key}`}
-                size="sm"
-                variant={queueQuickFilter === filter.key ? "default" : "secondary"}
-                className="h-7 px-3 text-xs"
-                onClick={() => setQueueQuickFilter(filter.key)}
-              >
-                {filter.label}
-              </Button>
-            ))}
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="min-w-48 flex-1 text-xs font-medium text-slate-500">Search work orders<Input aria-label="Search work orders" className="mt-1" placeholder="Title, vendor, property, or notes" value={search} onChange={(event) => setSearch(event.target.value)} /></label>
+            <label className="text-xs font-medium text-slate-500">Show<Select value={queueQuickFilter} onValueChange={setQueueQuickFilter}><SelectTrigger aria-label="Work order filter" className="mt-1 min-w-40"><SelectValue /></SelectTrigger><SelectContent>{quickFilters.map((filter) => <SelectItem key={filter.key} value={filter.key}>{filter.label}</SelectItem>)}</SelectContent></Select></label>
+            {search ? <Button variant="ghost" size="sm" onClick={() => setSearch("")}>Clear search</Button> : null}
           </div>
 
           <div className="mt-2 space-y-2">
             <input ref={workOrderAttachmentInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={onWorkOrderAttachmentInputChange} />
-            {queueWorkOrders.length === 0 && (
+            {visibleQueueWorkOrders.length === 0 && (
               <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/80 p-4 text-sm">
-                <div className="font-medium text-slate-900">{queuePresentation.emptyTitle}</div>
+                <div className="font-medium text-slate-900">{search ? "No matching work orders." : queuePresentation.emptyTitle}</div>
                 <div className="mt-1 text-xs text-slate-500">{queuePresentation.emptyDetail}</div>
               </div>
             )}
-            {queueWorkOrders.map((workOrder) => {
-              const rowMeta = workOrderMetaById[workOrder.id] || {};
-              const linkedTxn = rowMeta.linkedTxn || null;
-              const linkedAsset = rowMeta.linkedAsset || null;
-              const vendorLabel = workOrder.vendorId ? (vendorById[workOrder.vendorId]?.name || "Unknown vendor") : "Unassigned";
-              const resolvedCost = resolveWorkOrderCost(workOrder, transactionById);
-              const linkedDocumentCount = rowMeta.linkedDocumentCount || 0;
-              const workOrderIssues = rowMeta.issues || [];
-              const workOrderReadiness = rowMeta.readiness || getWorkOrderReadiness(workOrder, reviewContext);
-              const isOverdue = Boolean(rowMeta.isOverdue);
-              const isExpanded = Object.prototype.hasOwnProperty.call(expandedOverrides, workOrder.id)
-                ? expandedOverrides[workOrder.id]
-                : defaultExpandedIds.has(workOrder.id);
-              const hasActualCost = Number(workOrder.actualCost || 0) > 0;
-              const estimatedCost = Number(workOrder.estimatedCost || 0);
-              const hasEstimatedCost = estimatedCost > 0;
-              const hasResolvedCostRecord = hasActualCost || Boolean(linkedTxn);
-              const shouldShowEstimatedCost = hasEstimatedCost && (!hasResolvedCostRecord || !amountsMatch(estimatedCost, resolvedCost));
-              const shouldShowResolvedCost = hasResolvedCostRecord && resolvedCost > 0;
-              const hasAnyCost = shouldShowEstimatedCost || shouldShowResolvedCost;
-              const isCapital = workOrder.accountingTreatment === "capital_improvement";
-              const primaryActionKey = workOrderPrimaryActionKey({ workOrder, linkedTxn, linkedAsset, hasActualCost });
-              const primaryAction = {
-                create_expense: { label: "Create expense", onClick: () => createWorkOrderExpense(workOrder), icon: Receipt },
-                view_expense: { label: "View expense", onClick: () => createWorkOrderExpense(workOrder), icon: Receipt },
-                create_asset: { label: "Create asset", onClick: () => startCreateAssetFromWorkOrder(workOrder), icon: FilePlus2 },
-                manage_work_order: { label: "Manage work order", onClick: () => toggleExpanded(workOrder.id), icon: ClipboardList },
-              }[primaryActionKey];
-              const PrimaryIcon = primaryAction.icon;
-              const StatusIcon = isOverdue ? AlertTriangle : statusIconForStatus(workOrder.status);
-
-              return (
-                <div
-                  id={workspaceFocusDomId("work-order", workOrder.id)}
-                  key={workOrder.id}
-                  className={`rounded-lg border bg-white p-2.5 transition ${focusedWorkOrderId === workOrder.id ? "border-teal-400 ring-2 ring-teal-100" : isOverdue ? "border-red-200" : "border-slate-200"}`}
-                >
-                  <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_minmax(360px,1.35fr)_minmax(300px,auto)]">
-                    <div className="min-w-0">
-                      <div className="flex min-w-0 items-start gap-1.5">
-                        <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${isOverdue ? "border-red-200 bg-red-50 text-red-700" : statusIconTone(workOrder.status)}`}>
-                          <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                        </span>
-                        <button
-                          type="button"
-                          className="mt-0.5 flex min-w-0 items-center gap-1 text-left font-semibold text-slate-900 hover:text-teal-800"
-                          onClick={() => toggleExpanded(workOrder.id)}
-                        >
-                          {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
-                          <span className="truncate">{workOrder.title}</span>
-                        </button>
-                      </div>
-                      <div className="mt-1 text-xs text-slate-600">{propertyNameById[workOrder.propertyId] || workOrder.propertyId} &middot; {labelForUnit(workOrder.unit)}</div>
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        <Badge variant="secondary" className={statusTone(workOrder.status)}>{workOrder.status}</Badge>
-                        <Badge variant="outline" className={priorityTone(workOrder.priority)}>{workOrder.priority}</Badge>
-                        {isOverdue && <Badge variant="secondary" className="!bg-red-100 !text-red-700">Overdue</Badge>}
-                      </div>
-                    </div>
-                    <div className="grid min-w-0 gap-x-4 gap-y-1.5 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-4">
-                      <div className="min-w-0 lg:col-span-1 xl:col-span-1">
-                        <div className="text-[10px] font-semibold uppercase text-slate-500">Vendor</div>
-                        <div className={`truncate ${workOrder.vendorId ? "font-medium text-slate-900" : "font-medium text-amber-700"}`} title={vendorLabel}>{vendorLabel}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase text-slate-500">Reported</div>
-                        <div>{formatMaintenanceDate(workOrder.reportedOn)}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] font-semibold uppercase text-slate-500">Due</div>
-                        <div className={isOverdue ? "font-medium text-red-700" : ""}>{formatMaintenanceDate(workOrder.dueDate)}</div>
-                      </div>
-                      {(workOrder.completedAt || workOrder.status === "Completed") && (
-                        <div>
-                          <div className="text-[10px] font-semibold uppercase text-slate-500">Completed</div>
-                          <div className="font-medium text-emerald-700">{formatMaintenanceDate(workOrder.completedAt)}</div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-start justify-between gap-2 xl:justify-end">
-                      <div className="min-w-40 rounded-md border border-slate-200 bg-slate-50/70 px-2.5 py-2 text-xs">
-                        {hasAnyCost ? (
-                          <div className="space-y-1">
-                            {shouldShowEstimatedCost && (
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-500">Estimated</span>
-                                <span className="font-medium text-slate-900">{currency(estimatedCost)}</span>
-                              </div>
-                            )}
-                            {shouldShowResolvedCost && (
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="text-slate-500">Actual/resolved</span>
-                                <span className="font-semibold text-slate-900">{currency(resolvedCost)}</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="text-slate-500">No cost recorded.</div>
-                        )}
-                      </div>
-                      <div className="flex w-full flex-wrap gap-2 sm:w-auto xl:flex-col">
-                        <Button size="sm" variant="secondary" onClick={(event) => { detailTrigger.current = event.currentTarget; setDetailId(workOrder.id); }}>Open record</Button>
-                        <Button size="sm" className="w-full sm:w-auto xl:w-40" onClick={primaryAction.onClick}>
-                          <PrimaryIcon className="h-4 w-4" aria-hidden="true" />
-                          {primaryAction.label}
-                        </Button>
-                        {!isExpanded && (
-                          <Button size="sm" variant="secondary" className="w-full sm:w-auto xl:w-40" onClick={() => toggleExpanded(workOrder.id)}>
-                            View details
-                          </Button>
-                        )}
-                      </div>
-                    </div>
+            {visibleQueueWorkOrders.map((workOrder) => {
+              const meta = workOrderMetaById[workOrder.id];
+              const actionKey = workOrderPrimaryActionKey({ workOrder, linkedTxn: meta.linkedTxn, linkedAsset: meta.linkedAsset, hasActualCost: Number(workOrder.actualCost || 0) > 0 });
+              const actionLabel = { manage_work_order: "Manage work order", create_expense: "Create expense", view_expense: "View expense", create_asset: "Create asset" }[actionKey];
+              const StatusIcon = meta.isOverdue ? AlertTriangle : statusIconForStatus(workOrder.status);
+              return <div key={workOrder.id} id={workspaceFocusDomId("work-order", workOrder.id)} className={`rt-maintenance-row rounded-lg border bg-white p-3 ${focusedWorkOrderId === workOrder.id ? "border-teal-400 ring-2 ring-teal-100" : meta.isOverdue ? "border-red-200" : "border-slate-200"}`}>
+                <div className="flex min-w-0 items-start gap-3">
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${meta.isOverdue ? "border-red-200 bg-red-50 text-red-700" : statusIconTone(workOrder.status)}`}><StatusIcon className="h-4 w-4" /></span>
+                  <div className="min-w-0 flex-1">
+                    <button type="button" className="rt-row-title break-words text-left hover:text-teal-700" onClick={(event) => openRecord(event, workOrder)}>{workOrder.title}</button>
+                    <div className="mt-1 text-xs text-slate-500">{propertyNameById[workOrder.propertyId] || workOrder.propertyId} · {labelForUnit(workOrder.unit)}</div>
+                    <div className="mt-2 flex flex-wrap gap-1.5"><Badge variant="secondary" className={statusTone(workOrder.status)}>{workOrder.status}</Badge>{["High", "Urgent"].includes(workOrder.priority) ? <Badge className={priorityTone(workOrder.priority)}>{workOrder.priority}</Badge> : null}{meta.isOverdue ? <Badge className="!bg-red-100 !text-red-700">Overdue</Badge> : null}{meta.issues.length ? <span className="text-xs text-amber-700" title={meta.issues.map((issue) => issue.label).join(", ")}>{meta.issues[0].label}{meta.issues.length > 1 ? ` +${meta.issues.length - 1}` : ""}</span> : null}</div>
                   </div>
-
-                  <div className="mt-2 grid gap-2 border-t border-slate-100 pt-2 text-[10px] font-semibold uppercase text-slate-500 md:grid-cols-3">
-                    <div>
-                      <div>Record support</div>
-                      <div className="mt-1 flex flex-wrap gap-1 normal-case">
-                        <Badge variant="secondary" className={linkedTxn ? "!bg-emerald-100 !text-emerald-700" : "!bg-amber-100 !text-amber-800"}>
-                          {linkedTxn ? "Expense linked" : "No linked expense"}
-                        </Badge>
-                        <Badge variant="secondary">{linkedDocumentCount} doc{linkedDocumentCount === 1 ? "" : "s"}</Badge>
-                      </div>
-                    </div>
-                    <div>
-                      <div>Accounting</div>
-                      <div className="mt-1 flex flex-wrap gap-1 normal-case">
-                        <Badge variant="secondary" className={workOrder.accountingReviewed ? "!bg-emerald-100 !text-emerald-700" : "!bg-amber-100 !text-amber-800"}>
-                          {workOrder.accountingReviewed ? "Reviewed" : "Needs review"}
-                        </Badge>
-                        <AuditReadinessBadge status={workOrderReadiness} />
-                      </div>
-                    </div>
-                    <div>
-                      <div>Category</div>
-                      <div className="mt-1 flex flex-wrap gap-1 normal-case">
-                        <Badge variant="secondary" className={isCapital && !linkedAsset ? "!bg-amber-100 !text-amber-800" : ""}>
-                          {isCapital ? (linkedAsset ? "Capital asset linked" : "Capital asset needed") : maintenanceAccountingTreatmentLabel(workOrder.accountingTreatment)}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  {isExpanded && (
-                    <div className="mt-2 space-y-2 border-t border-slate-200 pt-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "In Progress")} disabled={workOrder.status === "In Progress"}>Start</Button>
-                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "Waiting on Parts")} disabled={workOrder.status === "Waiting on Parts"}>Mark waiting</Button>
-                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "Completed")} disabled={workOrder.status === "Completed"}>Mark completed</Button>
-                        <Button size="sm" variant="secondary" onClick={() => actions.setWorkOrderStatus(workOrder.id, "Closed")} disabled={workOrder.status === "Closed"}>Close</Button>
-                      </div>
-                      <div className={WORKSPACE_MUTED_PANEL_CLASS}>
-                        <div className="mb-2 text-xs font-medium uppercase text-slate-500">Status, vendor, cost, and accounting</div>
-                        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                          <div>
-                            <Label>Status</Label>
-                            <Select value={workOrder.status} onValueChange={(value) => actions.setWorkOrderStatus(workOrder.id, value)}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {WORK_ORDER_STATUS_ORDER.map((status) => <SelectItem key={`${workOrder.id}-status-${status}`} value={status}>{status}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>Vendor</Label>
-                            <Select value={workOrder.vendorId || "__none__"} onValueChange={(value) => actions.assignWorkOrderVendor(workOrder.id, value === "__none__" ? "" : value)}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Unassigned</SelectItem>
-                                {maintenanceVendors.map((vendor) => <SelectItem key={`${workOrder.id}-vendor-${vendor.id}`} value={vendor.id}>{vendor.name}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div>
-                            <Label>Estimated cost</Label>
-                            <Input
-                              type="number"
-                              value={workOrder.estimatedCost ?? ""}
-                              onChange={(e) => actions.addOrUpdateWorkOrder({ ...workOrder, estimatedCost: Number(e.target.value || 0) })}
-                            />
-                            <div className="mt-1 text-[11px] text-slate-500">Planning or expected cost.</div>
-                          </div>
-                          <div>
-                            <Label>Actual cost</Label>
-                            <Input
-                              type="number"
-                              value={workOrder.actualCost ?? ""}
-                              onChange={(e) => actions.addOrUpdateWorkOrder({ ...workOrder, actualCost: e.target.value ? Number(e.target.value) : undefined })}
-                            />
-                            <div className="mt-1 text-[11px] text-slate-500">Work-order cost before ledger cleanup.</div>
-                          </div>
-                          <div>
-                            <Label>Expense / asset treatment</Label>
-                            <Select value={workOrder.accountingTreatment || "needs_review"} onValueChange={(value) => actions.updateWorkOrderAccounting(workOrder.id, { accountingTreatment: value, accountingReviewed: false })}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {MAINTENANCE_ACCOUNTING_TREATMENT_OPTIONS.map((option) => <SelectItem key={`${workOrder.id}-treatment-${option.value}`} value={option.value}>{option.label}</SelectItem>)}
-                              </SelectContent>
-                            </Select>
-                            <div className="mt-1 text-[11px] text-slate-500">Use this to decide whether the work order becomes an expense, asset, or review item.</div>
-                          </div>
-                          <div>
-                            <Label>Reviewed</Label>
-                            <label className="mt-1 flex h-10 items-center gap-2 rounded border border-slate-200 bg-white px-3 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(workOrder.accountingReviewed)}
-                                onChange={(event) => actions.updateWorkOrderAccounting(workOrder.id, { accountingReviewed: event.target.checked })}
-                              />
-                              <span>Reviewed</span>
-                            </label>
-                          </div>
-                          <div className="md:col-span-2">
-                            <Label>Accounting notes</Label>
-                            <Input
-                              value={workOrder.accountingReviewNotes || ""}
-                              onChange={(e) => actions.updateWorkOrderAccounting(workOrder.id, { accountingReviewNotes: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-                          <div className="font-medium text-slate-900">Description and notes</div>
-                          <div className="mt-2">{workOrder.description || "No description entered."}</div>
-                          {workOrder.notes ? <div className="mt-2 text-slate-500">{workOrder.notes}</div> : null}
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-                          <div className="font-medium text-slate-900">Linked records</div>
-                          <div className="mt-2 space-y-1">
-                            <div>Linked expense: {linkedTxn ? `${formatMaintenanceDate(linkedTxn.date)} | ${currency(linkedTxn.amount)}` : "Not linked"}</div>
-                            <div>Linked documents: {linkedDocumentCount}</div>
-                            <div>Linked asset: {linkedAsset ? linkedAsset.description : isCapital ? "Needed for capital improvement" : "Not applicable"}</div>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <Button size="sm" variant="secondary" onClick={() => createWorkOrderExpense(workOrder)}>
-                              {linkedTxn ? "View expense" : "Create expense"}
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => openWorkOrderAttachmentPicker(workOrder)}>Attach file</Button>
-                            {linkedDocumentCount > 0 && (
-                              <Button size="sm" variant="secondary" onClick={() => openWorkOrderDocuments(workOrder)}>
-                                Open docs ({linkedDocumentCount})
-                              </Button>
-                            )}
-                            {isCapital && !linkedAsset && (
-                              <Button size="sm" variant="secondary" onClick={() => startCreateAssetFromWorkOrder(workOrder)}>
-                                Create asset
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex flex-wrap gap-1">
-                          {workOrderIssues.length === 0 ? (
-                            <span className="text-xs text-emerald-700">No readiness issues.</span>
-                          ) : (
-                            workOrderIssues.map((issue) => (
-                              <span key={`${workOrder.id}-issue-${issue.key}`} title={issue.help} className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700">
-                                {issue.label}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                        <Button size="sm" variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => actions.deleteWorkOrder(workOrder.id)} disabled={!canDeleteRecords}>
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
+                <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                  <div><div className="text-slate-500">Vendor</div><div className="mt-1 font-medium">{vendorById[workOrder.vendorId]?.name || "Unassigned"}</div></div>
+                  <div><div className="text-slate-500">Due</div><div className={`mt-1 font-medium ${meta.isOverdue ? "text-red-700" : ""}`}>{formatMaintenanceDate(workOrder.dueDate)}</div></div>
+                  <div><div className="text-slate-500">{workOrder.actualCost != null || meta.linkedTxn ? "Actual / linked cost" : "Estimated cost"}</div><div className="mt-1 font-semibold tabular-nums">{workOrder.actualCost != null || meta.linkedTxn || workOrder.estimatedCost != null ? currency(resolveWorkOrderCost(workOrder, transactionById)) : "Not entered"}</div></div>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <Button size="sm" variant="secondary" onClick={(event) => openRecord(event, workOrder)}>Open record</Button>
+                  <Button size="sm" disabled={!canCreateEditRecords && actionKey !== "view_expense"} onClick={(event) => {
+                    if (actionKey === "create_expense" || actionKey === "view_expense") createWorkOrderExpense(workOrder);
+                    else if (actionKey === "create_asset") startCreateAssetFromWorkOrder(workOrder);
+                    else openRecord(event, workOrder, "update");
+                  }}>{actionLabel}</Button>
+                </div>
+              </div>;
             })}
           </div>
         </div> : null}
@@ -1083,27 +957,27 @@ export function MaintenanceWorkspace({
         <RecordDetailPanel open={Boolean(detail)} onOpenChange={(open) => { if (!open) { setDetailId(""); requestAnimationFrame(() => detailTrigger.current?.isConnected && detailTrigger.current.focus()); } }}>
           {detail && <>
             <DialogHeader><DialogTitle>{detail.title || "Work order"}</DialogTitle></DialogHeader>
-            <div className="mt-4 grid gap-6 lg:grid-cols-2">
-              <div className="space-y-4">
-                <p className="text-sm text-slate-600">{propertyNameById[detail.propertyId]} · {labelForUnit(detail.unit)} · {detail.status}</p>
-                <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <div><dt>Priority</dt><dd>{detail.priority || "Normal"}</dd></div>
-                  <div><dt>Due</dt><dd>{formatMaintenanceDate(detail.dueDate)}</dd></div>
-                  <div><dt>Cost</dt><dd>{currency(resolveWorkOrderCost(detail, transactionById))}</dd></div>
-                  <div><dt>Accounting</dt><dd>{maintenanceAccountingTreatmentLabel(detail.accountingTreatment)}</dd></div>
-                </dl>
-                <p className="whitespace-pre-wrap text-sm">{detail.description || "No description entered."}</p>
-                {detail.notes && <p className="whitespace-pre-wrap text-sm text-slate-600">{detail.notes}</p>}
-                <p className="text-sm">{detail.transactionId ? "Expense linked" : "No linked expense"} · {detailFiles.length} files</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button onClick={() => { setDetailId(""); setExpandedOverrides((previous) => ({ ...previous, [detail.id]: true })); }}>Edit details</Button>
-                  <Button variant="secondary" onClick={() => { setDetailId(""); openWorkOrderDocuments(detail); }}>Open documents</Button>
-                  <Button variant="secondary" disabled={!canCreateEditRecords} onClick={() => { setDetailId(""); createWorkOrderExpense(detail); }}>Review expense</Button>
-                  <DialogClose variant="secondary">Close</DialogClose>
-                </div>
-              </div>
-              <RecordFilePreview document={detailFiles[0]} />
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500"><span>{propertyNameById[detail.propertyId]} · {labelForUnit(detail.unit)}</span><Badge className={statusTone(detail.status)}>{detail.status}</Badge><AuditReadinessBadge status={workOrderMetaById[detail.id].readiness} /></div>
+            <div className="mt-4 flex flex-wrap gap-1 border-b pb-2" aria-label="Work order sections">
+              {[ ["overview", "Overview"], ["update", "Update & accounting"], ["files", `Files (${detailFiles.length})`] ].map(([key, label]) => <Button key={key} size="sm" variant={detailSection === key ? "default" : "ghost"} aria-pressed={detailSection === key} onClick={() => setDetailSection(key)}>{label}</Button>)}
+              <DialogClose variant="secondary" className="ml-auto">Close</DialogClose>
             </div>
+            {detailSection === "overview" ? <div className="mt-4 space-y-4">
+              <dl className="grid gap-3 rounded-lg border bg-slate-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <div><dt className="text-xs text-slate-500">Vendor</dt><dd className="mt-1 font-medium">{vendorById[detail.vendorId]?.name || "Unassigned"}</dd></div>
+                <div><dt className="text-xs text-slate-500">Priority</dt><dd className="mt-1 font-medium">{detail.priority || "Normal"}</dd></div>
+                <div><dt className="text-xs text-slate-500">Due</dt><dd className="mt-1 font-medium">{formatMaintenanceDate(detail.dueDate)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Reported</dt><dd className="mt-1 font-medium">{formatMaintenanceDate(detail.reportedOn)}</dd></div>
+              </dl>
+              <section><h3 className="text-sm font-semibold">Request</h3><p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{detail.description || "No description entered."}</p>{detail.notes ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-500">{detail.notes}</p> : null}</section>
+              <div className="grid gap-3 sm:grid-cols-2"><div className="rounded-lg border p-3 text-sm"><h3 className="font-semibold">Costs and treatment</h3><div className="mt-2">Estimate: {detail.estimatedCost != null ? currency(detail.estimatedCost) : "Not entered"}</div><div className="mt-1">Actual: {detail.actualCost != null ? currency(detail.actualCost) : "Not entered"}</div><div className="mt-1 text-slate-500">{maintenanceAccountingTreatmentLabel(detail.accountingTreatment)}</div></div><div className="rounded-lg border p-3 text-sm"><h3 className="font-semibold">Record support</h3><div className="mt-2">{workOrderMetaById[detail.id].linkedTxn ? "Expense linked" : "No linked expense"} · {workOrderMetaById[detail.id].linkedDocumentCount} documents</div><div className="mt-2 space-y-1 text-xs text-amber-700">{workOrderMetaById[detail.id].issues.map((issue) => <p key={issue.key}>{issue.label}</p>)}</div></div></div>
+              <Button disabled={!canCreateEditRecords} onClick={() => setDetailSection("update")}>Edit details</Button>
+            </div> : detailSection === "update" ? renderWorkOrderEditor(detail) : <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap gap-2"><Button size="sm" disabled={!canCreateEditRecords} onClick={() => openWorkOrderAttachmentPicker(detail)}>Attach file</Button><Button size="sm" variant="secondary" onClick={() => { setDetailId(""); openWorkOrderDocuments(detail); }}>Open documents</Button></div>
+              {detailFiles.length ? <label className="block text-xs text-slate-500">File<Select value={selectedFileId || detailFiles[0].id} onValueChange={setSelectedFileId}><SelectTrigger aria-label="Work order file" className="mt-1"><SelectValue /></SelectTrigger><SelectContent>{detailFiles.map((file) => <SelectItem key={file.id} value={file.id}>{file.name}</SelectItem>)}</SelectContent></Select></label> : null}
+              <RecordFilePreview document={detailFiles.find((file) => file.id === selectedFileId) || detailFiles[0]} />
+            </div>}
+
           </>}
         </RecordDetailPanel>
       </CardContent>

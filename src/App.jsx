@@ -2633,7 +2633,7 @@ function AppContent() {
   };
 
   return (
-    <div className={`rt-app-shell min-h-screen p-3 sm:p-4 ${appSettings.theme === "dark" ? "theme-dark bg-slate-950 text-slate-100" : "theme-light bg-slate-100 text-slate-900"}`}>
+    <div data-workspace={view} className={`rt-app-shell min-h-screen p-3 sm:p-4 ${appSettings.theme === "dark" ? "theme-dark bg-slate-950 text-slate-100" : "theme-light bg-slate-100 text-slate-900"}`}>
       <div className={`mx-auto grid max-w-[1720px] grid-cols-[minmax(0,1fr)] gap-4 lg:items-start ${sidebarCollapsed ? "lg:grid-cols-[72px_1fr]" : "lg:grid-cols-[200px_1fr]"}`}>
         <AppSidebar
           currentView={currentView}

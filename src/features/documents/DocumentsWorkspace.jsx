@@ -597,6 +597,7 @@ export function DocumentsWorkspace({
             ownershipLabel={describeDocumentOwnership(document)}
             onPrimaryAction={runAction}
             onSecondaryAction={runAction}
+            onReview={showDocumentReview}
           />
         ))}
       </div>
@@ -605,9 +606,9 @@ export function DocumentsWorkspace({
 
   return (
     <Card className="overflow-hidden shadow-none">
-      <CardContent className="space-y-3 !p-4">
+      <CardContent className="rt-documents-workspace space-y-3 !p-4">
         <input ref={documentImportInputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={onDocumentImportInputChange} />
-        <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg border border-slate-200 bg-slate-50/80 p-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <Badge variant="secondary">{visibleDocuments.length} file{visibleDocuments.length === 1 ? "" : "s"}</Badge>
           <Button
             size="sm"
@@ -635,180 +636,67 @@ export function DocumentsWorkspace({
           />
         ) : null}
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => changeDocumentsTab("inbox")}>
-            <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <DocumentStatIcon icon={Inbox} tone="inbox" />
-              <span>Inbox</span>
-            </div>
-            <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{inboxDocuments.length}</div>
-            <div className="mt-1 text-xs text-slate-500">Files needing OCR, review, or attachment.</div>
-          </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => showInboxStatus("needs_indexing")}>
-            <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <DocumentStatIcon icon={FileWarning} tone="text" />
-              <span>Needs text extraction</span>
-            </div>
-            <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{visibleDocumentsMissingIndex.length}</div>
-            <div className="mt-1 text-xs text-slate-500">Files that still need searchable text.</div>
-          </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectExpenseQueueFilter(); }}>
-            <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <DocumentStatIcon icon={ReceiptText} tone="expense" />
-              <span>Expense drafts</span>
-            </div>
-            <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{pendingExpenseReviewCount}</div>
-            <div className="mt-1 text-xs text-slate-500">OCR expense suggestions waiting for review.</div>
-          </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectWorkOrderQueueFilter(); }}>
-            <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <DocumentStatIcon icon={Wrench} tone="workOrder" />
-              <span>Work order drafts</span>
-            </div>
-            <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{pendingWorkOrderReviewCount}</div>
-            <div className="mt-1 text-xs text-slate-500">Maintenance suggestions waiting for review.</div>
-          </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("library"); setDocumentSubview("linked"); setDocumentStatusFilter("all"); }}>
-            <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <DocumentStatIcon icon={Link2} tone="linked" />
-              <span>Linked documents</span>
-            </div>
-            <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{linkedDocuments.length}</div>
-            <div className="mt-1 text-xs text-slate-500">Files already supporting records.</div>
-          </button>
-          <button type="button" className={`${WORKSPACE_STAT_TILE_CLASS} text-left transition hover:border-blue-300 hover:bg-blue-50/50`} onClick={() => { setDocumentsTab("library"); setDocumentSubview("supporting"); setDocumentStatusFilter("all"); }}>
-            <div className="flex min-h-8 items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-500">
-              <DocumentStatIcon icon={FileCheck2} tone="supporting" />
-              <span>Supporting only</span>
-            </div>
-            <div className="mt-1 text-lg font-semibold leading-tight text-slate-900">{supportingDocuments.length}</div>
-            <div className="mt-1 text-xs text-slate-500">Reference files that do not create ledger records.</div>
-          </button>
+        <div className="rt-document-summary">
+          {[
+            { label: "Inbox", value: inboxDocuments.length, icon: Inbox, tone: "inbox", action: () => changeDocumentsTab("inbox") },
+            { label: "Needs text", value: visibleDocumentsMissingIndex.length, icon: FileWarning, tone: "text", action: () => showInboxStatus("needs_indexing") },
+            { label: "Expense drafts", value: pendingExpenseReviewCount, icon: ReceiptText, tone: "expense", action: () => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectExpenseQueueFilter(); } },
+            { label: "Missing support", value: missingReceiptGapRecords.length, icon: Link2, tone: "linked", action: () => changeDocumentsTab("receipt_gaps") },
+          ].map((item) => (
+            <button key={item.label} type="button" className="rt-document-stat" onClick={item.action}>
+              <DocumentStatIcon icon={item.icon} tone={item.tone} />
+              <span className="min-w-0 text-left"><span className="block text-xs text-slate-500">{item.label}</span><span className="block text-lg font-semibold tabular-nums text-slate-900">{item.value}</span></span>
+            </button>
+          ))}
         </div>
 
-        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-2">
-              <ReceiptText className="mt-0.5 h-4 w-4 shrink-0 text-blue-700" aria-hidden="true" />
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-900">Document workflows</div>
-                <div className="mt-1 text-xs text-slate-600">
-                  Flagged recommendations need review before bulk apply.
-                </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  <Badge variant="secondary">Expense drafts: {pendingExpenseReviewCount}</Badge>
-                  <Badge variant="secondary">Work orders: {pendingWorkOrderReviewCount}</Badge>
-                  {recommendationSummary.safe > 0 ? <Badge variant="secondary">Safe recommendations: {recommendationSummary.safe}</Badge> : null}
-                  {recommendationSummary.flagged > 0 ? <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-800">Flagged recommendations: {recommendationSummary.flagged}</Badge> : null}
-                  {nextExpenseReviewRecord?.document?.name ? <Badge variant="secondary">Next bill: {nextExpenseReviewRecord.document.name}</Badge> : null}
-                </div>
+        <details className="rt-document-processing rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+          <summary className="cursor-pointer text-sm font-medium text-slate-700">Processing tools <span className="ml-2 text-xs font-normal text-slate-500">Text extraction, draft queues, and batch review</span></summary>
+          <p className="mt-3 text-xs text-slate-500">Batch actions use all files matching Search and Show, across every page. Review the matching set before applying changes.</p>
+          <div className="mt-3 grid gap-3 lg:grid-cols-3">
+            <section className="rounded-lg border border-blue-200 bg-white p-3">
+              <div className="text-sm font-semibold text-slate-900">Text extraction</div>
+              <p className="mt-1 text-xs text-slate-500">Make files searchable and check extracted fields.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {visibleDocumentsMissingIndex.length > 0 ? <Button size="sm" variant="secondary" onClick={markVisibleDocumentsPendingOcr} disabled={documentBatchOcrBusy}>Queue matching OCR ({visibleDocumentsMissingIndex.length})</Button> : null}
+                {visibleAutomaticOcrDocuments.length > 0 ? <Button size="sm" variant="secondary" onClick={() => void runVisibleDocumentOcr()} disabled={documentBatchOcrBusy}>{documentBatchOcrBusy ? "Running matching OCR..." : `Run matching OCR (${visibleAutomaticOcrDocuments.length})`}</Button> : null}
+                {ocrQualityDocuments.length > 0 ? <Button size="sm" variant="secondary" onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("ocr_quality"); setDocumentStatusFilter("all"); }}>Review OCR fixes ({ocrQualityDocuments.length})</Button> : null}
               </div>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Button
-                size="sm"
-                variant="secondary"
-                className="w-full sm:w-auto"
-                onClick={() => openDocumentImportPicker()}
-                onMouseEnter={prefetchDocumentImportDialog}
-                onFocus={prefetchDocumentImportDialog}
-                onTouchStart={prefetchDocumentImportDialog}
-              >
-                <Upload className="mr-2 h-4 w-4" aria-hidden="true" />
-                Upload bill
-              </Button>
-              {pendingExpenseReviewCount > 0 ? (
-                <Button size="sm" className="w-full sm:w-auto" onClick={startNextBillFromDocument}>
-                  Review next bill
-                </Button>
-              ) : null}
-              {recommendationSummary.safe > 0 ? (
-                <Button size="sm" className="w-full sm:w-auto" onClick={acceptVisibleSafeSuggestions} disabled={!canReviewDocuments}>
-                  Apply {recommendationSummary.safe} safe recommendations
-                </Button>
-              ) : null}
-              {ocrQualityDocuments.length > 0 ? (
-                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("ocr_quality"); setDocumentStatusFilter("all"); }}>
-                  Review OCR fixes ({ocrQualityDocuments.length})
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        <div className={WORKSPACE_FILTER_PANEL_CLASS}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <div className="text-sm font-medium text-slate-900">Workflow actions</div>
-            </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-              {visibleDocumentsMissingIndex.length > 0 ? (
-                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={markVisibleDocumentsPendingOcr} disabled={documentBatchOcrBusy}>
-                  Queue matching OCR ({visibleDocumentsMissingIndex.length})
-                </Button>
-              ) : null}
-              {visibleAutomaticOcrDocuments.length > 0 ? (
-                <Button size="sm" variant="secondary" className="w-full sm:w-auto" onClick={() => void runVisibleDocumentOcr()} disabled={documentBatchOcrBusy}>
-                  {documentBatchOcrBusy ? "Running matching OCR..." : "Run matching OCR (" + visibleAutomaticOcrDocuments.length + ")"}
-                </Button>
-              ) : null}
-              {pendingExpenseReviewCount > 0 ? (
-                <Button size="sm" className="w-full sm:w-auto" variant={documentStatusFilter === "expense_queue" ? "default" : "secondary"} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectExpenseQueueFilter(); }}>
-                  Expense drafts ({pendingExpenseReviewCount})
-                </Button>
-              ) : null}
-              {pendingWorkOrderReviewCount > 0 ? (
-                <Button size="sm" className="w-full sm:w-auto" variant={documentStatusFilter === "work_order_queue" ? "default" : "secondary"} onClick={() => { setDocumentsTab("inbox"); setDocumentSubview("all"); selectWorkOrderQueueFilter(); }}>
-                  Work order drafts ({pendingWorkOrderReviewCount})
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        </div>
-
-        {(pendingExpenseReviewCount > 0 || pendingWorkOrderReviewCount > 0 || dismissedExpenseReviewCount > 0 || dismissedWorkOrderReviewCount > 0) ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 items-start gap-2">
-                <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
-                <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-900">Review queues</div>
-                <div className="mt-1 text-xs text-slate-600">Step through OCR-created expense and work-order drafts before posting them.</div>
-                <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-700">
-                  <Badge variant="secondary">Expense drafts: {pendingExpenseReviewCount}</Badge>
-                  <Badge variant="secondary">High confidence: {pendingHighConfidenceExpenseReviewCount}</Badge>
-                  <Badge variant="secondary">Work order drafts: {pendingWorkOrderReviewCount}</Badge>
-                  {pendingHighConfidenceWorkOrderReviewCount > 0 ? <Badge variant="secondary">High-confidence work orders: {pendingHighConfidenceWorkOrderReviewCount}</Badge> : null}
-                  {dismissedExpenseReviewCount > 0 ? <Badge variant="secondary">Not expenses: {dismissedExpenseReviewCount}</Badge> : null}
-                  {dismissedWorkOrderReviewCount > 0 ? <Badge variant="secondary">Not work orders: {dismissedWorkOrderReviewCount}</Badge> : null}
-                </div>
-                </div>
-              </div>
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap">
-                {pendingExpenseReviewCount > 0 ? <Button size="sm" variant="secondary" onClick={reviewNextExpenseQueueItem}>Review next bill</Button> : null}
+            </section>
+            <section className="rounded-lg border border-emerald-200 bg-white p-3">
+              <div className="text-sm font-semibold text-slate-900">Draft review</div>
+              <p className="mt-1 text-xs text-slate-500">{pendingExpenseReviewCount} expense drafts · {pendingWorkOrderReviewCount} work order drafts. Check each before posting.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" onClick={() => openDocumentImportPicker()} onMouseEnter={prefetchDocumentImportDialog} onFocus={prefetchDocumentImportDialog} onTouchStart={prefetchDocumentImportDialog}>Upload bill</Button>
+                {pendingExpenseReviewCount > 0 ? <Button size="sm" onClick={startNextBillFromDocument}>Review next bill</Button> : null}
                 {pendingWorkOrderReviewCount > 0 ? <Button size="sm" variant="secondary" onClick={reviewNextWorkOrderQueueItem}>Review next work order</Button> : null}
-                {(dismissedExpenseReviewCount > 0 || dismissedWorkOrderReviewCount > 0) ? (
-                  <Button size="sm" variant="secondary" onClick={() => setExpenseQueueShowDismissed((prev) => !prev)}>
-                    {expenseQueueShowDismissed ? "Hide reviewed later" : "Show reviewed later"}
-                  </Button>
-                ) : null}
-                {visibleExpenseReviewRecords.length > 0 ? (
-                  <Button size="sm" variant="secondary" onClick={dismissVisibleExpenseQueue}>
-                    Mark matching not expenses ({visibleExpenseReviewRecords.length})
-                  </Button>
-                ) : null}
+                {(dismissedExpenseReviewCount > 0 || dismissedWorkOrderReviewCount > 0) ? <Button size="sm" variant="secondary" onClick={() => setExpenseQueueShowDismissed((prev) => !prev)}>{expenseQueueShowDismissed ? "Hide reviewed later" : "Show reviewed later"}</Button> : null}
               </div>
-            </div>
+            </section>
+            <section className="rounded-lg border border-amber-200 bg-white p-3">
+              <div className="text-sm font-semibold text-slate-900">Batch review</div>
+              <p className="mt-1 text-xs text-slate-500">{recommendationSummary.safe} safe recommendations · {recommendationSummary.flagged} flagged. Flagged changes require individual review.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {recommendationSummary.safe > 0 ? <Button size="sm" onClick={acceptVisibleSafeSuggestions} disabled={!canReviewDocuments}>Apply {recommendationSummary.safe} safe recommendations</Button> : null}
+                {visibleExpenseReviewRecords.length > 0 ? <Button size="sm" variant="secondary" onClick={dismissVisibleExpenseQueue}>Mark matching not expenses ({visibleExpenseReviewRecords.length})</Button> : null}
+              </div>
+            </section>
           </div>
-        ) : null}
+        </details>
 
+        <Tabs value={documentsTab} onValueChange={changeDocumentsTab}>
+          <TabsList className={DOCUMENT_MUTED_PANEL_CLASS + " h-auto w-full justify-start overflow-x-auto p-1 sm:w-auto"}>
+            <TabsTrigger value="inbox"><Inbox className="mr-1 h-3.5 w-3.5 text-blue-700" />Inbox ({inboxDocuments.length})</TabsTrigger>
+            <TabsTrigger value="library"><FileCheck2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Library ({filteredDocuments.length})</TabsTrigger>
+            <TabsTrigger value="receipt_gaps"><ReceiptText className="mr-1 h-3.5 w-3.5 text-amber-700" />Missing Support ({missingReceiptGapRecords.length})</TabsTrigger>
+          </TabsList>
         <div className={WORKSPACE_FILTER_PANEL_CLASS}>
           {documentPage.pageCount > 1 && <p className="mb-2 text-xs text-slate-500">Bulk actions use all files matching the Search and Show filters, across every page.</p>}
-          <div className="grid gap-2 md:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(16rem,2fr)_1fr_1fr_1fr]">
             <SavedViews viewKey="documents" filters={{ search: documentSearch, status: documentStatusFilter, sort: documentSort, tab: documentsTab, subview: documentSubview, group: documentGroupMode }} onApply={(saved) => { setDocumentSearch(String(saved.search || "")); setDocumentStatusFilter(saved.status || "all"); setDocumentSort(saved.sort || "uploaded_desc"); setDocumentsTab(saved.tab || "inbox"); setDocumentSubview(saved.subview || "all"); setDocumentGroupMode(saved.group || "none"); }} />
             <div>
               <Label className="text-xs text-slate-600">Search</Label>
-              <Input aria-label="Search documents" className="mt-1" placeholder="Search files, tags, extracted text, tenant, vendor, work order, property, or unit" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} />
+              <Input aria-label="Search documents" className="mt-1" placeholder="Search files, vendors, text, or linked records" value={documentSearch} onChange={(event) => setDocumentSearch(event.target.value)} />
             </div>
             <div>
               <Label className="text-xs text-slate-600">Show</Label>
@@ -870,12 +758,6 @@ export function DocumentsWorkspace({
           </div>
         </div>
 
-        <Tabs value={documentsTab} onValueChange={changeDocumentsTab}>
-          <TabsList className={DOCUMENT_MUTED_PANEL_CLASS + " h-auto w-full justify-start overflow-x-auto p-1 sm:w-auto"}>
-            <TabsTrigger value="inbox"><Inbox className="mr-1 h-3.5 w-3.5 text-blue-700" />Inbox ({inboxDocuments.length})</TabsTrigger>
-            <TabsTrigger value="library"><FileCheck2 className="mr-1 h-3.5 w-3.5 text-indigo-700" />Library ({filteredDocuments.length})</TabsTrigger>
-            <TabsTrigger value="receipt_gaps"><ReceiptText className="mr-1 h-3.5 w-3.5 text-amber-700" />Missing Support ({missingReceiptGapRecords.length})</TabsTrigger>
-          </TabsList>
           {["inbox", "library"].map((tab) => (
             <TabsContent key={tab} value={tab} className="space-y-2">
               {filteredDocuments.length === 0 ? (

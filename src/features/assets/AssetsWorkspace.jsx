@@ -1,4 +1,5 @@
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
+import { WorkspaceModeNav } from "../shared/WorkspaceModeNav.jsx";
 import React, { useEffect, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -530,34 +531,7 @@ export function AssetsWorkspace({
 
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="Depreciation workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {workspaceModes.map((mode) => {
-          const modeSelected = workspaceMode === mode.key;
-          const ModeIcon = mode.key === "overview"
-            ? Boxes
-            : mode.key === "register"
-              ? ReceiptText
-              : mode.key === "schedules"
-                ? CalendarDays
-                : ClipboardCheck;
-          return (
-            <button
-              key={`asset-mode-${mode.key}`}
-              type="button"
-              role="tab"
-              aria-selected={modeSelected}
-              className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/60"}`}
-              onClick={() => setWorkspaceMode(mode.key)}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
-              </div>
-              <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
-            </button>
-          );
-        })}
-      </div>
+      <WorkspaceModeNav label="Depreciation workspace modes" modes={workspaceModes} value={workspaceMode} onChange={setWorkspaceMode} icons={{ overview: Boxes, register: ReceiptText, schedules: CalendarDays, cleanup: ClipboardCheck }} />
 
       <section aria-labelledby="asset-summary-title">
         <h2 id="asset-summary-title" className="mb-2 text-base font-semibold text-slate-950">{summaryHeading}</h2>

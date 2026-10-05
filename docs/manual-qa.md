@@ -6,6 +6,19 @@ Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, 
 
 ## Fresh App Flow
 
+### v1.9.8 refresh checks
+
+- At 1920×1200 and the smaller checked laptop sizes, confirm Home's bounded previews fit without scrolling; verify scope controls align with the header actions.
+- Confirm light-theme card outlines, header dividers, and balanced blue/lavender/cream accents remain readable; check dark theme and narrow-window navigation.
+- Review a suggested Smart Check, confirm property/unit context is retained, and verify matching shared-to-unit bills with continuous service coverage do not produce a false missing-payment suggestion.
+- Open a lease overview, inspect payments/files/history, and confirm unsaved agreement edits still require an explicit save or discard.
+- Open maintenance and unit details, inspect history/files, and confirm closing returns focus to the initiating control.
+- Open loan payment history, load older dates, edit a saved payment, and confirm saving changes that payment without creating another entry. Check the nested loan editor and amortization panel.
+- In Planning, select 24 and 36 months and confirm the monthly health warning matches the displayed planned monthly average.
+- Review a saved PDF after restarting. Wait for preview loading to complete, open the full preview, and check the original page and linked transaction preview.
+
+### Core setup and records
+
 - Launch a fresh desktop build.
 - Load the fictional sample dataset from the demo-data control.
 - Confirm Dashboard shows Getting Started and Tax Readiness panels.

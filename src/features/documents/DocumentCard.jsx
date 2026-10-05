@@ -1,13 +1,10 @@
 import { FileText, MoreHorizontal } from "lucide-react";
-import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { AuditReadinessBadge } from "../shared/AuditReadinessBadge.jsx";
 import {
-  buildDocumentHealthBadges,
   buildLinkedRecordSummary,
   formatDocumentDate,
   formatDocumentScope,
-  isSupportingOnlyDocument,
 } from "./documentPresentation.js";
 import {
   documentWorkflowStatusLabel,
@@ -27,20 +24,11 @@ const STATUS_BADGE_CLASS = {
   supporting_only: "border-slate-200 bg-white text-slate-700 hover:bg-white",
 };
 
-const HEALTH_BADGE_CLASS = {
-  amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50",
-  blue: "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-50",
-  emerald: "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-50",
-  indigo: "border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-50",
-  sky: "border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-50",
-  slate: "border-slate-200 bg-white text-slate-700 hover:bg-white",
-  teal: "border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-50",
-};
-
 export function DocumentCard({
   document,
   context,
   onPrimaryAction,
+  onReview,
   onSecondaryAction,
   ownershipLabel,
   propertyLabel,
@@ -56,9 +44,6 @@ export function DocumentCard({
     transactionById: context.transactionById,
   });
   const warnings = context.getDocumentQualityWarnings?.(document) || [];
-  const healthBadges = buildDocumentHealthBadges(document, context);
-  const supportingOnly = isSupportingOnlyDocument(document);
-  const linked = Boolean(linkedSummary && linkedSummary.kind !== "supporting");
   const extracted = document.ocrStatus === "completed" || Boolean(document.extractedText);
   const extractionLabel = extracted ? "Text extracted" : document.ocrStatus === "pending" ? "OCR pending" : "Needs text";
   const typeLabel = document.type || "File";
@@ -69,32 +54,24 @@ export function DocumentCard({
       : getDocumentReviewSummary(document, context);
 
   return (
-    <div role="group" aria-label={`Document ${document.name}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(12rem,.75fr)_minmax(14rem,.85fr)_auto] lg:items-center">
+    <div role="group" aria-label={`Document ${document.name}`} className="rt-document-row rounded-lg border border-slate-200 bg-white px-3 py-2.5 transition hover:border-teal-200 hover:bg-teal-50/30">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,.9fr)_auto] lg:items-center">
         <div className="min-w-0">
           <div className="flex min-w-0 items-start gap-2 text-slate-900">
             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-slate-50 text-slate-600">
               <FileText className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <div className="rt-row-title truncate">{document.name}</div>
+              <button type="button" className="rt-row-title block max-w-full truncate text-left hover:text-teal-700" title={document.name} onClick={() => onReview(document)}>{document.name}</button>
               <div className="mt-0.5 line-clamp-1 text-xs text-slate-500">{typeLabel} | {formatDocumentScope(document, propertyLabel)} | {documentDate}</div>
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {linked ? <Badge variant="secondary" className="border-teal-200 bg-teal-50 text-teal-800">Linked</Badge> : null}
-            {supportingOnly ? <Badge variant="secondary">Supporting only</Badge> : null}
-            {extracted ? <Badge variant="secondary">Text extracted</Badge> : null}
             <AuditReadinessBadge
               status={status === "reviewed" || status === "supporting_only" ? { key: "ready", label: documentWorkflowStatusLabel(status) } : { key: "needs_review", label: documentWorkflowStatusLabel(status) }}
               className={STATUS_BADGE_CLASS[status] || ""}
             />
-            {healthBadges.map((badge) => (
-              <Badge key={`${document.id}-health-${badge.key}`} variant="secondary" className={HEALTH_BADGE_CLASS[badge.tone] || HEALTH_BADGE_CLASS.slate}>
-                {badge.label}
-              </Badge>
-            ))}
-            {!extracted && healthBadges.every((badge) => badge.label !== extractionLabel && badge.label !== "Needs OCR") ? <Badge variant="secondary">{extractionLabel}</Badge> : null}
+            {warnings.length > 0 ? <span className="text-xs text-amber-700">{warnings.length} check{warnings.length === 1 ? "" : "s"}</span> : null}
           </div>
         </div>
 
@@ -103,7 +80,7 @@ export function DocumentCard({
           <div className="mt-0.5 line-clamp-2">{linkedSummary?.label || ownershipLabel || "No linked record yet"}</div>
         </div>
 
-        <p className="line-clamp-2 text-xs leading-5 text-slate-600">{reviewSummary || "Record support is linked and ready to inspect from details."}</p>
+        <p className="line-clamp-2 text-xs leading-5 text-slate-600">{reviewSummary || (extracted ? "Searchable text available" : extractionLabel)}</p>
 
         <div className="flex items-center gap-2 lg:justify-end">
           <Button size="sm" className="whitespace-nowrap" onClick={() => onPrimaryAction(document, primaryAction)}>
@@ -111,7 +88,7 @@ export function DocumentCard({
           </Button>
           {secondaryActions.length > 0 ? (
             <details className="relative">
-              <summary className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="More actions">
+              <summary aria-label={`More actions for ${document.name}`} className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" title="More actions">
                 <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
               </summary>
               <div className="absolute right-0 z-20 mt-1 min-w-44 rounded-md border border-slate-200 bg-white p-1 shadow-lg">

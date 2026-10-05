@@ -1,6 +1,6 @@
 import { RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
 import { useEffect, useMemo, useState } from "react";
-import { FileWarning, Link2, Sparkles, X } from "lucide-react";
+import { FileWarning, Sparkles, X } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { DialogAction, DialogClose, DialogHeader, DialogTitle } from "../../components/ui/dialog";
@@ -120,130 +120,6 @@ function ManualAttachmentPicker({ document, leases, transactions, workOrders, ap
   );
 }
 
-function DocumentFixPanel({
-  applyDocumentLinkSuggestion,
-  currency,
-  document,
-  documentLinkSuggestionKindLabel,
-  documentOcrBusy,
-  documentTagSuggestionSourceLabel,
-  duplicateCandidates,
-  extractedFields,
-  handleWarningAction,
-  markCurrentWarningsReviewed,
-  onReviewDuplicateDocument,
-  openDocumentLinkedRecord,
-  qualityWarnings,
-  suggestedLinks,
-  updateLinkedTransactionFromOcr,
-  warningActionLabel,
-}) {
-  const fieldRows = [
-    extractedFields?.vendorName ? ["Vendor", extractedFields.vendorName] : null,
-    extractedFields?.totalAmount != null ? ["Amount", currency(extractedFields.totalAmount)] : null,
-    extractedFields?.invoiceDate || extractedFields?.serviceDate ? ["Date", extractedFields.invoiceDate || extractedFields.serviceDate] : null,
-    extractedFields?.servicePeriodStart && extractedFields?.servicePeriodEnd ? ["Service", `${extractedFields.servicePeriodStart} to ${extractedFields.servicePeriodEnd}`] : null,
-    extractedFields?.unit ? ["Unit", formatDocumentUnitLabel(extractedFields.unit)] : null,
-  ].filter(Boolean);
-  const topSuggestedLinks = suggestedLinks.slice(0, 2);
-
-  return (
-    <aside className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 lg:sticky lg:top-0">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-slate-900">Fix panel</div>
-        {qualityWarnings.length > 0 ? <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-800">{qualityWarnings.length}</Badge> : <Badge variant="secondary">Ready</Badge>}
-      </div>
-
-      {qualityWarnings.length > 0 ? (
-        <div className="space-y-2">
-          {qualityWarnings.map((warning) => (
-            <div key={`fix-${warning.key}`} className="rounded-md border border-amber-200 bg-white p-2">
-              <div className="text-xs font-semibold text-amber-900">{warning.label}</div>
-              <div className="mt-0.5 line-clamp-2 text-xs text-amber-800">{warning.detail}</div>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="mt-2 h-7 px-2 text-xs"
-                onClick={() => handleWarningAction(warning)}
-                disabled={warning.key === "no_text" && documentOcrBusy}
-              >
-                {warningActionLabel(warning)}
-              </Button>
-            </div>
-          ))}
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={markCurrentWarningsReviewed}>
-              Accept warnings
-            </Button>
-            {document?.transactionId ? (
-              <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={updateLinkedTransactionFromOcr}>
-                Update linked
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-
-      {fieldRows.length > 0 ? (
-        <div className="rounded-md border border-slate-200 bg-white p-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">OCR fields</div>
-          <div className="mt-2 space-y-1.5">
-            {fieldRows.map(([label, value]) => (
-              <div key={`fix-field-${label}`} className="grid grid-cols-[4.5rem_1fr] gap-2 text-xs">
-                <span className="text-slate-500">{label}</span>
-                <span className="min-w-0 truncate font-medium text-slate-800">{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {topSuggestedLinks.length > 0 ? (
-        <div className="rounded-md border border-blue-200 bg-white p-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-blue-700">
-            <Link2 className="h-3.5 w-3.5" />
-            Suggested links
-          </div>
-          <div className="mt-2 space-y-2">
-            {topSuggestedLinks.map((suggestion) => (
-              <div key={`fix-link-${suggestion.kind}-${suggestion.id}`} className="rounded border border-blue-100 bg-blue-50/60 p-2 text-xs">
-                <div className="line-clamp-2 font-medium text-slate-900">{documentLinkSuggestionKindLabel(suggestion.kind)}: {suggestion.label}</div>
-                <div className="mt-0.5 text-slate-500">{suggestion.confidence === "high" ? "High confidence" : "Possible match"} | {documentTagSuggestionSourceLabel(suggestion)}</div>
-                <Button size="sm" variant="secondary" className="mt-2 h-7 px-2 text-xs" onClick={() => applyDocumentLinkSuggestion(document, suggestion)}>
-                  Apply link
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {duplicateCandidates.length > 0 ? (
-        <div className="rounded-md border border-amber-200 bg-white p-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-amber-800">Duplicates</div>
-          <div className="mt-2 space-y-2">
-            {duplicateCandidates.slice(0, 2).map((candidate) => (
-              <div key={`fix-duplicate-${candidate.document.id}`} className="rounded border border-amber-100 bg-amber-50/60 p-2 text-xs">
-                <div className="line-clamp-1 font-medium text-slate-900">{candidate.document.name}</div>
-                <div className="mt-0.5 text-slate-600">{candidate.reasons.join(", ") || "similar details"}</div>
-                <Button size="sm" variant="secondary" className="mt-2 h-7 px-2 text-xs" onClick={() => onReviewDuplicateDocument?.(candidate.document)}>
-                  Review
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      {document?.transactionId ? (
-        <DialogAction size="sm" variant="secondary" className="w-full" onProceed={() => openDocumentLinkedRecord(document, "transaction")}>
-          Open linked transaction
-        </DialogAction>
-      ) : null}
-    </aside>
-  );
-}
-
 export function DocumentReviewDialog({
   aiDocumentCopilotConfigured,
   aiDocumentCopilotReady,
@@ -303,8 +179,10 @@ export function DocumentReviewDialog({
   const currentExtractedFields = document ? getDocumentExtractedFields(document) : null;
   const [ocrCorrectionDraft, setOcrCorrectionDraft] = useState({ vendorName: "", totalAmount: "", servicePeriodStart: "", servicePeriodEnd: "", unit: "Shared" });
   const [savedCorrections, setSavedCorrections] = useState("");
+  const [reviewSection, setReviewSection] = useState("review");
   const [textEditorOpen, setTextEditorOpen] = useState(false);
   useEffect(() => {
+    setReviewSection("review");
     setTextEditorOpen(false);
     const initialCorrections = {
       vendorName: currentExtractedFields?.vendorName || "",
@@ -403,6 +281,7 @@ export function DocumentReviewDialog({
   ].map((unit) => String(unit || "").trim()).filter(Boolean)));
   const safeTransactionLinkSuggestion = suggestedLinks.find((suggestion) => suggestion.kind === "transaction" && suggestion.confidence === "high") || null;
   const focusExtractedTextEditor = () => {
+    setReviewSection("tools");
     setTextEditorOpen(true);
     window.requestAnimationFrame(() => {
       globalThis.document?.getElementById(`document-text-editor-${document.id}`)?.focus?.();
@@ -426,6 +305,7 @@ export function DocumentReviewDialog({
         title: "Attach to existing transaction",
         body: `${documentLinkSuggestionKindLabel(safeTransactionLinkSuggestion.kind)}: ${safeTransactionLinkSuggestion.label}. This prevents creating a duplicate ledger entry from the same bill.`,
         button: "Apply link",
+        appliesSuggestions: true,
         onClick: () => applyDocumentLinkSuggestion(document, safeTransactionLinkSuggestion),
       }
     : expenseSuggestion
@@ -449,6 +329,7 @@ export function DocumentReviewDialog({
             title: "Review attachment",
             body: `${documentLinkSuggestionKindLabel(safeLinkSuggestion.kind)}: ${safeLinkSuggestion.label}`,
             button: "Apply link",
+            appliesSuggestions: true,
             onClick: () => applyDocumentLinkSuggestion(document, safeLinkSuggestion),
           }
         : canRunAutomaticOcr && !hasIndexedText
@@ -477,7 +358,7 @@ export function DocumentReviewDialog({
   const RecommendedActionButton = recommendedAction.leavesRecord ? DialogAction : Button;
   const recommendedActionProps = recommendedAction.leavesRecord ? { onProceed: recommendedAction.onClick } : { onClick: recommendedAction.onClick };
   return (
-    <RecordDetailPanel onDiscardChanges={() => setOcrCorrectionDraft(JSON.parse(savedCorrections))} dirty={Boolean(savedCorrections && savedCorrections !== JSON.stringify(ocrCorrectionDraft))} open={Boolean(document)} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }} className="flex flex-col overflow-hidden">
+    <RecordDetailPanel onDiscardChanges={() => setOcrCorrectionDraft(JSON.parse(savedCorrections))} dirty={Boolean(savedCorrections && savedCorrections !== JSON.stringify(ocrCorrectionDraft))} open={Boolean(document)} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }} className="rt-document-review flex flex-col overflow-hidden">
         <DialogHeader className="-mx-6 -mt-6 shrink-0 border-b border-slate-200 bg-white px-6 py-4">
           <div className="flex items-start justify-between gap-3">
             <DialogTitle className="min-w-0 truncate pr-2">{document.name}</DialogTitle>
@@ -494,9 +375,9 @@ export function DocumentReviewDialog({
           </div>
         </DialogHeader>
 
-        <div className="-mx-2 flex-1 space-y-3 overflow-y-auto px-2 py-3">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="space-y-3">
+        <div className="rt-document-review-body -mx-2 flex-1 overflow-y-auto px-2 py-3">
+          <div className="rt-document-review-grid">
+            <aside className="rt-document-original">
         <section className="rounded-lg border border-slate-200 bg-white p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
@@ -507,6 +388,44 @@ export function DocumentReviewDialog({
           </div>
           <RecordFilePreview document={document} onOpenFull={openDocumentPreview} />
         </section>
+
+            </aside>
+            <div className="min-w-0 space-y-3">
+              <nav aria-label="Document review sections" className="rt-document-review-nav flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-white p-1">
+                {[ ["review", "Review"], ["links", "Links"], ["tools", "Text & tools"] ].map(([key, label]) => (
+                  <Button key={key} size="sm" variant={reviewSection === key ? "default" : "ghost"} aria-pressed={reviewSection === key} onClick={() => setReviewSection(key)}>{label}</Button>
+                ))}
+              </nav>
+              <div hidden={reviewSection !== "review"} className="space-y-3">
+        <section className="rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-wide text-blue-700">Recommended action</div>
+              <h3 className="mt-1 text-sm font-semibold text-slate-900">{recommendedAction.title}</h3>
+              <div className="mt-1 text-sm text-slate-700">{recommendedAction.body}</div>
+            </div>
+            {recommendedAction.onClick ? (
+              <RecommendedActionButton
+                size="sm"
+                {...recommendedActionProps}
+                disabled={recommendedAction.disabled || (qualityWarnings.length > 0 && recommendedAction.appliesSuggestions)}
+              >
+                {qualityWarnings.length > 0 && recommendedAction.appliesSuggestions ? "Review flagged changes" : recommendedAction.button}
+              </RecommendedActionButton>
+            ) : null}
+          </div>
+        </section>
+
+          {extractedFields ? (
+            <ReviewSection title="Extracted fields" defaultOpen className="bg-slate-50/80">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Badge variant="outline" className={extractedFields.confidence === "high" ? "text-slate-800" : "border-amber-300 text-amber-800"}>
+                  {extractedFields.confidence === "high" ? "High confidence" : "Review suggested fields"}
+                </Badge>
+              </div>
+              <DocumentExtractedFieldsPanel fields={extractedFields} className="mt-2" currency={currency} />
+            </ReviewSection>
+          ) : null}
 
         {qualityWarnings.length > 0 ? (
           <section className="rounded-lg border border-amber-200 bg-amber-50/70 p-3">
@@ -563,48 +482,17 @@ export function DocumentReviewDialog({
           </section>
         ) : null}
 
-        <section className="rounded-lg border border-blue-200 bg-blue-50/70 p-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-xs font-medium uppercase tracking-wide text-blue-700">Recommended action</div>
-              <h3 className="mt-1 text-sm font-semibold text-slate-900">{recommendedAction.title}</h3>
-              <div className="mt-1 text-sm text-slate-700">{recommendedAction.body}</div>
-            </div>
-            {recommendedAction.onClick ? (
-              <RecommendedActionButton
-                size="sm"
-                {...recommendedActionProps}
-                disabled={recommendedAction.disabled || (qualityWarnings.length > 0 && (safeLinkSuggestion || safeTagSuggestions.length > 0))}
-              >
-                {qualityWarnings.length > 0 && (safeLinkSuggestion || safeTagSuggestions.length > 0) ? "Review flagged changes" : recommendedAction.button}
-              </RecommendedActionButton>
-            ) : null}
-          </div>
-        </section>
-
         <div className="flex flex-wrap gap-2">
-          {document.dataUrl ? (
-            <Button size="sm" variant="secondary" onClick={() => openDocumentPreview(document)}>
-              View file
-            </Button>
-          ) : (
-            <Badge variant="secondary" className="h-9 rounded-md px-3 py-2">Preview unavailable</Badge>
-          )}
+          {linkedTransaction && qualityWarnings.length === 0 ? <DialogAction size="sm" variant="secondary" onProceed={() => openDocumentLinkedRecord(document, "transaction")}>Open linked transaction</DialogAction> : null}
           {canRunAutomaticOcr && !hasIndexedText ? (
             <Button size="sm" variant="secondary" onClick={() => queueDocumentForOcr(document)} disabled={documentOcrBusy}>
               {documentOcrBusy ? "Running OCR..." : "Extract text"}
             </Button>
           ) : null}
-          {safeTagSuggestions.length > 0 || safeLinkSuggestion ? (
-            qualityWarnings.length > 0 ? (
-              <Button size="sm" variant="secondary" disabled>
-                Review flagged changes
-              </Button>
-            ) : (
+          {qualityWarnings.length === 0 && (safeTagSuggestions.length > 0 || safeLinkSuggestion) ? (
               <Button size="sm" variant="secondary" onClick={() => applySafeSuggestionsToDocument(document)}>
                 Apply recommended changes
               </Button>
-            )
           ) : null}
           {aiDocumentCopilotConfigured ? (
             <Button size="sm" variant="secondary" onClick={() => void runDocumentAiAnalysis(document)} disabled={documentAiBusy || !canRunDocumentAi}>
@@ -618,39 +506,7 @@ export function DocumentReviewDialog({
             </Button>
           ) : null}
         </div>
-        </div>
-        <DocumentFixPanel
-          applyDocumentLinkSuggestion={applyDocumentLinkSuggestion}
-          currency={currency}
-          document={document}
-          documentLinkSuggestionKindLabel={documentLinkSuggestionKindLabel}
-          documentOcrBusy={documentOcrBusy}
-          documentTagSuggestionSourceLabel={documentTagSuggestionSourceLabel}
-          duplicateCandidates={duplicateCandidates}
-          extractedFields={extractedFields}
-          handleWarningAction={handleWarningAction}
-          markCurrentWarningsReviewed={markCurrentWarningsReviewed}
-          onReviewDuplicateDocument={onReviewDuplicateDocument}
-          openDocumentLinkedRecord={openDocumentLinkedRecord}
-          qualityWarnings={qualityWarnings}
-          suggestedLinks={suggestedLinks}
-          updateLinkedTransactionFromOcr={updateLinkedTransactionFromOcr}
-          warningActionLabel={warningActionLabel}
-        />
-        </div>
-
-        <div className="grid gap-3 lg:grid-cols-2">
-          {extractedFields ? (
-            <ReviewSection title="Extracted fields" defaultOpen className="bg-slate-50/80">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Badge variant="outline" className={extractedFields.confidence === "high" ? "text-slate-800" : "border-amber-300 text-amber-800"}>
-                  {extractedFields.confidence === "high" ? "High confidence" : "Review suggested fields"}
-                </Badge>
-              </div>
-              <DocumentExtractedFieldsPanel fields={extractedFields} className="mt-2" currency={currency} />
-            </ReviewSection>
-          ) : null}
-
+        <div className="space-y-3">
           {expenseSuggestion ? (
             <ReviewSection title="Suggested expense draft" defaultOpen className="border-emerald-200 bg-emerald-50/70 text-sm text-slate-700">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -771,6 +627,8 @@ export function DocumentReviewDialog({
           </ReviewSection>
         ) : null}
 
+              </div>
+              <div hidden={reviewSection !== "links"} className="space-y-3">
         <ReviewSection title="Record links" defaultOpen className="text-sm">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -834,6 +692,8 @@ export function DocumentReviewDialog({
           </ReviewSection>
         ) : null}
 
+              </div>
+              <div hidden={reviewSection !== "tools"} className="space-y-3">
         {utilitySections.length > 0 ? (
           <ReviewSection title="Detected utility sections" className="border-amber-200 bg-amber-50/70">
             <DocumentUtilitySectionsPanel
@@ -889,6 +749,9 @@ export function DocumentReviewDialog({
           />
         </details>
 
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="-mx-6 -mb-6 shrink-0 border-t border-slate-200 bg-white px-6 py-3">

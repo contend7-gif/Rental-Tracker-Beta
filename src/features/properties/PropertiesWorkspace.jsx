@@ -16,7 +16,6 @@ import {
   ImagePlus,
   Info,
   KeyRound,
-  MoreHorizontal,
   Pencil,
   Plus,
   ReceiptText,
@@ -34,6 +33,7 @@ import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from ".
 import { Input } from "../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { formatUnitLabel } from "../../domain/unitLabels.js";
 import { isRentIncomeTransaction } from "../transactions/transactionPresentation.js";
 import { leaseRentSummaryLabel } from "../../domain/leaseTerms.js";
 import { PropertyRecordEditor } from "./PropertyRecordEditor.jsx";
@@ -97,12 +97,12 @@ function PropertyThumb({ property, className = "h-12 w-16" }) {
   );
 }
 
-function Stat({ label, value, detail, tone = "text-slate-950" }) {
+function Stat({ label, value, detail, help, tone = "text-slate-950" }) {
   return (
     <div className="min-w-0 border-b border-slate-200 pb-3 last:border-b-0 last:pb-0 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-4 lg:last:border-r-0 lg:last:pr-0">
-      <div className="text-[11px] font-medium uppercase text-slate-500">{label}</div>
-      <div className={`mt-1 truncate text-base font-semibold ${tone}`}>{value}</div>
-      {detail ? <div className="mt-0.5 truncate text-xs text-slate-500">{detail}</div> : null}
+      <div className="flex items-center gap-1 text-[11px] font-medium uppercase text-slate-500" title={help}>{label}{help ? <Info className="h-3 w-3" aria-label={help} /> : null}</div>
+      <div title={String(value)} className={`mt-1 truncate text-base font-semibold ${tone}`}>{value}</div>
+      {detail ? <div title={detail} className="mt-0.5 truncate text-xs text-slate-500">{detail}</div> : null}
     </div>
   );
 }
@@ -169,6 +169,17 @@ export function PropertiesWorkspace(props) {
   const [photoToRemove, setPhotoToRemove] = useState(null);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [unitDetailId, setUnitDetailId] = useWorkspaceMemory("properties:unitDetailId", "");
+  const [unitSection, setUnitSection] = useState("overview");
+  const unitTriggerRef = useRef(null);
+  const openUnitDetail = (unit, event) => {
+    unitTriggerRef.current = event?.currentTarget || null;
+    setUnitSection("overview");
+    setUnitDetailId(unit.id);
+  };
+  const closeUnitDetail = () => {
+    setUnitDetailId("");
+    requestAnimationFrame(() => unitTriggerRef.current?.isConnected && unitTriggerRef.current.focus());
+  };
   const photoInputRef = useRef(null);
 
   useEffect(() => {
@@ -520,47 +531,24 @@ export function PropertiesWorkspace(props) {
         </div>
       ) : null}
 
-      {rows.length !== 1 ? <Card className="overflow-hidden shadow-none">
-        <CardContent className="space-y-2 !p-3">
-          {rows.length > 1 ? <div className="hidden grid-cols-[minmax(220px,1.5fr)_90px_120px_150px_150px_90px_32px] gap-3 rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-medium uppercase text-slate-500 lg:grid">
-            <span>Property</span><span>Occupancy</span><span>YTD cash flow</span><span className="flex items-center gap-1" title={VISIBLE_RENT_SCHEDULE_HELP}>Recorded / visible schedule <Info className="h-3 w-3" aria-hidden="true" /><span className="sr-only">{VISIBLE_RENT_SCHEDULE_HELP}</span></span><span>Next lease expiration</span><span>Open items</span><span />
-          </div> : null}
-          {rows.length === 0 ? <div className="p-6 text-sm text-slate-500">No properties match the current filter.</div> : rows.map((row) => {
-            const active = row.property.id === selected?.property.id;
-            return (
-              <button key={row.property.id} type="button" onClick={() => { setSelectedPropertyId(row.property.id); setTab("overview"); setRecordSection("valuation"); }} className={`grid w-full grid-cols-2 items-center gap-x-4 gap-y-3 rounded-lg border border-slate-200 px-4 text-left ${rows.length === 1 ? "py-3 lg:grid-cols-[minmax(220px,1.5fr)_90px_120px_150px_150px_90px]" : "py-3 lg:grid-cols-[minmax(220px,1.5fr)_90px_120px_150px_150px_90px_32px]"} ${active ? "bg-teal-50/70" : "bg-white hover:bg-slate-50"}`}>
-                <span className="col-span-2 flex min-w-0 items-center gap-3 lg:col-span-1"><PropertyThumb property={row.property} className={rows.length === 1 ? "h-10 w-14" : "h-12 w-16"} /><span className="min-w-0"><span className="flex items-center gap-2"><span className="block truncate text-sm font-semibold text-slate-950">{row.property.name}</span>{row.property.archivedAt ? <Badge variant="secondary">Archived</Badge> : null}</span><span className="block truncate text-xs text-slate-500">{row.property.address}</span><span className="mt-0.5 block text-[11px] text-slate-400">{row.units.length} unit{row.units.length === 1 ? "" : "s"}</span></span></span>
-                <span className="text-sm font-medium text-slate-800"><span className={`mb-0.5 block text-[10px] uppercase text-slate-400 ${rows.length === 1 ? "" : "lg:hidden"}`}>Occupancy</span>{row.occupancy == null ? "Owner" : `${Math.round(row.occupancy * 100)}%`}</span>
-                <span className={`text-sm font-semibold ${row.cashflow >= 0 ? "text-emerald-700" : "text-rose-700"}`}><span className={`mb-0.5 block text-[10px] font-medium uppercase text-slate-400 ${rows.length === 1 ? "" : "lg:hidden"}`}>YTD cash flow</span>{currency(row.cashflow)}</span>
-                <span className="text-sm text-slate-800" title={VISIBLE_RENT_SCHEDULE_HELP}><span className={`mb-0.5 block text-[10px] uppercase text-slate-400 ${rows.length === 1 ? "" : "lg:hidden"}`}>Rent recorded / visible schedule</span>{currency(row.rentRecorded)} <span className="text-slate-400">/ {currency(row.scheduledRent)}</span></span>
-                <span className="text-sm text-slate-700"><span className={`mb-0.5 block text-[10px] uppercase text-slate-400 ${rows.length === 1 ? "" : "lg:hidden"}`}>Next lease expiration</span>{row.nextLease ? `${row.nextLease.unit} | ${row.nextLease.actualEndDate || row.nextLease.endDate}` : "None upcoming"}</span>
-                <span><span className={`mb-0.5 block text-[10px] uppercase text-slate-400 ${rows.length === 1 ? "" : "lg:hidden"}`}>Open items</span>{row.openItems ? <Badge className="!bg-amber-50 !text-amber-800">{row.openItems}</Badge> : <span className="text-xs text-slate-400">None</span>}</span>
-                {rows.length > 1 ? <MoreHorizontal className="h-4 w-4 text-slate-400" /> : null}
-              </button>
-            );
-          })}
-        </CardContent>
-      </Card> : null}
+      {rows.length !== 1 ? <Card className="shadow-none"><CardContent className="!p-3">
+        <div className="mb-2 flex items-center justify-between text-xs text-slate-500"><span className="font-semibold">Portfolio</span><span>{rows.length} properties in scope</span></div>
+        <div className="grid gap-2 lg:grid-cols-2">{rows.length ? rows.map((row) => <button key={row.property.id} type="button" aria-pressed={row.property.id === selected?.property.id} onClick={() => { setSelectedPropertyId(row.property.id); setTab("overview"); setRecordSection("valuation"); setUnitDetailId(""); }} className={`min-w-0 rounded-lg border p-3 text-left ${row.property.id === selected?.property.id ? "border-teal-300 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}>
+          <div className="flex min-w-0 items-center gap-3"><PropertyThumb property={row.property} /><div className="min-w-0 flex-1"><div className="break-words text-sm font-semibold">{row.property.name}{row.property.archivedAt ? <Badge className="ml-2">Archived</Badge> : null}</div><div className="truncate text-xs text-slate-500">{row.property.address}</div></div></div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-xs"><div><span className="text-slate-500">Occupancy</span><div className="mt-1 font-semibold">{row.occupancy == null ? "Owner" : `${Math.round(row.occupancy * 100)}%`}</div></div><div><span className="text-slate-500">YTD cash flow</span><div className={`mt-1 font-semibold ${row.cashflow >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{currency(row.cashflow)}</div></div><div><span className="text-slate-500">Open items</span><div className="mt-1 font-semibold">{row.openItems}</div></div></div>
+        </button>) : <p className="p-3 text-sm text-slate-500">No properties match the current filter.</p>}</div>
+      </CardContent></Card> : null}
 
       {selected ? (
         <Card className="overflow-hidden shadow-none">
-          <div className="relative min-h-36 border-b border-slate-200 bg-slate-100">
-            {((selected.property.photos || []).find((photo) => photo.isCover) || selected.property.photos?.[0])?.dataUrl ? (
-              <img src={((selected.property.photos || []).find((photo) => photo.isCover) || selected.property.photos[0]).dataUrl} alt={`${selected.property.name} cover`} className="absolute inset-0 h-full w-full object-cover" />
-            ) : <div className="absolute inset-0 flex items-center justify-center text-slate-300"><Building2 className="h-12 w-12" /></div>}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/10 to-transparent" />
-            <div className="relative flex min-h-44 flex-col justify-end gap-3 p-4 text-white sm:min-h-36 sm:flex-row sm:items-end sm:justify-between">
-              <div><div className="flex items-center gap-2"><div className="text-lg font-semibold">{selected.property.name}</div>{selected.property.archivedAt ? <Badge className="!bg-white !text-slate-800">Archived</Badge> : null}</div><div className="text-sm text-slate-100">{selected.property.address} | {selected.property.type}</div></div>
-              <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-                <Button size="sm" variant="secondary" className="min-w-0" onClick={() => photoInputRef.current?.click()} disabled={!canCreateEditRecords || imageBusy || Boolean(selected.property.archivedAt)}><Camera className="mr-2 h-4 w-4 shrink-0" /><span className="truncate">{imageBusy ? "Adding..." : "Add photos"}</span></Button>
-                {selected.property.archivedAt ? <Button size="sm" variant="secondary" className="min-w-0" onClick={restoreSelectedProperty} disabled={!canCreateEditRecords}><RotateCcw className="mr-2 h-4 w-4 shrink-0" /><span className="truncate">Restore</span></Button> : <Button size="sm" variant="secondary" className="min-w-0" onClick={openEdit} disabled={!canCreateEditRecords}><Pencil className="mr-2 h-4 w-4 shrink-0" /><span className="truncate">Edit property</span></Button>}
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-gradient-to-r from-cyan-50 to-white p-4">
+            <div className="flex min-w-0 items-center gap-3"><PropertyThumb property={selected.property} className="h-16 w-24" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-lg font-semibold text-slate-950">{selected.property.name}</h3>{selected.property.archivedAt ? <Badge>Archived</Badge> : null}</div><div className="mt-1 text-sm text-slate-500">{selected.property.address}</div><div className="mt-1 text-xs text-slate-500">{selected.property.type} · {selected.units.length} units · As of {dashboardAsOfDate}</div></div></div>
+            <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => photoInputRef.current?.click()} disabled={!canCreateEditRecords || imageBusy || Boolean(selected.property.archivedAt)}><Camera className="h-4 w-4" />{imageBusy ? "Adding..." : "Add photos"}</Button>{selected.property.archivedAt ? <Button size="sm" variant="secondary" onClick={restoreSelectedProperty} disabled={!canCreateEditRecords}>Restore</Button> : <Button size="sm" variant="secondary" onClick={openEdit} disabled={!canCreateEditRecords}><Pencil className="h-4 w-4" />Edit property</Button>}</div>
             <input ref={photoInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onPhotoFiles} />
           </div>
           <CardContent className="!p-4">
             <Tabs value={tab} onValueChange={setTab} className="space-y-4">
-              <div role="tablist" aria-label="Property workspace modes" className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              <div role="tablist" aria-label="Property workspace modes" className="flex flex-wrap gap-1 border-b border-slate-200 pb-2">
                 {propertyWorkspaceModes.map((mode) => {
                   const modeSelected = tab === mode.key;
                   const ModeIcon = mode.key === "overview" ? ShieldCheck : mode.key === "units" ? Building2 : mode.key === "records" ? FileText : Camera;
@@ -570,14 +558,14 @@ export function PropertiesWorkspace(props) {
                       type="button"
                       role="tab"
                       aria-selected={modeSelected}
-                      className={`rounded-xl border p-3 text-left transition ${modeSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white hover:border-cyan-200 hover:bg-cyan-50/60"}`}
+                      className={`rounded-md border px-3 py-2 text-left transition ${modeSelected ? "border-teal-700 bg-teal-700 text-white" : "border-transparent hover:bg-slate-50"}`}
                       onClick={() => setTab(mode.key)}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="flex items-center gap-2 text-sm font-semibold"><ModeIcon className={`h-4 w-4 ${modeSelected ? "text-white" : "text-slate-600"}`} aria-hidden="true" />{mode.label}</span>
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${modeSelected ? "bg-white/15 text-white" : "bg-slate-100 text-slate-700"}`}>{mode.badge}</span>
                       </div>
-                      <div className={`mt-2 text-xs leading-4 ${modeSelected ? "text-slate-200" : "text-slate-500"}`}>{mode.description}</div>
+
                     </button>
                   );
                 })}
@@ -587,10 +575,19 @@ export function PropertiesWorkspace(props) {
                 <div className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2 lg:grid-cols-5">
                   <Stat label="YTD cash flow" value={currency(selected.cashflow)} detail={`${currency(selected.income)} income | ${currency(selected.expenses)} expenses`} tone={selected.cashflow >= 0 ? "text-emerald-700" : "text-rose-700"} />
                   <Stat label="Occupancy" value={selected.occupancy == null ? "Owner occupied" : `${Math.round(selected.occupancy * 100)}%`} detail={`${selected.occupiedUnits.length} of ${selected.rentableUnits.length} rentable units`} />
-                  <Stat label="Rent recorded" value={currency(selected.rentRecorded)} detail={`${currency(selected.scheduledRent)} visible schedule through ${dashboardAsOfDate}`} />
+                  <Stat label="Rent recorded" value={currency(selected.rentRecorded)} help={VISIBLE_RENT_SCHEDULE_HELP} detail={`${currency(selected.scheduledRent)} visible schedule through ${dashboardAsOfDate}`} />
                   <Stat label="Current estimate" value={selectedValueSummary.value ? currency(selectedValueSummary.value) : "Not set"} detail={selectedValueSummary.detail} />
                   <Stat label="Open items" value={String(selected.openItems)} detail={`${selected.openReviewItems} review | ${selected.openMaintenance} maintenance`} tone={selected.openItems ? "text-amber-700" : "text-emerald-700"} />
                 </div>
+
+                <section className="rounded-lg border border-slate-200 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold">Unit snapshot</h3><Button size="sm" variant="ghost" onClick={() => setTab("units")}>Manage units</Button></div>
+                  <div className="grid gap-2 sm:grid-cols-2">{selected.units.map((unit) => {
+                    const status = getUnitStatusForDate(unit, dashboardAsOfDate);
+                    const lease = leases.find((item) => item.propertyId === selected.property.id && item.unit === unit.name && leaseIsActiveByDate(item, dashboardAsOfDate));
+                    return <button key={unit.id} type="button" className="min-w-0 rounded-lg border border-slate-200 bg-slate-50/50 p-3 text-left hover:border-teal-300 hover:bg-teal-50" onClick={(event) => openUnitDetail(unit, event)}><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">{formatUnitLabel(unit.name)}</span><Badge className={status === "Rental" ? "!bg-emerald-100 !text-emerald-700" : status === "Owner-Occupied" ? "!bg-blue-100 !text-blue-700" : "!bg-amber-100 !text-amber-800"}>{unitStatusLabel[status] || status}</Badge></div><div className="mt-2 text-xs text-slate-600">{lease ? `${lease.tenantName} · ${leaseRentSummaryLabel(lease, currency)}` : status === "Owner-Occupied" ? "Owner occupied" : "No active lease"}</div><div className="mt-1 text-xs text-slate-500">{lease ? `Lease ends ${lease.actualEndDate || lease.endDate}` : "Open unit details"}</div></button>;
+                  })}</div>{!selected.units.length ? <p className="text-sm text-slate-500">Add a unit to track occupancy and leases.</p> : null}
+                </section>
 
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-lg border border-slate-200 p-3">
@@ -643,7 +640,7 @@ export function PropertiesWorkspace(props) {
                     <Button size="sm" onClick={() => openUnitEditor()} disabled={!canCreateEditRecords || Boolean(selected.property.archivedAt)}><Plus className="mr-2 h-4 w-4" />Add unit</Button>
                   </div>
                 </div>
-                <PropertyRecordEditor {...props} propertyFilter={selected.property.id} recordSection="occupancy" openUnitDetail={(unit) => setUnitDetailId(unit.id)} openUnitEditor={openUnitEditor} />
+                <PropertyRecordEditor {...props} propertyFilter={selected.property.id} recordSection="occupancy" openUnitDetail={openUnitDetail} openUnitEditor={openUnitEditor} />
               </TabsContent>
 
               <TabsContent value="photos">
@@ -683,41 +680,48 @@ export function PropertiesWorkspace(props) {
         </Card>
       ) : null}
 
-      <RecordDetailPanel className="max-w-[720px] p-0" open={Boolean(unitDetail)} onOpenChange={(open) => { if (!open) setUnitDetailId(""); }}>
+      <RecordDetailPanel className="!max-w-[800px] !p-0" open={Boolean(unitDetail)} onOpenChange={(open) => { if (!open) closeUnitDetail(); }}>
         <div className="flex h-full w-full flex-col overflow-hidden">
           <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2"><DialogTitle className="text-base font-semibold text-slate-950">{unitDetail && (/^unit\b/i.test(unitDetail.name) ? unitDetail.name : `Unit ${unitDetail.name}`)}</DialogTitle>{unitDetail ? <Badge variant="secondary">{unitStatusLabel[unitDetailStatus] || unitDetailStatus}</Badge> : null}</div>
-              <div className="truncate text-sm text-slate-500">{selected?.property.name} | Unit record</div>
+              <div className="truncate text-sm text-slate-500">{selected?.property.name} · As of {dashboardAsOfDate}</div>
             </div>
-            <Button size="sm" variant="secondary" className="h-9 w-9 shrink-0 p-0" title="Close unit details" onClick={() => setUnitDetailId("")}><X className="h-4 w-4" /></Button>
+            <Button size="sm" variant="secondary" className="h-9 w-9 shrink-0 p-0" title="Close unit details" onClick={closeUnitDetail}><X className="h-4 w-4" /></Button>
           </div>
 
+          {unitDetail ? <div className="flex flex-wrap gap-1 border-b border-slate-200 px-5 py-2" aria-label="Unit sections">{[["overview", "Overview"], ["history", "Occupancy history"], ["records", "Files & work"]].map(([key, label]) => <Button key={key} size="sm" variant={unitSection === key ? "default" : "ghost"} aria-pressed={unitSection === key} onClick={() => setUnitSection(key)}>{label}</Button>)}</div> : null}
           {unitDetail ? <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
+            {unitSection === "overview" ? <>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Occupancy</div><div className="mt-1 text-sm font-semibold text-slate-900">{unitDetailLease?.tenantName || (unitDetailStatus === "Owner-Occupied" ? "Owner occupied" : unitStatusLabel[unitDetailStatus] || unitDetailStatus)}</div></div>
               <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Rent recorded YTD</div><div className="mt-1 text-sm font-semibold text-emerald-700">{currency(unitDetailRent)}</div></div>
               <div className="rounded-lg border border-slate-200 p-3"><div className="text-[11px] font-medium uppercase text-slate-500">Rent schedule</div><div className="mt-1 text-sm font-semibold text-slate-900">{unitDetailLease ? leaseRentSummaryLabel(unitDetailLease, currency) : "No rent scheduled"}</div></div>
             </div>
 
+              <section className="rounded-lg border border-slate-200 p-4"><h3 className="text-sm font-semibold">Current agreement</h3><p className="mt-2 text-sm text-slate-600">{unitDetailLease ? `${unitDetailLease.tenantName} · ${unitDetailLease.startDate} to ${unitDetailLease.actualEndDate || unitDetailLease.endDate}` : "No active lease for the selected date."}</p><div className="mt-3"><Button size="sm" disabled={!unitDetailLease && Boolean(selected.property.archivedAt)} onClick={() => { setUnitDetailId(""); if (unitDetailLease) openLease(unitDetailLease); else openLeaseForUnit(selected.property.id, unitDetail.name); }}>{unitDetailLease ? "View lease" : "Manage occupancy"}</Button></div></section>
+              <div className="grid grid-cols-2 gap-3"><Button variant="secondary" onClick={() => setUnitSection("history")}>Occupancy history ({unitDetailTimeline.length})</Button><Button variant="secondary" onClick={() => setUnitSection("records")}>Files & work ({unitDetailDocuments.length + unitDetailMaintenance.length})</Button></div>
+            </> : unitSection === "history" ? <>
             <section className="rounded-lg border border-slate-200">
               <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2"><div><div className="text-sm font-semibold text-slate-900">Lease & occupancy</div><div className="text-xs text-slate-500">Current agreement and recent status history.</div></div>{unitDetailLease ? <Button size="sm" variant="secondary" onClick={() => openLease(unitDetailLease)}>View lease</Button> : <Button size="sm" variant="secondary" onClick={() => { setUnitDetailId(""); openLeaseForUnit(selected.property.id, unitDetail.name); }} disabled={Boolean(selected?.property.archivedAt)}>Manage occupancy</Button>}</div>
               <div className="divide-y divide-slate-200">
-                {unitDetailTimeline.slice(0, 4).map((item) => <div key={item.id} className="grid gap-1 px-3 py-2.5 sm:grid-cols-[1fr_auto]"><div><div className="text-sm font-medium text-slate-800">{item.label}</div><div className="text-xs text-slate-500">{item.detail}</div></div><div className="text-xs text-slate-500 sm:text-right">{item.startDate || "Date not set"}<span className="block">{item.endDate ? `to ${item.endDate}` : "Current"}</span></div></div>)}
+                {unitDetailTimeline.map((item) => <div key={item.id} className="grid gap-1 px-3 py-2.5 sm:grid-cols-[1fr_auto]"><div><div className="text-sm font-medium text-slate-800">{item.label}</div><div className="text-xs text-slate-500">{item.detail}</div></div><div className="text-xs text-slate-500 sm:text-right">{item.startDate || "Date not set"}<span className="block">{item.endDate ? `to ${item.endDate}` : "Current"}</span></div></div>)}
                 {!unitDetailTimeline.length ? <div className="px-3 py-3 text-sm text-slate-500">No occupancy history recorded yet.</div> : null}
               </div>
             </section>
 
+            </> : <>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <section className="rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Wrench className="h-4 w-4 text-slate-500" />Open maintenance</div><Badge variant="secondary">{unitDetailMaintenance.length}</Badge></div>
-                <div className="divide-y divide-slate-200">{unitDetailMaintenance.slice(0, 3).map((order) => <div key={order.id} className="px-3 py-2.5"><div className="truncate text-sm font-medium text-slate-800">{order.title}</div><div className="text-xs text-slate-500">{order.status} | {order.priority || "Normal"}</div></div>)}{!unitDetailMaintenance.length ? <div className="px-3 py-3 text-sm text-slate-500">No open work orders.</div> : null}</div>
+                <div className="divide-y divide-slate-200">{unitDetailMaintenance.slice(0, 3).map((order) => <div key={order.id} className="px-3 py-2.5"><button type="button" className="text-left text-sm font-medium text-slate-800 hover:text-teal-700" onClick={() => { props.requestWorkspaceFocus?.("maintenance", order.id); openUnitWorkspace("maintenance"); }}>{order.title}</button><div className="text-xs text-slate-500">{order.status} | {order.priority || "Normal"}</div></div>)}{!unitDetailMaintenance.length ? <div className="px-3 py-3 text-sm text-slate-500">No open work orders.</div> : null}</div>
                 <div className="border-t border-slate-200 p-2"><Button size="sm" variant="secondary" className="w-full" onClick={() => openUnitWorkspace("maintenance")}>Open maintenance</Button></div>
               </section>
 
               <section className="rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><FileText className="h-4 w-4 text-slate-500" />Documents</div><Badge variant="secondary">{unitDetailDocuments.length}</Badge></div>
-                <div className="divide-y divide-slate-200">{unitDetailDocuments.slice(0, 3).map((document) => <div key={document.id} className="px-3 py-2.5"><div className="truncate text-sm font-medium text-slate-800">{document.name || document.type || "Document"}</div><div className="text-xs text-slate-500">{document.type || "File"} | {document.uploadedAt ? String(document.uploadedAt).slice(0, 10) : "Date not recorded"}</div></div>)}{!unitDetailDocuments.length ? <div className="px-3 py-3 text-sm text-slate-500">No unit documents linked.</div> : null}</div>
+                <div className="divide-y divide-slate-200">{unitDetailDocuments.slice(0, 3).map((document) => <div key={document.id} className="px-3 py-2.5"><button type="button" className="text-left text-sm font-medium text-slate-800 hover:text-teal-700" onClick={() => { props.requestWorkspaceFocus?.("document", document.id); openUnitWorkspace("documents"); }}>{document.name || document.type || "Document"}</button><div className="text-xs text-slate-500">{document.type || "File"} | {document.uploadedAt ? String(document.uploadedAt).slice(0, 10) : "Date not recorded"}</div></div>)}{!unitDetailDocuments.length ? <div className="px-3 py-3 text-sm text-slate-500">No unit documents linked.</div> : null}</div>
                 <div className="border-t border-slate-200 p-2"><Button size="sm" variant="secondary" className="w-full" onClick={() => openUnitWorkspace("documents")}>Open documents</Button></div>
               </section>
             </div>
@@ -726,6 +730,7 @@ export function PropertiesWorkspace(props) {
               <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2"><div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Camera className="h-4 w-4 text-slate-500" />Unit photos</div><Button size="sm" variant="secondary" onClick={() => { setUnitDetailId(""); setTab("photos"); }}>Manage photos</Button></div>
               {unitDetailPhotos.length ? <div className="grid grid-cols-3 gap-2 p-3">{unitDetailPhotos.slice(0, 6).map((photo) => <img key={photo.id} src={photo.dataUrl} alt={photo.caption || photo.name} className="aspect-[4/3] w-full rounded-md object-cover" />)}</div> : <div className="px-3 py-3 text-sm text-slate-500">No photos are scoped to this unit.</div>}
             </section>
+            </>}
           </div> : null}
 
           {unitDetail ? <div className="grid grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:grid-cols-4"><Button size="sm" variant="secondary" onClick={() => { const unit = unitDetail; setUnitDetailId(""); openUnitEditor(unit); }} disabled={Boolean(selected?.property.archivedAt)}><Pencil className="mr-1.5 h-4 w-4" />Edit unit</Button><Button size="sm" variant="secondary" onClick={() => openDashboardQuickAddForScope?.(selected.property.id, unitDetail.name)} disabled={Boolean(selected?.property.archivedAt)}><ReceiptText className="mr-1.5 h-4 w-4" />Transaction</Button><Button size="sm" variant="secondary" onClick={() => openUnitWorkspace("maintenance")} disabled={Boolean(selected?.property.archivedAt)}><Wrench className="mr-1.5 h-4 w-4" />Maintenance</Button><Button size="sm" variant="secondary" onClick={() => openDocumentImportPicker?.({ propertyId: selected.property.id, unit: unitDetail.name, tags: "unit" })} disabled={Boolean(selected?.property.archivedAt)}><FileText className="mr-1.5 h-4 w-4" />Document</Button></div> : null}

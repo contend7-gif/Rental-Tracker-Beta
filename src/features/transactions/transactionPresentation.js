@@ -1,3 +1,4 @@
+import { formatUnitLabel } from "../../domain/unitLabels.js";
 import {
   ArrowLeftRight,
   Banknote,
@@ -212,7 +213,7 @@ export function formatRentReportingMonth(transaction) {
 export function formatTransactionUnitLabel(value) {
   const unit = String(value || "").trim();
   if (!unit) return "Unit";
-  return /^unit\b/i.test(unit) ? unit : `Unit ${unit}`;
+  return formatUnitLabel(unit);
 }
 
 export function getTransactionVisual(transaction) {

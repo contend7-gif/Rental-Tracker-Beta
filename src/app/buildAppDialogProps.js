@@ -391,6 +391,7 @@ export function buildAppDialogGroups(props) {
       getUnitStatusForDate,
       isTenantLedgerKindAllowedForTreatment,
       leaseDraft,
+      leases,
       leaseEditorMode,
       leasePdfInputRef,
       leaseReminderKindLabel,

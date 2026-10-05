@@ -3,6 +3,7 @@ import { Dialog, DialogContent } from "../../components/ui/dialog";
 import { Button } from "../../components/ui/button";
 import { loadDocumentDataUrlFromDesktop } from "../../app/documentFileAccess.ts";
 import { getDocumentPreviewKind } from "../documents/documentPresentation.js";
+import { PdfFilePreview } from "./PdfFilePreview.jsx";
 
 export function RecordDetailPanel({ children, className = "", ...props }) {
   return <Dialog {...props} variant="panel"><DialogContent className={`rt-record-detail max-w-[1280px] overflow-y-auto ${className}`}>{children}</DialogContent></Dialog>;
@@ -35,7 +36,7 @@ export function RecordFilePreview({ document, onOpenFull }) {
     </div>
     {error && <div className="mt-2 space-y-2"><p role="alert" className="text-sm text-amber-800">{error}</p><Button size="sm" variant="secondary" onClick={() => setRetry((value) => value + 1)}>Retry file load</Button></div>}
     {hasPreview && kind === "image" && !imageFailed && <img src={file.dataUrl} alt={`Preview of ${document.name}`} className="mt-3 max-h-[55vh] w-full rounded object-contain" onError={() => setImageFailed(true)} />}
-    {hasPreview && kind === "pdf" && <iframe src={file.dataUrl} title={`Preview of ${document.name}`} className="mt-3 h-[55vh] min-h-72 w-full rounded border bg-white" />}
+    {hasPreview && kind === "pdf" && <PdfFilePreview source={file.dataUrl} title={`Preview of ${document.name}`} className="mt-3 h-[55vh] min-h-72 w-full rounded border bg-white" />}
     {imageFailed && <p className="mt-3 text-sm text-slate-600">This image could not be previewed. Use View file to inspect the original.</p>}
     {hasPreview && !["image", "pdf"].includes(kind) && <p className="mt-3 text-sm text-slate-600">Use View file to inspect this file type.</p>}
     {!hasPreview && !error && <p role="status" className="mt-3 text-sm text-slate-600">{loading ? "Loading file…" : "No saved preview is available for this file."}</p>}

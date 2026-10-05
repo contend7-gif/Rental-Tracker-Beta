@@ -133,6 +133,25 @@ export function buildRecurringExpenseChecks(args: {
     const reviewDate = addDays(expectedDate, graceDays);
     if (reviewDate > args.todayIso) return;
 
+    // A shared bill can be reassigned to a specific unit without becoming unpaid.
+    // Require matching value and contiguous service coverage; never merge separate
+    // unit histories or rewrite the recorded allocation.
+    const lastTransaction = transactions.find((transaction) => transaction.date === lastRecordedDate);
+    if (sample.unit === "Shared" && lastTransaction
+      && isValidIsoDate(lastTransaction.servicePeriodEnd)
+      && (args.transactions || []).some((candidate) => (
+        candidate.status === "active" && candidate.type === "Expense"
+        && candidate.propertyId === sample.propertyId && candidate.category === sample.category
+        && candidate.unit !== "Shared" && Boolean(candidate.unit)
+        && normalize(candidate.vendor) === normalize(sample.vendor)
+        && isValidIsoDate(candidate.date) && candidate.date <= args.todayIso
+        && Math.abs(diffDays(expectedDate, candidate.date)) <= DEFAULT_GRACE_DAYS
+        && Math.abs(candidate.amount - lastTransaction.amount) < 0.01
+        && isValidIsoDate(candidate.servicePeriodStart) && isValidIsoDate(candidate.servicePeriodEnd)
+        && candidate.servicePeriodStart === addDays(lastTransaction.servicePeriodEnd!, 1)
+        && candidate.servicePeriodEnd >= expectedDate
+      ))) return;
+
     checks.push({
       patternKey,
       reviewDate,

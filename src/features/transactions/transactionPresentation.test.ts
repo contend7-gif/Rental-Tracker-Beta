@@ -54,6 +54,7 @@ test("rent reporting month prefers explicit period and understands month descrip
 test("transaction unit labels do not duplicate the Unit prefix", () => {
   assert.equal(formatTransactionUnitLabel("B"), "Unit B");
   assert.equal(formatTransactionUnitLabel("Unit B"), "Unit B");
+  assert.equal(formatTransactionUnitLabel("Shared"), "Shared");
 });
 
 test("transaction visuals distinguish common rental categories", () => {

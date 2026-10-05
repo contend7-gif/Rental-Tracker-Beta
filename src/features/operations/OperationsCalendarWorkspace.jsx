@@ -45,7 +45,7 @@ const SOURCE_META = {
 };
 
 const BUCKET_META = {
-  attention: { title: "Needs attention", helper: "Overdue and due today", tone: "border-rose-200 bg-rose-50/50", icon: AlertTriangle },
+  attention: { title: "Needs attention", helper: "Dates reached; suggested checks need confirmation", tone: "border-rose-200 bg-rose-50/50", icon: AlertTriangle },
   next7: { title: "Next 7 days", helper: "Coming up this week", tone: "border-amber-200 bg-amber-50/40", icon: CalendarClock },
   next30: { title: "Next 30 days", helper: "Prepare before it becomes urgent", tone: "border-blue-200 bg-blue-50/40", icon: CalendarDays },
   later: { title: "Later", helper: "Inside the selected horizon", tone: "border-slate-200 bg-slate-50/70", icon: CalendarDays },
@@ -91,14 +91,16 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
   const Icon = meta.icon;
   const propertyLabel = propertyNameById[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide");
   const days = daysUntil(item.date, todayIso);
-  const urgencyTone = days < 0
+  const urgencyTone = item.source === "smart_check"
+    ? "!bg-amber-100 !text-amber-800"
+    : days < 0
     ? "!bg-rose-100 !text-rose-800"
     : days === 0
       ? "!bg-amber-100 !text-amber-800"
       : "!bg-slate-100 !text-slate-700";
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-none">
+    <div className={`rt-calendar-item rounded-lg border border-slate-200 bg-white p-3 shadow-none ${item.source === "smart_check" ? "rt-calendar-suggestion" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${meta.tone}`}>
@@ -107,11 +109,11 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-semibold text-slate-900">{item.title}</div>
-              <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{formatDaysLeft(days)}</Badge>
+              <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{item.source === "smart_check" ? "Suggested check" : formatDaysLeft(days)}</Badge>
               <Badge variant="outline" className="bg-white text-[11px]">{meta.label}</Badge>
               {item.followUpStatus ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus}</Badge> : null}
             </div>
-            <div className="mt-1 text-xs text-slate-600">{item.detail}</div>
+            <div className="mt-1 text-xs leading-5 text-slate-600">{item.detail}</div>
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
               <span>{formatDate(item.date)}</span>
               {item.originalDate && item.originalDate !== item.date ? <span>Originally {formatDate(item.originalDate)}</span> : null}
@@ -256,6 +258,15 @@ export function OperationsCalendarWorkspace({
   }, {}), [sourceCountItems]);
 
   const openSourceRecord = (item) => {
+    if (item.source === "smart_check") {
+      // Review within the current portfolio scope. Shared is an expense allocation,
+      // not a rentable unit, and must not silently narrow Home or other workspaces.
+      setSearch(item.searchText || "");
+      requestWorkspaceFocus("transaction_search", item.searchText || "");
+      setView("ledger");
+      setNotice(`Reviewing transactions for ${item.searchText || item.title} in the current scope. No transaction was created.`);
+      return;
+    }
     if (item.propertyId) setPropertyFilter(item.propertyId);
     setUnitFilter(item.propertyId ? (item.unit || "all") : "all");
     if (item.source === "rent" || item.source === "lease") {
@@ -284,12 +295,6 @@ export function OperationsCalendarWorkspace({
       requestWorkspaceFocus("recurring", item.sourceRecordId);
       setView("ledger");
       setNotice(`Focused recurring rule ${item.title}.`);
-      return;
-    }
-    if (item.source === "smart_check") {
-      setSearch(item.searchText || "");
-      setView("ledger");
-      setNotice(`Reviewing transactions for ${item.searchText || item.title}. No transaction was created.`);
       return;
     }
     if (item.source === "planning") {
@@ -378,52 +383,36 @@ export function OperationsCalendarWorkspace({
   }).length;
 
   return (
-    <div className="space-y-4">
+    <div className="rt-operations-calendar space-y-4">
       <Card className="border-slate-200 bg-white shadow-none">
         <CardContent className="p-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-2xl">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                <CalendarClock className="h-4 w-4 text-teal-700" />
-                One schedule, authoritative records
-              </div>
-              <p className="mt-1 text-xs leading-5 text-slate-600">
-                Dates stay attached to their source records. Smart checks notice stable monthly expenses that appear to be missing, but never create transactions or assume the gap was a mistake.
-              </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-slate-900"><CalendarClock className="h-4 w-4 text-teal-700" />Source dates and reminders</div>
+              <p className="mt-1 text-xs text-slate-500">Open an item to review its source. Suggested checks need confirmation.</p>
             </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2">
-                <div className="text-lg font-semibold text-rose-800">{buckets.attention.length}</div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-rose-600">Attention</div>
-              </div>
-              <div className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
-                <div className="text-lg font-semibold text-amber-800">{buckets.next7.length}</div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-amber-600">Next 7</div>
-              </div>
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                <div className="text-lg font-semibold text-slate-800">{scopedItems.length}</div>
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Visible</div>
-              </div>
-            </div>
+            {workspaceMode === "agenda" ? <div className="flex flex-wrap gap-2 text-xs">
+              <span className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-800"><strong className="tabular-nums">{buckets.attention.length}</strong> {buckets.attention.length === 1 ? "date" : "dates"} reached</span>
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800"><strong className="tabular-nums">{buckets.next7.length}</strong> next 7 days</span>
+              <span className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-600"><strong className="tabular-nums">{scopedItems.length}</strong> visible</span>
+            </div> : null}
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
             <div className="flex flex-wrap gap-1.5">
-              <Button size="sm" variant={workspaceMode === "agenda" ? "default" : "outline"} onClick={() => setWorkspaceMode("agenda")}><List className="mr-1.5 h-4 w-4" />Agenda</Button>
-              <Button size="sm" variant={workspaceMode === "month" ? "default" : "outline"} onClick={() => setWorkspaceMode("month")}><CalendarRange className="mr-1.5 h-4 w-4" />Month</Button>
-              <Button size="sm" variant={workspaceMode === "close" ? "default" : "outline"} onClick={() => setWorkspaceMode("close")}><ClipboardCheck className="mr-1.5 h-4 w-4" />Monthly Close</Button>
+              <Button size="sm" aria-pressed={workspaceMode === "agenda"} variant={workspaceMode === "agenda" ? "default" : "secondary"} onClick={() => setWorkspaceMode("agenda")}><List className="mr-1.5 h-4 w-4" />Agenda</Button>
+              <Button size="sm" aria-pressed={workspaceMode === "month"} variant={workspaceMode === "month" ? "default" : "secondary"} onClick={() => setWorkspaceMode("month")}><CalendarRange className="mr-1.5 h-4 w-4" />Month</Button>
+              <Button size="sm" aria-pressed={workspaceMode === "close"} variant={workspaceMode === "close" ? "default" : "secondary"} onClick={() => setWorkspaceMode("close")}><ClipboardCheck className="mr-1.5 h-4 w-4" />Monthly Close</Button>
             </div>
-            {workspaceMode !== "close" ? <div className="text-xs text-slate-500">{workspaceMode === "month" ? "Full calendar view" : "Prioritized review queue"}</div> : <div className="text-xs text-slate-500">Reversible month-end review</div>}
+            <Button size="sm" variant="ghost" onClick={() => setView("review")}>Open Work Queue</Button>
           </div>
           {workspaceMode !== "close" ? <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
-            <div className="flex flex-wrap gap-1.5">
-              <Button size="sm" variant={sourceFilter === "all" ? "default" : "secondary"} onClick={() => setSourceFilter("all")}>All</Button>
-              {Object.entries(SOURCE_META).map(([source, meta]) => (
-                <Button key={source} size="sm" variant={sourceFilter === source ? "default" : "secondary"} onClick={() => setSourceFilter(source)}>
-                  {meta.label} {sourceCounts[source] || 0}
-                </Button>
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5">
+            <label className="flex min-w-0 flex-wrap items-center gap-2 text-xs font-medium text-slate-500">Source
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger aria-label="Calendar source" className="h-9 w-52 bg-white"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All sources</SelectItem>{Object.entries(SOURCE_META).map(([source, meta]) => <SelectItem key={source} value={source}>{meta.label} ({sourceCounts[source] || 0})</SelectItem>)}</SelectContent>
+              </Select>
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
               {acknowledgedCheckCount > 0 ? (
                 <Button
                   size="sm"
@@ -441,12 +430,12 @@ export function OperationsCalendarWorkspace({
                   {showHandled ? "Hide handled" : `Show handled (${handledCount})`}
                 </Button>
               ) : null}
-              {workspaceMode === "agenda" ? <>
-                <span className="mr-1 text-xs font-medium text-slate-500">Horizon</span>
-                {[30, 60, 90, 180].map((days) => (
-                  <Button key={days} size="sm" variant={horizonDays === days ? "default" : "outline"} onClick={() => setHorizonDays(days)}>{days} days</Button>
-                ))}
-              </> : null}
+              {workspaceMode === "agenda" ? <label className="flex items-center gap-2 text-xs font-medium text-slate-500">Horizon
+                <Select value={String(horizonDays)} onValueChange={(value) => setHorizonDays(Number(value))}>
+                  <SelectTrigger aria-label="Calendar horizon" className="h-9 w-32 bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>{[30, 60, 90, 180].map((days) => <SelectItem key={days} value={String(days)}>{days} days</SelectItem>)}</SelectContent>
+                </Select>
+              </label> : null}
             </div>
           </div> : null}
         </CardContent>
@@ -489,8 +478,8 @@ export function OperationsCalendarWorkspace({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {Object.keys(BUCKET_META).map((bucketKey) => (
+        <div className="rt-calendar-buckets grid gap-4 xl:grid-cols-2">
+          {Object.keys(BUCKET_META).filter((bucketKey) => buckets[bucketKey].length > 0).map((bucketKey) => (
             <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} />
           ))}
         </div>

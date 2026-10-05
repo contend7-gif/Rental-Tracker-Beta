@@ -1,8 +1,8 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChevronDown, ChevronRight, Plus, ReceiptText } from "lucide-react";
+import { ChevronRight, Plus, ReceiptText, X } from "lucide-react";
 import {
   actualLoanPaymentsByMonth,
   deriveLoanBalanceFromPayments,
@@ -11,6 +11,8 @@ import {
   projectedAmortizationRows,
   reconcileLoanPaymentsAgainstSchedule,
 } from "../../domain/loans.ts";
+import { DialogTitle } from "@/components/ui/dialog";
+import { RecordDetailPanel } from "../shared/RecordDetailPanel.jsx";
 import { loanPaymentTiming } from "./loanWorkspacePresentation.js";
 
 function formatDate(value) {
@@ -51,6 +53,24 @@ export function LoanCardsPanel({
   yearScopedLoanPayments,
 }) {
   const [expandedById, setExpandedById] = useState({});
+  const [historyLimitById, setHistoryLimitById] = useState({});
+  const openerRef = useRef(null);
+  const openLoan = (loan, mode) => {
+    openerRef.current = document.activeElement;
+    setExpandedById({ [loan.id]: true });
+    if (mode) onOpenWorkspaceMode?.(mode);
+  };
+  const closeLoan = () => {
+    setExpandedById({});
+    requestAnimationFrame(() => {
+      const target = openerRef.current?.isConnected ? openerRef.current : document.querySelector('[aria-label="Loan workspace modes"] [aria-selected="true"]');
+      target?.focus({ preventScroll: true });
+    });
+  };
+  const editPayment = (payment) => {
+    setExpandedById({});
+    startEditLoanPayment(payment);
+  };
   const [amortizationById, setAmortizationById] = useState({});
   const reviewById = Object.fromEntries((loanReviewInbox?.records || []).map((record) => [record.loan.id, record]));
   const propertySummaryById = Object.fromEntries(loanPropertySummaries.map((summary) => [summary.property.id, summary]));
@@ -91,7 +111,8 @@ export function LoanCardsPanel({
           const value = Number(propertySummary?.estimatedCurrentValue || property?.currentValue || 0);
           const ltv = value > 0 ? (effectiveBalance / value) * 100 : null;
           const paymentTiming = loanPaymentTiming(payments, asOfDate, defaults.nextPayment || loan.nextPayment);
-          const groups = groupLoanPaymentsForDisplay(recordedPayments, effectiveLoanPaymentDeductibleInterest).slice(0, 8);
+          const allGroups = groupLoanPaymentsForDisplay(recordedPayments, effectiveLoanPaymentDeductibleInterest);
+          const groups = allGroups.slice(0, historyLimitById[loan.id] || 8);
           const scopedActualPayments = yearScopedLoanPayments.filter((payment) => !asOfDate || String(payment.paymentDate || "").slice(0, 10) <= asOfDate);
           const selectedYearPayments = scopedActualPayments.filter((payment) => loanIdsMatch(payment.loanId, loan.id));
           const taxTotals = selectedYearPayments.reduce((summary, payment) => {
@@ -114,9 +135,9 @@ export function LoanCardsPanel({
 
           return (
             <div key={loan.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="grid gap-3 px-4 py-3 md:grid-cols-2 xl:grid-cols-[minmax(210px,1.4fr)_repeat(4,minmax(90px,.7fr))_minmax(195px,auto)] xl:items-center">
+              <div className="grid gap-3 px-4 py-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-[minmax(180px,1.4fr)_repeat(4,minmax(80px,.7fr))_minmax(180px,auto)] 2xl:items-center">
                 <div className="min-w-0">
-                  <div className="rt-row-title">{loan.loanType || "Mortgage"}</div>
+                  <button type="button" className="rt-row-title text-left hover:text-teal-700 focus-visible:outline-teal-600" aria-label={`Open loan for ${loan.lender || loan.loanType || "Mortgage"}`} onClick={() => openLoan(loan, workspaceMode === "overview" ? "details" : undefined)}>{loan.loanType || "Mortgage"}</button>
                   <div className="text-xs text-slate-500">{loan.lender || "Lender not entered"}</div>
                   <div className="mt-1 text-xs text-slate-500">{propertyNameById[loan.propertyId] || "Property not entered"} | Lien {loan.lienPosition || "-"}</div>
                 </div>
@@ -127,18 +148,25 @@ export function LoanCardsPanel({
                 {workspaceMode === "details" && <><div><div className="text-[10px] uppercase text-slate-400">Lien</div><div className="text-sm font-medium">{loan.lienPosition || "-"}</div></div><div><div className="text-[10px] uppercase text-slate-400">Balance</div><div className="text-sm font-medium">{currency(effectiveBalance)}</div></div><div><div className="text-[10px] uppercase text-slate-400">Total outlay</div><div className="text-sm font-medium">{currency(outlay)}</div><div className="text-[11px] text-slate-500">{ltv == null ? "Valuation needed" : `${ltv.toFixed(1)}% LTV`}</div></div></>}
                 <div className="flex flex-wrap items-center gap-1.5 xl:justify-end">
                   {workspaceMode !== "payments" && <Badge className={statusByMode.needsAttention ? "!bg-amber-100 !text-amber-800" : "!bg-emerald-50 !text-emerald-700"}>{statusByMode.label}</Badge>}
-                  {workspaceMode === "overview" && <Button size="sm" variant="secondary" onClick={() => { setExpandedById((current) => ({ ...current, [loan.id]: true })); onOpenWorkspaceMode?.("details"); }}>Manage loan</Button>}
+                  {workspaceMode === "overview" && <Button size="sm" variant="secondary" onClick={() => openLoan(loan, "details")}>Manage loan</Button>}
                   {workspaceMode === "payments" && <Button size="sm" onClick={() => onRecordPayment(loan)}><Plus className="mr-1 h-3.5 w-3.5" />Record payment</Button>}
                   {workspaceMode === "details" && <Button size="sm" variant="secondary" onClick={() => startEditLoan(loan)} onMouseEnter={prefetchLoanEditorDialog}>Edit loan</Button>}
-                  {workspaceMode !== "overview" && <Button size="sm" variant="ghost" onClick={() => setExpandedById((current) => ({ ...current, [loan.id]: !expanded }))}>
-                    {expanded ? <ChevronDown className="mr-1 h-4 w-4" /> : <ChevronRight className="mr-1 h-4 w-4" />}
-                    {expanded ? "Hide" : workspaceMode === "payments" ? "View history" : workspaceMode === "tax" ? "Review issues" : "View schedule"}
+                  {workspaceMode !== "overview" && <Button size="sm" variant="ghost" onClick={() => openLoan(loan)}>
+                    <ChevronRight className="mr-1 h-4 w-4" />
+                    {workspaceMode === "payments" ? "View history" : workspaceMode === "tax" ? "Review issues" : "View schedule"}
                   </Button>}
                 </div>
               </div>
 
-              {expanded && (
-                <div className="border-t border-slate-100 bg-slate-50/50 p-4">
+              <RecordDetailPanel open={expanded} onOpenChange={(open) => { if (!open) closeLoan(); }} className="!max-w-[1100px] !p-0">
+                <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-teal-100 bg-white px-5 py-4">
+                  <div className="min-w-0">
+                    <DialogTitle>{loan.lender || loan.loanType || "Mortgage"}</DialogTitle>
+                    <p className="mt-1 text-xs text-slate-500">{propertyNameById[loan.propertyId] || "Property not entered"} · {modePresentation.title}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" aria-label="Close loan details" onClick={closeLoan}><X className="h-4 w-4" /></Button>
+                </div>
+                <div className="bg-slate-50/50 p-4">
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(300px,.65fr)]">
                     <div className="space-y-4">
                       {workspaceMode === "details" && <section aria-labelledby={`loan-overview-${loan.id}`}>
@@ -182,10 +210,11 @@ export function LoanCardsPanel({
                             <thead className="bg-slate-50 text-slate-500"><tr><th className="px-2 py-2 text-left">Date</th><th className="px-2 py-2 text-right">Total</th><th className="px-2 py-2 text-right">Interest</th><th className="px-2 py-2 text-right">Deductible</th><th className="px-2 py-2 text-right">Principal</th><th className="px-2 py-2 text-right">Escrow</th><th className="px-2 py-2 text-right">PMI</th><th className="px-2 py-2 text-right">Extra</th><th className="px-2 py-2 text-right">Actions</th></tr></thead>
                             <tbody>
                               {groups.length === 0 && <tr><td colSpan={9} className="px-2 py-3 text-slate-500">No payments recorded.</td></tr>}
-                              {groups.map((group) => <tr key={group.paymentDate} className="border-t border-slate-100"><td className="px-2 py-2">{formatDate(group.paymentDate)}{group.entries.length > 1 && <span className="ml-1 text-slate-400">({group.entries.length})</span>}</td><td className="px-2 py-2 text-right font-medium">{currency(group.summary.totalPayment)}</td><td className="px-2 py-2 text-right">{currency(group.summary.interest)}</td><td className="px-2 py-2 text-right">{currency(group.summary.deductibleInterest)}</td><td className="px-2 py-2 text-right">{currency(group.summary.principal)}</td><td className="px-2 py-2 text-right">{currency(group.summary.escrow)}</td><td className="px-2 py-2 text-right">{currency(group.summary.mortgageInsurance)}</td><td className="px-2 py-2 text-right">{currency(group.summary.extraPrincipal)}</td><td className="whitespace-nowrap px-2 py-1 text-right">{group.entries.length === 1 ? <><Button size="sm" variant="ghost" onClick={() => startEditLoanPayment(group.entries[0])}>Edit</Button><Button size="sm" variant="ghost" onClick={() => deleteLoanPayment(group.entries[0])}>Delete</Button></> : <details className="text-left"><summary className="cursor-pointer text-teal-700">View {group.entries.length} parts</summary><div className="mt-2 min-w-56 space-y-2">{group.entries.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2"><span>{currency(entry.totalPayment)}</span><span><Button size="sm" variant="ghost" onClick={() => startEditLoanPayment(entry)}>Edit</Button><Button size="sm" variant="ghost" onClick={() => deleteLoanPayment(entry)}>Delete</Button></span></div>)}</div></details>}</td></tr>)}
+                              {groups.map((group) => <tr key={group.paymentDate} className="border-t border-slate-100"><td className="px-2 py-2">{formatDate(group.paymentDate)}{group.entries.length > 1 && <span className="ml-1 text-slate-400">({group.entries.length})</span>}</td><td className="px-2 py-2 text-right font-medium">{currency(group.summary.totalPayment)}</td><td className="px-2 py-2 text-right">{currency(group.summary.interest)}</td><td className="px-2 py-2 text-right">{currency(group.summary.deductibleInterest)}</td><td className="px-2 py-2 text-right">{currency(group.summary.principal)}</td><td className="px-2 py-2 text-right">{currency(group.summary.escrow)}</td><td className="px-2 py-2 text-right">{currency(group.summary.mortgageInsurance)}</td><td className="px-2 py-2 text-right">{currency(group.summary.extraPrincipal)}</td><td className="whitespace-nowrap px-2 py-1 text-right">{group.entries.length === 1 ? <><Button size="sm" variant="ghost" onClick={() => editPayment(group.entries[0])}>Edit</Button><Button size="sm" variant="ghost" onClick={() => deleteLoanPayment(group.entries[0])}>Delete</Button></> : <details className="text-left"><summary className="cursor-pointer text-teal-700">View {group.entries.length} parts</summary><div className="mt-2 min-w-56 space-y-2">{group.entries.map((entry) => <div key={entry.id} className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2"><span>{currency(entry.totalPayment)}</span><span><Button size="sm" variant="ghost" onClick={() => editPayment(entry)}>Edit</Button><Button size="sm" variant="ghost" onClick={() => deleteLoanPayment(entry)}>Delete</Button></span></div>)}</div></details>}</td></tr>)}
                             </tbody>
                           </table>
                         </div>
+                        {groups.length < allGroups.length && <Button size="sm" variant="secondary" className="mt-2" onClick={() => setHistoryLimitById((current) => ({ ...current, [loan.id]: (current[loan.id] || 8) + 8 }))}>Show older payments ({allGroups.length - groups.length} dates remaining)</Button>}
                         {hiddenFuturePayments.length > 0 ? (
                           <div className="mt-2 rounded-md border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
                             <div className="font-semibold">Future payments hidden by the as-of date</div>
@@ -195,7 +224,7 @@ export function LoanCardsPanel({
                                 <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-100 bg-white px-2 py-1.5">
                                   <span>{formatDate(payment.paymentDate)} - {currency(payment.totalPayment)}</span>
                                   <span className="flex items-center gap-1">
-                                    <Button size="sm" variant="ghost" onClick={() => startEditLoanPayment(payment)}>Edit</Button>
+                                    <Button size="sm" variant="ghost" onClick={() => editPayment(payment)}>Edit</Button>
                                     <Button size="sm" variant="ghost" onClick={() => deleteLoanPayment(payment)}>Delete</Button>
                                   </span>
                                 </div>
@@ -231,7 +260,7 @@ export function LoanCardsPanel({
                     </div>
                   </div>
                 </div>
-              )}
+              </RecordDetailPanel>
             </div>
           );
         })}
