@@ -8,6 +8,21 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.9.10",
+    releaseDate: "2026-10-07",
+    title: "Reliable drafts and connected rental records",
+    summary: "Resume saved drafts after restarting, understand calendar suggestions, and move between linked lease payments and receipts with clearer record panels.",
+    changes: [
+      "Save transaction, lease, and loan drafts on this computer and resume them after reopening the app. File contents are excluded and must be selected again.",
+      "Keep unfinished transaction entries and navigation warnings intact when saved-draft cleanup fails, with clear feedback and a safe retry.",
+      "Explain suggested monthly expense checks with recent supporting transaction dates and amounts, without treating an estimate as proof of an unpaid bill.",
+      "Use consistent review, waiting, intentional-gap, and snooze controls in Agenda and Month; expired snoozes return to Open and desktop notifications distinguish suggestions from overdue records.",
+      "Open the exact lease's Payments from a linked transaction and return from its accounting record without losing an unfinished payment entry.",
+      "Include linked payment receipts in Lease Documents and open their exact document review with unsaved-change protection.",
+      "Improve detail-panel borders, long filename wrapping, empty file guidance, dark-mode contrast, and support for reduced motion.",
+    ],
+  },
+  {
     version: "1.9.9",
     releaseDate: "2026-10-04",
     title: "A clearer, more colorful property workspace",

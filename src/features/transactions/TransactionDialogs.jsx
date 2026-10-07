@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
+import { FileEmptyState, RecordDetailPanel, RecordFilePreview } from "../shared/RecordDetailPanel.jsx";
 import { Archive, CalendarRange, CheckCircle2, FilePlus2, Hammer, Landmark, Trash2 } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -176,6 +176,9 @@ export function TransactionDetailsDialog({
   openTransactionInlineAttachmentPicker,
   propertyNameById,
   selectedTransactionDocuments,
+  relatedLeases = [],
+  openRelatedLease,
+  parentLeaseId,
   selectedTxn,
   selectedTxnReview,
   selectedTxnReviewFocusKey,
@@ -290,6 +293,11 @@ export function TransactionDetailsDialog({
               <dl className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 text-sm">
                 {[["Vendor / payee", selectedTxn.vendor || selectedTxn.paidFrom || "Not recorded"], ["Service period", selectedTxn.servicePeriodStart && selectedTxn.servicePeriodEnd ? `${selectedTxn.servicePeriodStart} to ${selectedTxn.servicePeriodEnd}` : "Not recorded"], ["Rent reporting month", formatRentReportingMonth(selectedTxn)], ["Notes", selectedTxn.notes]].filter(([, value]) => value).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 break-words text-slate-800">{value}</dd></div>)}
               </dl>
+            {relatedLeases.length > 0 ? <section aria-label="Linked lease payments" className="rt-linked-lease mt-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+              <div className="text-sm font-semibold text-slate-900">Lease payment records</div>
+              <p className="mt-1 text-xs text-slate-600">Linked through recorded tenant ledger entries.</p>
+              <div className="mt-2 flex flex-wrap gap-2">{relatedLeases.map((lease) => <Button key={lease.id} size="sm" variant="secondary" disabled={Boolean(parentLeaseId && parentLeaseId !== lease.id)} onClick={() => openRelatedLease(lease)}>{parentLeaseId === lease.id ? "Return to payments" : `Open payments for ${lease.tenantName || lease.unit}`}</Button>)}</div>
+            </section> : null}
             <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {selectedTxnStatusCards.map((card) => (
                 <div key={`txn-status-${card.key}`} className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2">
@@ -393,10 +401,10 @@ export function TransactionDetailsDialog({
               <div className="mt-2">
                 <Button size="sm" variant="secondary" onClick={openTransactionInlineAttachmentPicker}>Attach receipt/PDF</Button>
               </div>
-              {selectedTransactionDocuments.length === 0 && <div className="mt-2 text-xs text-slate-500">No files attached to this transaction yet.</div>}
+              {selectedTransactionDocuments.length === 0 && <div className="mt-3"><FileEmptyState title="No files attached to this transaction yet.">Attach a receipt or PDF to keep its support with this transaction.</FileEmptyState></div>}
               {selectedTransactionDocuments.map((document) => (
-                <div key={document.id} className="mt-2 flex items-center justify-between rounded border p-2 text-sm">
-                  <span>{document.name}</span>
+                <div key={document.id} className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
+                  <span className="min-w-0 flex-1 basis-48 break-words">{document.name}</span>
                   <div className="flex items-center gap-2">
                     <Button size="sm" variant="secondary" onClick={() => setSelectedFileId(document.id)}>Preview</Button>
                     <Button size="sm" variant="destructive" onClick={() => confirmAndDeleteDocument(document)}>Remove</Button>

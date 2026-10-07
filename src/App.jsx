@@ -842,6 +842,7 @@ function AppContent() {
     leaseExtensionPreview,
     extensionPdfInputRef,
     leaseEditorMode,
+    leaseInitialSection,
     leaseTenantLedgerHeadline,
     leaseTenantLedgerRowById,
     leaseTenantLedgerSort,
@@ -874,6 +875,7 @@ function AppContent() {
     setUsePeriodDraft,
     startTenantLedgerEntryEdit,
     tenantLedgerDraft,
+    tenantLedgerDraftDirty,
     usePeriodDraft,
   } = useLeaseTenantLedgerController({
     actions,
@@ -2421,6 +2423,13 @@ function AppContent() {
   };
 
   const appDialogProps = {
+    leaseInitialSection,
+    tenantLedgerEntries,
+    openLease,
+    requestWorkspaceFocus,
+    setView,
+    setPropertyFilter,
+    setUnitFilter,
     actions,
     activeProperties,
     activeTx,
@@ -2611,6 +2620,7 @@ function AppContent() {
     taxPrintDialogStateProps,
     taxPrintUnitOptions,
     tenantLedgerDraft,
+    tenantLedgerDraftDirty,
     tenantStatementCustomEnd,
     tenantStatementCustomStart,
     tenantStatementPreset,

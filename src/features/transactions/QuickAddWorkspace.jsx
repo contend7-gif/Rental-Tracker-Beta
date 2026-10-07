@@ -785,7 +785,7 @@ export function QuickAddWorkspace({
                 <div className="flex flex-wrap gap-2">
                   <Button aria-keyshortcuts="Control+s Meta+s" title="Save transaction (Ctrl+S)" onClick={() => submit(false)} disabled={saveDisabled || saving}>{pendingDocumentExpenseSource?.documentId ? "Save transaction and attach document" : "Save transaction"}</Button>
                   <Button variant="secondary" onClick={() => submit(true)} disabled={saveDisabled || saving}>{pendingDocumentExpenseSource?.nextDocumentId ? "Save, attach + next bill" : "Save + add next"}</Button>
-                  <Button variant="secondary" onClick={() => { guard.clear(); setSaveError(""); }} disabled={properties.length === 0 || saving}>Clear form</Button>
+                  <Button variant="secondary" onClick={() => { if (guard.clear()) setSaveError(""); }} disabled={properties.length === 0 || saving}>Clear form</Button>
                 </div>
                 <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
                   {!amountEntered
@@ -795,6 +795,7 @@ export function QuickAddWorkspace({
                       : <span className="text-slate-600">Income transaction. Deductible expense preview does not apply.</span>}
                 </div>
               </div>
+              {guard.error && <p role="alert" className="text-sm text-red-700">{guard.error}</p>}
               {form.servicePeriodStart && form.servicePeriodEnd ? <div className="text-xs text-slate-500">Service-period proration: {form.servicePeriodStart} to {form.servicePeriodEnd}</div> : null}
               {(!form.date || !form.propertyId || !amountEntered) ? (
                 <div className="text-xs text-amber-700">Date, property, and amount are required before saving.</div>

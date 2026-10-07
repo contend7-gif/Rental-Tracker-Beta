@@ -22,6 +22,7 @@ export type RecurringExpenseCheck = {
   vendor: string;
   category: string;
   occurrenceCount: number;
+  supportingRecords?: { id: string; date: string; amount: number }[];
 };
 
 function normalize(value: unknown) {
@@ -115,7 +116,8 @@ export function buildRecurringExpenseChecks(args: {
     if (intervals.some((days) => days < MONTHLY_MIN_DAYS || days > MONTHLY_MAX_DAYS)) return;
     if (likelyCoveredByTemplate(transactions, args.recurringTemplates || [])) return;
 
-    const sample = transactions[transactions.length - 1];
+    const sortedTransactions = [...transactions].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+    const sample = sortedTransactions[sortedTransactions.length - 1];
     const patternKey = stablePatternKey(signature);
     const lastRecordedDate = dates[dates.length - 1];
     // An inferred pattern is no longer reliable after two unrecorded cycles.
@@ -162,6 +164,8 @@ export function buildRecurringExpenseChecks(args: {
       vendor: sample.vendor.trim(),
       category: sample.category,
       occurrenceCount: dates.length,
+      supportingRecords: sortedTransactions.filter((transaction) => recentDates.includes(transaction.date))
+        .slice(-5).map(({ id, date, amount }) => ({ id, date, amount })),
     });
   });
 

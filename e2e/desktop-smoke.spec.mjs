@@ -123,15 +123,167 @@ test("transaction drafts survive navigation and protect unsaved changes", async 
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await prompt.getByRole("button", { name: "Save draft and leave", exact: true }).click();
     await openEntry();
-    await page.getByRole("button", { name: "Restore draft", exact: true }).click();
+    await page.getByRole("button", { name: "Resume draft", exact: true }).click();
     await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example recoverable draft");
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await prompt.getByRole("button", { name: "Discard and leave", exact: true }).click();
     await openEntry();
-    await expect(page.getByRole("button", { name: "Restore draft", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
     await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("");
     expect(rendererErrors).toEqual([]);
   } finally { await electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("failed draft cleanup keeps transaction edits protected and allows a successful clear retry", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-draft-cleanup-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    const initialCount = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length);
+    await page.getByRole("button", { name: "New", exact: true }).click();
+    await page.getByRole("menuitem", { name: /^Transaction/ }).click();
+    await page.getByLabel("Description / memo", { exact: true }).fill("Example protected cleanup draft");
+    await page.getByLabel("Amount", { exact: true }).fill("23");
+    await page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await page.evaluate(() => {
+      window.restoreDraftCleanup = Storage.prototype.removeItem;
+      Storage.prototype.removeItem = function(key) {
+        if (key.startsWith("rental-tracker:draft:")) throw new DOMException("Storage unavailable", "SecurityError");
+        return window.restoreDraftCleanup.call(this, key);
+      };
+    });
+    await page.getByRole("button", { name: "Clear form", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Your entries are unchanged and still protected");
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example protected cleanup draft");
+    await expect(page.getByLabel("Amount", { exact: true })).toHaveValue("23");
+    await expect(page.getByRole("button", { name: "Resume draft", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    const prompt = page.getByRole("dialog", { name: "Leave unsaved transaction?", exact: true });
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example protected cleanup draft");
+    await page.evaluate(() => { Storage.prototype.removeItem = window.restoreDraftCleanup; delete window.restoreDraftCleanup; });
+    await page.getByRole("button", { name: "Clear form", exact: true }).click();
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(prompt).toHaveCount(0);
+    expect(await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length)).toBe(initialCount);
+    expect(rendererErrors).toEqual([]);
+  } finally { await electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("saved transaction drafts survive desktop restart without posting and clear after successful saving", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-durable-transaction-"));
+  let run = await launchDesktopApp(profilePath);
+  const openEntry = async () => {
+    await run.page.getByRole("button", { name: "New", exact: true }).click();
+    await run.page.getByRole("menuitem", { name: /^Transaction/ }).click();
+  };
+  try {
+    const count = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length);
+    await openEntry();
+    await run.page.getByRole("button", { name: /Repair \/ maintenance/ }).click();
+    await run.page.getByLabel("Description / memo", { exact: true }).fill("Example restart draft");
+    await run.page.getByLabel("Amount", { exact: true }).fill("0");
+    await run.page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await expect(run.page.getByRole("status").filter({ hasText: "Draft saved on this computer" })).toBeVisible();
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    expect(await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length)).toBe(count);
+    await openEntry();
+    await expect(run.page.getByLabel("Description / memo", { exact: true })).toHaveValue("");
+    await run.page.getByRole("button", { name: "Resume draft", exact: true }).click();
+    await expect(run.page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example restart draft");
+    await run.page.getByRole("button", { name: "Save transaction", exact: true }).click();
+    await expect(run.page.getByRole("alert")).toContainText("Not saved");
+    await expect(run.page.getByRole("button", { name: "Resume draft", exact: true })).toBeVisible();
+    await run.page.getByLabel("Amount", { exact: true }).fill("25");
+    await run.page.getByRole("button", { name: "Save transaction", exact: true }).click();
+    await expect.poll(async () => run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.filter((item) => item.description === "Example restart draft").length)).toBe(1);
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await openEntry();
+    await expect(run.page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
+    expect(run.rendererErrors).toEqual([]);
+  } finally { await run.electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("loan drafts survive desktop restart and clear when the loan is saved", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-durable-loan-"));
+  let run = await launchDesktopApp(profilePath);
+  const openLoan = async () => {
+    await run.page.getByRole("button", { name: "New", exact: true }).click();
+    await run.page.getByRole("menuitem", { name: /^Loan/ }).click();
+    await expect(run.page.getByRole("dialog", { name: "Add Loan", exact: true })).toBeVisible();
+  };
+  try {
+    const count = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.loans.length);
+    await openLoan();
+    await run.page.getByLabel("Lender", { exact: true }).fill("Example draft lender");
+    await run.page.getByLabel("Original balance", { exact: true }).fill("45000");
+    await run.page.getByRole("button", { name: "Save draft", exact: true }).click();
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    expect(await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.loans.length)).toBe(count);
+    await openLoan();
+    await expect(run.page.getByLabel("Lender", { exact: true })).toHaveValue("");
+    await run.page.getByRole("button", { name: "Resume draft", exact: true }).click();
+    await expect(run.page.getByLabel("Lender", { exact: true })).toHaveValue("Example draft lender");
+    await expect(run.page.getByLabel("Original balance", { exact: true })).toHaveValue("45000");
+    await run.page.screenshot({ path: path.join(rootDir, "output", "playwright", "draft-recovery-loan.png") });
+    await run.page.getByRole("dialog").getByRole("button", { name: "Add loan", exact: true }).click();
+    await expect.poll(async () => run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.loans.filter((item) => item.lender === "Example draft lender").length)).toBe(1);
+    await openLoan();
+    await expect(run.page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
+    expect(run.rendererErrors).toEqual([]);
+  } finally { await run.electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
+
+test("new lease drafts survive desktop restart and discard does not change current entries", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-durable-lease-"));
+  let run = await launchDesktopApp(profilePath);
+  const openLease = async () => {
+    await run.page.getByRole("button", { name: "Leases", exact: true }).click();
+    await run.page.getByRole("button", { name: "Add lease", exact: true }).click();
+    const picker = run.page.getByRole("dialog", { name: "Choose a unit for the new lease", exact: true });
+    if (await picker.isVisible()) await picker.getByRole("button").first().click();
+    await expect(run.page.getByLabel("Tenant", { exact: true })).toBeVisible();
+  };
+  try {
+    const count = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.leases.length);
+    await openLease();
+    await run.page.getByLabel("Tenant", { exact: true }).fill("Example lease restart draft");
+    await run.page.getByRole("button", { name: "Save draft", exact: true }).click();
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    expect(await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.leases.length)).toBe(count);
+    await openLease();
+    await expect(run.page.getByLabel("Tenant", { exact: true })).toHaveValue("");
+    await run.page.getByRole("button", { name: "Resume draft", exact: true }).click();
+    await expect(run.page.getByLabel("Tenant", { exact: true })).toHaveValue("Example lease restart draft");
+    await run.page.getByRole("button", { name: "Discard draft", exact: true }).click();
+    await expect(run.page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
+    await expect(run.page.getByLabel("Tenant", { exact: true })).toHaveValue("Example lease restart draft");
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await openLease();
+    await expect(run.page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
+    await run.page.getByLabel("Tenant", { exact: true }).fill("Example completed lease draft");
+    await run.page.getByLabel("Monthly rent", { exact: true }).fill("700");
+    await run.page.getByRole("button", { name: "Save draft", exact: true }).click();
+    await run.page.getByRole("button", { name: "Save lease", exact: true }).click();
+    await expect.poll(async () => run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.leases.filter((item) => item.tenantName === "Example completed lease draft").length)).toBe(1);
+    await openLease();
+    await expect(run.page.getByRole("button", { name: "Resume draft", exact: true })).toHaveCount(0);
+    expect(run.rendererErrors).toEqual([]);
+  } finally { await run.electronApp.close(); fs.rmSync(profilePath, { recursive: true, force: true }); }
 });
 
 test("saved transaction views and table columns survive restart", async () => {
@@ -476,10 +628,14 @@ test("Smart Check review preserves dashboard scope and recognizes reassigned bil
     const unit = page.locator("main").getByLabel("Unit", { exact: true });
     await expect(property).toHaveValue("all");
     await expect(unit).toHaveValue("all");
-    await expect(page.getByText("Check missing payment: Example Reassigned Energy", { exact: true })).toHaveCount(0);
-    const row = page.locator("div.rounded-lg.border.border-slate-200.bg-white.p-3").filter({ has: page.getByText("Check missing payment: Example Missing Energy", { exact: true }) });
+    await expect(page.getByText("Review monthly expense: Example Reassigned Energy", { exact: true })).toHaveCount(0);
+    const row = page.locator("div.rounded-lg.border.border-slate-200.bg-white.p-3").filter({ has: page.getByText("Review monthly expense: Example Missing Energy", { exact: true }) });
     await expect(row.getByText("Suggested check", { exact: true })).toBeVisible();
     await expect(row.getByText(/overdue/i)).toHaveCount(0);
+    await row.getByText("Why this appears", { exact: true }).click();
+    await expect(row.getByText("Recent supporting transactions", { exact: true })).toBeVisible();
+    await expect(row.getByText(/does not establish an unpaid bill/)).toBeVisible();
+    await expect(row.getByText("$40.00", { exact: true })).toHaveCount(3);
     await page.getByRole("combobox", { name: "Calendar source", exact: true }).selectOption("smart_check");
     await page.getByRole("combobox", { name: "Calendar horizon", exact: true }).selectOption("180");
     await expect(row).toBeVisible();
@@ -489,13 +645,37 @@ test("Smart Check review preserves dashboard scope and recognizes reassigned bil
       await page.screenshot({ path: path.join(rootDir, "output", "playwright", `calendar-refresh-${width}.png`) });
     }
     await page.setViewportSize({ width: 1440, height: 900 });
+    const reasonText = await row.getByText(/does not establish an unpaid bill/).textContent();
+    const reviewDate = reasonText.match(/Review starts (\d{4}-\d{2}-\d{2})/)[1];
     await page.getByRole("button", { name: "Month", exact: true }).click();
     await expect(page.getByLabel("Jump to month", { exact: true })).toBeVisible();
+    await page.getByLabel("Jump to month", { exact: true }).fill(reviewDate.slice(0, 7));
+    const reviewDayLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${reviewDate}T00:00:00Z`));
+    await page.getByRole("button", { name: `Show ${reviewDayLabel}`, exact: true }).click();
+    const monthDetails = page.locator("div.rounded-lg.border.border-slate-200.bg-white.p-3.text-left").filter({ has: page.getByText("Review monthly expense: Example Missing Energy", { exact: true }) });
+    await monthDetails.getByText("Why this appears", { exact: true }).click();
+    await expect(monthDetails.getByText("Recent supporting transactions", { exact: true })).toBeVisible();
+    await expect(monthDetails.getByRole("combobox", { name: /^Follow-up status/ }).locator("option[value=done]")).toHaveText("Review complete");
     await expect(page.getByRole("combobox", { name: "Calendar horizon", exact: true })).toHaveCount(0);
     await page.screenshot({ path: path.join(rootDir, "output", "playwright", "calendar-month-refresh-1440.png") });
     await page.getByRole("button", { name: "Agenda", exact: true }).click();
     await expect(page.getByRole("combobox", { name: "Calendar source", exact: true })).toHaveValue("smart_check");
     await expect(page.getByRole("combobox", { name: "Calendar horizon", exact: true })).toHaveValue("180");
+    const followUp = row.getByRole("combobox", { name: "Follow-up status for Review monthly expense: Example Missing Energy", exact: true });
+    await followUp.selectOption("snoozed");
+    await expect(followUp).toHaveValue("snoozed");
+    await row.getByText("Why this appears", { exact: true }).click();
+    await expect(row.getByText(/Original source date:/)).toBeVisible();
+    await expect.poll(() => page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      return Object.values(backup.settings.operationsFollowUps || {}).some((record) => record.status === "snoozed" && record.snoozedUntil);
+    })).toBe(true);
+    await followUp.selectOption("done");
+    await expect(row).toHaveCount(0);
+    await page.getByRole("button", { name: /^Show handled/ }).click();
+    await expect(followUp).toHaveValue("done");
+    await followUp.selectOption("open");
+    await expect(followUp).toHaveValue("open");
     await row.getByRole("button", { name: "Review transactions", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Transactions", exact: true })).toBeVisible();
     await expect(page.getByRole("tab", { name: /^Activity/ })).toHaveAttribute("aria-selected", "true");
@@ -1644,6 +1824,102 @@ test("Work Queue reaches every task and confirms a reviewed service-period corre
     expect(run.rendererErrors).toEqual([]);
   } finally {
     await run.electronApp.close().catch(() => {});
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+
+test("linked payments connect lease receipts and preserve unfinished payment work", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-linked-payments-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    const pdfUrl = `data:application/pdf;base64,${makeTextPdf([[{ text: "Example rent payment receipt" }]]).toString("base64")}`;
+    await page.evaluate(async (dataUrl) => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const lease = { ...backup.data.leases[0], id: "example-connected-lease", tenantName: "Example Connected Tenant" };
+      const date = new Date().toISOString().slice(0, 10);
+      backup.data.leases.push(lease);
+      backup.data.transactions.push({ ...backup.data.transactions[0], id: "example-connected-payment", propertyId: lease.propertyId, unit: lease.unit, date, description: "Example connected rent payment", vendor: lease.tenantName, status: "active", type: "Income", category: "Rent", amount: 950, rentMonth: date.slice(0, 7), receiptName: "example-rent-receipt-for-the-very-long-connected-tenant-payment-and-lease-record.pdf" });
+      backup.data.tenantLedgerEntries.push({ id: "example-connected-entry", leaseId: lease.id, transactionId: "example-connected-payment", date, kind: "payment", accountingTreatment: "rent_income", amount: 950, memo: "Example linked payment", reviewed: false, reviewedAt: "", reviewNotes: "", linkedDocumentIds: [], createdAt: `${date}T12:00:00Z` });
+      backup.data.documents.push({ id: "example-connected-receipt", transactionId: "example-connected-payment", propertyId: lease.propertyId, unit: lease.unit, name: "example-rent-receipt-for-the-very-long-connected-tenant-payment-and-lease-record.pdf", mimeType: "application/pdf", type: "Receipt", uploadedAt: `${date}T12:00:00Z`, dataUrl, extractedText: "Example rent payment receipt" });
+      backup.settings.leaseAutomationEnabled = false;
+      await window.desktopPersistence.saveAppData(backup);
+    }, pdfUrl);
+    await page.reload();
+    const before = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await page.getByRole("button", { name: "Example connected rent payment", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Open payments for Example Connected Tenant", exact: true })).toBeVisible();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "connected-payment-lease.png") });
+    await page.getByRole("button", { name: "Open payments for Example Connected Tenant", exact: true }).click();
+    const leasePanel = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: /^Lease -.*Example Connected Tenant/ }) });
+    await expect(leasePanel.getByRole("button", { name: "Payments", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(leasePanel.getByText("Example linked payment", { exact: true })).toBeVisible();
+    await leasePanel.getByPlaceholder("Memo", { exact: true }).fill("Example unfinished payment note");
+    await leasePanel.getByRole("button", { name: "Open txn", exact: true }).click();
+    await page.getByRole("button", { name: "Return to payments", exact: true }).click();
+    await expect(leasePanel.getByPlaceholder("Memo", { exact: true })).toHaveValue("Example unfinished payment note");
+    await leasePanel.getByRole("button", { name: "Documents", exact: true }).click();
+    await expect(leasePanel.getByText("example-rent-receipt-for-the-very-long-connected-tenant-payment-and-lease-record.pdf", { exact: true })).toBeVisible();
+    await expect(leasePanel.getByText("Payment support", { exact: true })).toBeVisible();
+    for (const width of [1920, 1440, 720]) {
+      await electronApp.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0].setContentSize(width, width === 1920 ? 1200 : 900), width);
+      await page.setViewportSize({ width, height: width === 1920 ? 1200 : 900 });
+      expect(await leasePanel.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBe(true);
+      await expect(leasePanel.getByRole("button", { name: "Review document", exact: true })).toBeVisible();
+      await page.screenshot({ path: path.join(rootDir, "output", "playwright", `detail-polish-${width}.png`) });
+    }
+    await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 960));
+    await page.setViewportSize({ width: 1440, height: 960 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "connected-lease-receipts.png") });
+    await leasePanel.getByRole("button", { name: "Review document", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toBeVisible();
+    await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await leasePanel.getByRole("button", { name: "Payments", exact: true }).click();
+    await expect(leasePanel.getByPlaceholder("Memo", { exact: true })).toHaveValue("Example unfinished payment note");
+    await leasePanel.getByRole("button", { name: "Documents", exact: true }).click();
+    await leasePanel.getByRole("button", { name: "Review document", exact: true }).click();
+    await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "example-rent-receipt-for-the-very-long-connected-tenant-payment-and-lease-record.pdf", exact: true })).toBeVisible();
+    await expect(leasePanel).toHaveCount(0);
+    await page.getByRole("button", { name: "Close document review", exact: true }).click();
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await page.getByRole("button", { name: "Example connected rent payment", exact: true }).click();
+    await page.getByRole("button", { name: "Open payments for Example Connected Tenant", exact: true }).click();
+    await leasePanel.getByRole("button", { name: "Edit", exact: true }).click();
+    await leasePanel.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(leasePanel).toHaveCount(0);
+    const after = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    expect(after.transactions).toEqual(before.transactions);
+    expect(after.leases).toEqual(before.leases);
+    expect(after.tenantLedgerEntries).toEqual(before.tenantLedgerEntries);
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByLabel("Theme", { exact: true }).selectOption("dark");
+    await page.getByRole("button", { name: "Transactions", exact: true }).click();
+    await page.getByRole("button", { name: "Example connected rent payment", exact: true }).click();
+    await page.getByRole("button", { name: "Open payments for Example Connected Tenant", exact: true }).click();
+    const contrast = await leasePanel.locator(".rt-detail-heading").evaluate((header) => {
+      const luminance = (color) => {
+        const values = color.match(/[\d.]+/g).slice(0, 3).map(Number).map((value) => {
+          const channel = value / 255;
+          return channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+        });
+        return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+      };
+      const foreground = luminance(getComputedStyle(header.querySelector("h2")).color);
+      const background = luminance(getComputedStyle(header).backgroundColor);
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+    await leasePanel.getByRole("button", { name: "Documents", exact: true }).click();
+    await page.screenshot({ path: path.join(rootDir, "output", "playwright", "detail-polish-dark.png") });
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });

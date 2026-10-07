@@ -14,9 +14,11 @@
   },
   "files": [
     "src/models.ts",
+    "src/domain/recordConnections.ts",
     "src/types/desktop.d.ts",
     "src/app/useDesktopBridgeController.ts",
     "src/app/desktopSaveQueue.ts",
+    "src/app/draftRecovery.ts",
     "src/app/desktopPersistenceHydration.ts",
     "src/app/desktopUpdateShared.ts",
     "src/app/performanceMetrics.ts",

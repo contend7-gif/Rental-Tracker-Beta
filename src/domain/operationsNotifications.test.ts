@@ -22,3 +22,12 @@ test("operations digest stays quiet when nothing is due", () => {
     { id: "future", source: "lease", date: "2026-09-01" },
   ] as never[], "2026-08-31"), null);
 });
+
+test("inferred expense checks are never described as overdue bills", () => {
+  const digest = buildOperationsNotificationDigest([
+    { id: "check", source: "smart_check", date: "2026-08-10" },
+  ] as never[], "2026-08-31");
+  assert.ok(digest);
+  assert.match(digest.body, /1 suggested check to review/);
+  assert.doesNotMatch(digest.body, /overdue|due today/);
+});

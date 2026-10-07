@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { DraftRecoveryControls } from "../shared/DraftRecovery.jsx";
-import { RecordDetailPanel } from "../shared/RecordDetailPanel.jsx";
+import { leaseDraftKey } from "../../app/draftRecovery.ts";
+import { FileEmptyState, RecordDetailPanel } from "../shared/RecordDetailPanel.jsx";
 import { Button } from "../../components/ui/button";
-import { DialogClose, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { DialogAction, DialogClose, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
@@ -45,6 +46,8 @@ export function LeaseEditorDialog({
   leaseDraft,
   leases = [],
   leaseEditorMode,
+  leaseInitialSection = "overview",
+  onReviewLeaseDocument,
   leasePdfInputRef,
   leaseReminderKindLabel,
   leaseReminderToneClass,
@@ -79,6 +82,7 @@ export function LeaseEditorDialog({
   setUsePeriodDraft,
   startTenantLedgerEntryEdit,
   tenantLedgerDraft,
+  tenantLedgerDraftDirty = false,
   tenantStatementCustomEnd,
   tenantStatementCustomStart,
   tenantStatementPreset,
@@ -92,9 +96,9 @@ export function LeaseEditorDialog({
   const [detailTab, setDetailTab] = useState("overview");
   const [editingAgreement, setEditingAgreement] = useState(!isExistingLease);
   useEffect(() => {
-    setDetailTab("overview");
+    setDetailTab(leaseInitialSection);
     setEditingAgreement(!isExistingLease);
-  }, [leaseDraft?.id, leaseEditorMode]);
+  }, [leaseDraft?.id, leaseEditorMode, leaseInitialSection]);
   const propertyOptions = selectableProperties(properties, leaseDraft?.propertyId);
   const agreementType = normalizeLeaseAgreementType(leaseDraft);
   const billingCadence = normalizeLeaseBillingCadence(leaseDraft);
@@ -108,7 +112,7 @@ export function LeaseEditorDialog({
           ? "Rent each interval"
           : "Monthly rent";
   return (
-    <RecordDetailPanel className="flex flex-col overflow-hidden" draft={leaseEditorMode === "full" ? leaseDraft : undefined} open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
+    <RecordDetailPanel className="flex flex-col overflow-hidden" draft={leaseEditorMode === "full" ? leaseDraft : undefined} dirty={leaseEditorMode === "full" && tenantLedgerDraftDirty} open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
 
         {!leaseDraft ? (
           <div className="p-4">
@@ -117,13 +121,13 @@ export function LeaseEditorDialog({
         ) : (
           <>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {leaseEditorMode === "full" && editingAgreement && <DraftRecoveryControls draftKey={`lease:${leaseDraft.id || `${leaseDraft.propertyId}:${leaseDraft.unit}`}`} draft={leaseDraft} onRestore={(saved) => setLeaseDraft({ ...leaseDraft, ...saved })} />}
-              <DialogHeader>
+              {leaseEditorMode === "full" && editingAgreement && <DraftRecoveryControls draftKey={leaseDraftKey(leaseDraft, isExistingLease)} legacyDraftKey={`lease:${leaseDraft.id || `${leaseDraft.propertyId}:${leaseDraft.unit}`}`} draft={leaseDraft} onRestore={(saved) => setLeaseDraft({ ...leaseDraft, ...saved, id: leaseDraft.id, propertyId: leaseDraft.propertyId, unit: leaseDraft.unit })} />}
+              <DialogHeader className="rt-detail-heading rounded-lg border border-violet-200 bg-violet-50/60 p-3">
                 <DialogTitle>{leaseEditorMode === "full" ? `Lease - ${leaseDraft.unit} (${leaseDraft.tenantName})` : `Occupancy - ${leaseDraft.unit}`}</DialogTitle>
               </DialogHeader>
               {leaseEditorMode === "full" && <>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                  <div className="flex flex-wrap gap-1" aria-label="Lease detail sections">{[["overview", "Overview"], ["payments", "Payments"], ["documents", "Documents"], ["history", "History"]].map(([key, label]) => <button type="button" key={key} aria-pressed={detailTab === key} onClick={() => setDetailTab(key)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${detailTab === key ? "bg-teal-50 text-teal-900" : "text-slate-500 hover:bg-slate-50"}`}>{label}</button>)}</div>
+                  <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Lease detail sections">{[["overview", "Overview"], ["payments", "Payments"], ["documents", "Documents"], ["history", "History"]].map(([key, label]) => <button type="button" key={key} aria-pressed={detailTab === key} onClick={() => setDetailTab(key)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${detailTab === key ? "bg-teal-50 text-teal-900" : "text-slate-500 hover:bg-slate-50"}`}>{label}</button>)}</div>
                   <div className="flex flex-wrap gap-2">{isExistingLease && <Button size="sm" variant="secondary" disabled={!canCreateEditRecords} onClick={() => { setEditingAgreement(true); setDetailTab("overview"); }}>Edit agreement</Button>}{isExistingLease && <Button size="sm" variant="secondary" disabled={!canCreateEditRecords} onClick={() => openLeaseExtension(leaseDraft)}>Extend lease</Button>}</div>
                 </div>
                 {detailTab === "overview" && !editingAgreement && <section aria-label="Lease overview" className="mt-4 space-y-4">
@@ -132,7 +136,7 @@ export function LeaseEditorDialog({
                     ["Agreement", leaseAgreementTypeLabel(leaseDraft), `${leaseDraft.startDate} to ${leaseDraft.actualEndDate || (leaseIsOpenEnded(leaseDraft) ? "Ongoing" : leaseDraft.endDate || "End date missing")}${leaseDraft.actualEndDate ? " / Actual departure" : ""}`],
                     ["Rent arrangement", leaseRentSummaryLabel(leaseDraft, currency), leaseBillingCadenceLabel(leaseDraft)],
                     ["Security deposit in agreement", leaseDraft.securityDeposit == null || leaseDraft.securityDeposit === "" ? "Not recorded" : currency(leaseDraft.securityDeposit), "See Payments for recorded deposit activity."],
-                    ["Attached documents", `${selectedLeaseDocuments.length} lease PDFs`, "Open Documents to view or attach files."],
+                    ["Attached documents", `${selectedLeaseDocuments.length} linked files`, "Open Documents to view or attach files."],
                   ].map(([label, value, detail]) => <div key={label} className="rounded-lg border border-slate-200 p-3"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 text-sm font-semibold text-slate-900">{value}</dd><dd className="mt-1 text-xs text-slate-500">{detail}</dd></div>)}</dl>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><h3 className="text-sm font-semibold text-slate-900">Payment records</h3><p className="mt-1 text-xs text-slate-600">{leaseTenantLedgerSummary.rows.length ? leaseTenantLedgerHeadline : "No tenant ledger entries recorded yet."}</p><p className="mt-1 text-xs text-slate-500">Based on recorded ledger entries. Review scheduled charges in Payments.</p><Button size="sm" variant="secondary" className="mt-2" onClick={() => setDetailTab("payments")}>Open tenant ledger</Button></div>
                   {leaseDraft.notes && <div><h3 className="text-sm font-semibold text-slate-900">Notes</h3><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{leaseDraft.notes}</p></div>}
@@ -292,7 +296,7 @@ export function LeaseEditorDialog({
                 </div>
                 </div>
               )}
-              <div hidden={leaseEditorMode === "full" && detailTab !== "history"} className="mt-4 rounded border p-3">
+              <div hidden={leaseEditorMode === "full" && detailTab !== "history"} className="mt-4 rounded-lg border border-slate-200 p-3">
                 <div className="text-sm font-medium">Owner/Vacancy dates for this unit</div>
                 {leaseEditorMode === "full" ? (
                   <div className="mt-2 text-sm text-slate-600">
@@ -364,7 +368,7 @@ export function LeaseEditorDialog({
                     )}
                     {getUnitOccupancyPeriods(leaseDraft.propertyId, leaseDraft.unit).length === 0 && <div className="mt-2 text-xs text-slate-500">No owner-occupied or vacant periods saved for this unit.</div>}
                     {getUnitOccupancyPeriods(leaseDraft.propertyId, leaseDraft.unit).map((period) => (
-                      <div key={period.id} className="mt-2 flex items-center justify-between rounded border p-2 text-sm">
+                      <div key={period.id} className="mt-2 flex items-center justify-between rounded-lg border border-slate-200 p-2 text-sm">
                         <span>
                           {period.useType}: {period.startDate} to {period.endDate || "until lease starts"}
                           <span className={`ml-2 rounded-full px-2 py-0.5 text-[11px] ${period.reviewed ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>
@@ -383,7 +387,7 @@ export function LeaseEditorDialog({
               </div>
               {leaseEditorMode === "full" && (
                 <>
-                  <div hidden={detailTab !== "payments"} className="mt-4 rounded border p-3">
+                  <div hidden={detailTab !== "payments"} className="mt-4 rounded-lg border border-slate-200 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="text-sm font-medium">Tenant ledger</div>
                       <div className="flex items-center gap-2 text-xs">
@@ -438,7 +442,7 @@ export function LeaseEditorDialog({
                     {selectedLeaseAutomationReminders.length > 0 && (
                       <div className="mt-2 space-y-1">
                         {selectedLeaseAutomationReminders.map((reminder) => (
-                          <div key={reminder.id} className={`rounded border px-2 py-1 text-[11px] ${leaseReminderToneClass(reminder.kind)}`}>
+                          <div key={reminder.id} className={`rounded-lg border border-slate-200 px-2 py-1 text-[11px] ${leaseReminderToneClass(reminder.kind)}`}>
                             <span className="font-medium">{leaseReminderKindLabel(reminder.kind)}:</span> {reminder.message}
                           </div>
                         ))}
@@ -569,24 +573,27 @@ export function LeaseEditorDialog({
                       </div>
                     )}
                   </div>
-                  <div hidden={detailTab !== "documents"} className="mt-4 rounded border p-3">
-                    <div className="text-sm font-medium">Lease PDFs</div>
+                  <div hidden={detailTab !== "documents"} className="mt-4 rounded-lg border border-slate-200 p-3">
+                    <div className="text-sm font-medium">Lease documents & payment receipts</div>
                     <div className="mt-2">
                       <input ref={leasePdfInputRef} type="file" accept="application/pdf" className="hidden" onChange={onLeasePdfInputChange} />
                       <Button variant="secondary" onClick={openLeasePdfPicker}>Add PDF</Button>
                     </div>
-                    {selectedLeaseDocuments.length === 0 && <div className="mt-2 text-xs text-slate-500">No PDFs attached to this lease yet.</div>}
+                    {selectedLeaseDocuments.length === 0 && <div className="mt-3"><FileEmptyState title="No documents or payment receipts linked to this lease yet.">Add a signed lease PDF here. Receipts appear when linked to a payment transaction.</FileEmptyState></div>}
                     {selectedLeaseDocuments.map((document) => (
-                      <div key={document.id} className="mt-2 flex items-center justify-between rounded border p-2 text-sm">
-                        <span>{document.name}</span>
-                        <Button size="sm" variant="secondary" onClick={() => openDocumentPreview(document)}>View PDF</Button>
+                      <div key={document.id} className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3 text-sm">
+                        <div className="min-w-0 flex-1 basis-48"><div className="break-words">{document.name}</div><div className="text-xs text-slate-500">{document.leaseId === leaseDraft.id ? "Lease document" : "Payment support"}</div></div>
+                        <div className="flex shrink-0 flex-wrap gap-2">
+                          <Button size="sm" variant="secondary" onClick={() => openDocumentPreview(document)}>View file</Button>
+                          <DialogAction size="sm" variant="secondary" onProceed={() => onReviewLeaseDocument(document)}>Review document</DialogAction>
+                        </div>
                       </div>
                     ))}
                   </div>
                 </>
               )}
             </div>
-            <div className="border-t bg-white px-4 py-3">
+            <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3">
               <div className="flex flex-wrap justify-end gap-2">
                 {leaseEditorMode === "full" && editingAgreement && <Button onClick={saveLease} disabled={!canCreateEditRecords}>Save lease</Button>}
                 {leaseEditorMode === "full" && editingAgreement && isExistingLease && <Button variant="destructive" onClick={confirmAndDeleteLease} disabled={!canDeleteRecords}>Delete lease</Button>}

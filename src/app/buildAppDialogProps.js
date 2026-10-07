@@ -1,3 +1,4 @@
+import { leasesForTransaction } from "../domain/recordConnections.ts";
 import { currency } from "../domain/accounting.ts";
 import { formatStatementPresetLabel, monthStartIso } from "../lib/appSupport.ts";
 import { DOCUMENT_OCR_STATUS_OPTIONS } from "./documentShared.ts";
@@ -275,6 +276,13 @@ export function buildAppDialogGroups(props) {
       openTransactionInlineAttachmentPicker,
       propertyNameById,
       selectedTransactionDocuments,
+      relatedLeases: leasesForTransaction(selectedTxn?.id || "", props.tenantLedgerEntries || [], leases),
+      openRelatedLease: (lease) => {
+        if (leaseDraft && leaseDraft.id !== lease.id) return;
+        setSelectedTxn(null);
+        if (!leaseDraft) props.openLease(lease, "payments");
+      },
+      parentLeaseId: leaseDraft?.id,
       selectedTxn,
       selectedTxnLinkedWorkOrder,
       selectedTxnReconcileWarning,
@@ -391,6 +399,15 @@ export function buildAppDialogGroups(props) {
       getUnitStatusForDate,
       isTenantLedgerKindAllowedForTreatment,
       leaseDraft,
+      leaseInitialSection: props.leaseInitialSection,
+      tenantLedgerDraftDirty: props.tenantLedgerDraftDirty,
+      onReviewLeaseDocument: (document) => {
+        closeLeaseEditor();
+        props.setPropertyFilter(document.propertyId || leaseDraft.propertyId);
+        props.setUnitFilter("all");
+        props.requestWorkspaceFocus("document", document.id);
+        props.setView("documents");
+      },
       leases,
       leaseEditorMode,
       leasePdfInputRef,

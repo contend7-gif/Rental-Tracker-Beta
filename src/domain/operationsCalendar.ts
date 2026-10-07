@@ -40,6 +40,8 @@ export type OperationsCalendarItem = {
   eventKind?: "lease_start" | "lease_review" | "lease_end" | "lease_move_out";
   originalDate?: string;
   followUpStatus?: OperationsFollowUpRecord["status"];
+  snoozeReturned?: boolean;
+  evidence?: { reason: string; records: { id: string; date: string; amount: number }[] };
 };
 
 export type PlanningCalendarAction = {
@@ -85,14 +87,16 @@ export function operationsFollowUpRecord(
 export function applyOperationsFollowUps(
   items: OperationsCalendarItem[],
   records: Record<string, OperationsFollowUpRecord> = {},
-  options: { showHandled?: boolean } = {},
+  options: { showHandled?: boolean; todayIso?: string } = {},
 ) {
   return sortItems(items.flatMap((item) => {
     const record = records[item.id];
     if (!record) return [item];
     if ((record.status === "done" || record.status === "intentional") && !options.showHandled) return [];
     if (record.status === "snoozed" && isValidIsoDate(record.snoozedUntil)) {
-      return [{ ...item, originalDate: record.originalDate || item.date, date: record.snoozedUntil, followUpStatus: record.status }];
+      const returned = isValidIsoDate(options.todayIso) && record.snoozedUntil <= options.todayIso!;
+      return [{ ...item, originalDate: record.originalDate || item.date, date: record.snoozedUntil,
+        followUpStatus: returned ? "open" as const : record.status, snoozeReturned: returned }];
     }
     return [{ ...item, originalDate: record.originalDate || item.date, followUpStatus: record.status }];
   }));
@@ -302,8 +306,12 @@ export function buildOperationsCalendarItems(args: {
       sourceRecordId: check.patternKey,
       date: check.reviewDate,
       expectedDate: check.expectedDate,
-      title: `Check missing payment: ${check.vendor}`,
-      detail: `${check.vendor} usually appears monthly. Last recorded ${check.lastRecordedDate}; expected around ${check.expectedDate}. Confirm the gap was intentional.`,
+      title: `Review monthly expense: ${check.vendor}`,
+      detail: `No matching entry found around ${check.expectedDate}. Review the records before deciding whether anything is missing.`,
+      evidence: {
+        reason: `${check.occurrenceCount} recorded dates show a monthly pattern in ${check.category}. Last recorded ${check.lastRecordedDate}; estimated next date ${check.expectedDate}. Review starts ${check.reviewDate}. This estimate does not establish an unpaid bill.`,
+        records: check.supportingRecords || [],
+      },
       propertyId: check.propertyId,
       unit: check.unit,
       priority: "high",

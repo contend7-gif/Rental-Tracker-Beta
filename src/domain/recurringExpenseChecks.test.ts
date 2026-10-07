@@ -45,6 +45,8 @@ test("stable monthly utilities become a review check only after the grace period
   assert.equal(checks[0].reviewDate, "2026-08-12");
   assert.equal(checks[0].vendor, "Example Energy");
   assert.match(checks[0].patternKey, /^repeat-[0-9a-f]{8}$/);
+  assert.deepEqual(checks[0].supportingRecords, transactions.map(({ id, date, amount }) => ({ id, date, amount })));
+  assert.deepEqual(buildRecurringExpenseChecks({ transactions: [...transactions].reverse(), todayIso: "2026-08-12" }), checks);
 });
 
 test("irregular, unsupported, voided, and under-observed expenses do not create checks", () => {

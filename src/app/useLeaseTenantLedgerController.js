@@ -1,4 +1,6 @@
+import { documentsForLease } from "../domain/recordConnections.ts";
 import { useMemo, useRef, useState } from "react";
+import { discardDraft, leaseDraftKey } from "./draftRecovery.ts";
 import { flushSync } from "react-dom";
 import { buildTenantLedgerSummary, compareTenantLedgerEntries } from "../domain/tenantLedger.ts";
 import {
@@ -76,6 +78,7 @@ export function useLeaseTenantLedgerController({
 }) {
   const [leaseDraft, setLeaseDraft] = useState(null);
   const [leaseEditorMode, setLeaseEditorMode] = useState("full");
+  const [leaseInitialSection, setLeaseInitialSection] = useState("overview");
   const [editingUsePeriodId, setEditingUsePeriodId] = useState("");
   const [usePeriodDraft, setUsePeriodDraft] = useState(() => createBlankUsePeriodDraft(todayIso));
   const [leaseValidationDialog, setLeaseValidationDialog] = useState({ open: false, message: "" });
@@ -84,6 +87,8 @@ export function useLeaseTenantLedgerController({
   const extensionPdfInputRef = useRef(null);
   const [editingTenantLedgerEntryId, setEditingTenantLedgerEntryId] = useState("");
   const [tenantLedgerDraft, setTenantLedgerDraft] = useState(() => createBlankTenantLedgerDraft());
+  const tenantLedgerBaseline = useRef(JSON.stringify(createBlankTenantLedgerDraft()));
+  const tenantLedgerDraftDirty = JSON.stringify(tenantLedgerDraft) !== tenantLedgerBaseline.current;
   const [leaseTenantLedgerSort, setLeaseTenantLedgerSort] = useState("date_desc");
 
   const getUnitStatusForDate = (unit, date = todayIso) => {
@@ -118,8 +123,8 @@ export function useLeaseTenantLedgerController({
 
   const selectedLeaseDocuments = useMemo(() => {
     if (!leaseDraft) return [];
-    return documents.filter((doc) => doc.leaseId === leaseDraft.id);
-  }, [documents, leaseDraft]);
+    return documentsForLease(leaseDraft.id, tenantLedgerEntries, documents);
+  }, [documents, leaseDraft, tenantLedgerEntries]);
   const leaseTenantLedgerSummary = useMemo(() => {
     if (!leaseDraft?.id) {
       return { rows: [], chargeBalanceById: {}, totalDue: 0, tenantCredit: 0 };
@@ -158,19 +163,23 @@ export function useLeaseTenantLedgerController({
   const resetTenantLedgerEditor = (leaseLike = null) => {
     const defaultAmount = leaseLike ? String(Math.max(0, Number(leaseLike.monthlyRent || 0))) : "";
     setEditingTenantLedgerEntryId("");
-    setTenantLedgerDraft(createBlankTenantLedgerDraft(todayIso, defaultAmount));
+    const nextDraft = createBlankTenantLedgerDraft(todayIso, defaultAmount);
+    tenantLedgerBaseline.current = JSON.stringify(nextDraft);
+    setTenantLedgerDraft(nextDraft);
   };
 
   const startTenantLedgerEntryEdit = (entry) => {
     setEditingTenantLedgerEntryId(entry.id);
-    setTenantLedgerDraft({
+    const nextDraft = {
       date: entry.date,
       kind: entry.kind,
       accountingTreatment: normalizeTenantLedgerAccountingTreatment(entry.accountingTreatment),
       amount: String(entry.amount),
       memo: entry.memo || "",
       automationKey: String(entry.automationKey || ""),
-    });
+    };
+    tenantLedgerBaseline.current = JSON.stringify(nextDraft);
+    setTenantLedgerDraft(nextDraft);
   };
 
   const openLinkedTenantLedgerTransaction = (entry) => {
@@ -367,7 +376,8 @@ export function useLeaseTenantLedgerController({
     });
   };
 
-  const openLease = (lease) => {
+  const openLease = (lease, section = "overview") => {
+    setLeaseInitialSection(section === "payments" ? "payments" : "overview");
     prefetchDialog("leaseEditor");
     const draft = {
       ...lease,
@@ -411,6 +421,7 @@ export function useLeaseTenantLedgerController({
   };
 
   const openNewLeaseForUnit = (propertyId, unitName, startDate = todayIso) => {
+    setLeaseInitialSection("overview");
     prefetchDialog("leaseEditor");
     const leaseId = `lease-${Date.now()}`;
     const draft = {
@@ -873,6 +884,8 @@ export function useLeaseTenantLedgerController({
     });
 
     setNotice(`Lease updated for ${savedLease.tenantName || savedLease.unit}.`);
+    try { discardDraft(localStorage, leaseDraftKey(leaseDraft, Boolean(storedLease)), sessionStorage, `lease:${leaseDraft.id}`); }
+    catch { setNotice("Lease saved, but its saved draft could not be removed. Discard the draft before starting another edit."); }
     closeLeaseEditor();
   };
 
@@ -931,6 +944,7 @@ export function useLeaseTenantLedgerController({
     leaseExtensionPreview,
     leaseExtensionDraft,
     leaseEditorMode,
+    leaseInitialSection,
     leaseTenantLedgerHeadline,
     leaseTenantLedgerRowById,
     leaseTenantLedgerSort,
@@ -963,6 +977,7 @@ export function useLeaseTenantLedgerController({
     setUsePeriodDraft,
     startTenantLedgerEntryEdit,
     tenantLedgerDraft,
+    tenantLedgerDraftDirty,
     usePeriodDraft,
   };
 }

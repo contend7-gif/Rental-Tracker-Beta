@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { discardDraft } from "./draftRecovery.ts";
 import { deductibleMortgageInterest, createLoanPayment } from "../domain/accounting.ts";
 import {
   buildLoanPaymentDraft,
@@ -279,6 +280,8 @@ export function useLoanWorkspaceController({
     });
 
     setNotice(editingLoanId ? "Loan updated." : "Loan added.");
+    try { discardDraft(localStorage, `loan:${editingLoanId || loanDraft.propertyId}`, sessionStorage); }
+    catch { setNotice("Loan saved, but its saved draft could not be removed. Discard the draft before starting another edit."); }
     clearLoanDraft(propertyId);
     setLoanEditorOpen(false);
   };

@@ -44,6 +44,13 @@ test("operations follow-ups hide handled items, move snoozes, and preserve sourc
   assert.equal(visible[0].date, "2026-09-10");
   assert.equal(visible[0].originalDate, "2026-09-01");
   assert.equal(visible[0].followUpStatus, "snoozed");
+  const returned = applyOperationsFollowUps(items, { [items[0].id]: snoozed }, { todayIso: "2026-09-10" });
+  assert.equal(returned[0].followUpStatus, "open");
+  assert.equal(returned[0].snoozeReturned, true);
+  assert.equal(returned[0].originalDate, "2026-09-01");
+  assert.equal(items[0].date, "2026-09-01");
+  assert.equal(snoozed.status, "snoozed");
+  assert.equal(applyOperationsFollowUps(items, { [items[0].id]: snoozed }, { todayIso: "2026-09-09" })[0].followUpStatus, "snoozed");
 
   const done = { ...snoozed, status: "done" as const };
   assert.equal(applyOperationsFollowUps(items, { [items[0].id]: done }).length, 0);

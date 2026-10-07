@@ -110,6 +110,38 @@ Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, 
 - Run `npm run scenario:loan-tax`.
 - Run `npm run smoke:ci`.
 
+## Draft recovery after restart
+
+- In a fictional profile, save an unfinished transaction, loan, or new lease draft. Close the entire app and reopen the same profile.
+- Open the matching entry/editor and confirm Saved draft available appears. Resume explicitly; confirm no record was posted merely by saving or resuming the draft.
+- Confirm a new lease draft is offered for the same property/unit even though the new editor generated another record ID.
+- Confirm invalid record submission retains the draft; successful submission clears it. Restart again and check that completed drafts do not reappear.
+- Choose Discard draft and confirm the stored draft disappears while current form entries remain. Restart and confirm the discarded draft stays removed.
+- Confirm file contents are excluded and attachments must be selected again. Drafts are explicitly saved locally, not automatically saved after every edit.
+
 ## Real-Data Reminder
 
 This app is local-first and intended to organize rental records. Keep your own backups and confirm tax filings with a qualified tax preparer. Do not commit real rental data, tenant names, property addresses, documents, exports, databases, API keys, or private notes to the repository.
+
+### Reminder trust and follow-up
+
+- In Calendar, expand **Why this appears** on a suggested monthly expense check. Confirm recent supporting transaction dates/amounts match the vendor history and the estimate is not described as proof of an unpaid bill.
+- Compare Agenda and Month: both offer Open, Review complete, Snooze 7 days, and Waiting; Gap intentional is available for suggested checks.
+- Snooze, restart, and verify the review date persists while the source date is unchanged. On the return date the reminder is Open again.
+- Review complete hides the reminder; Show handled exposes it for reopening. Payment/maintenance/lease source records must stay unchanged.
+- Confirm desktop notifications count suggested checks separately from overdue recorded dates.
+
+### Connected lease, payment, and document records
+
+- Open a transaction linked through a tenant ledger entry. **Open payments for [tenant]** should open the exact lease on Payments without guessing from a matching name, date, or amount.
+- From Payments, open its accounting transaction and use **Return to payments**. An unfinished payment entry must remain intact.
+- Lease Documents should include both directly attached agreements and receipts linked through active payment entries, without duplicate files or support from voided entries.
+- **Review document** should open the exact file in Documents, clearing stale document search/status filters. Keep editing must preserve unfinished lease/payment changes; discard must navigate without posting them.
+- Verify that browsing these connections changes no lease terms, transaction amounts, or tenant ledger entries.
+
+### Final detail-panel polish
+
+- Open a lease and compare Overview, Payments, Documents, and History. Borders should be soft and consistent, with a restrained violet header and clear selected tabs.
+- At 1920 × 1200 and in a narrow window, long filenames should wrap and View file / Review document controls should remain visible without horizontal scrolling.
+- Empty lease and transaction file sections should explain how to attach documents and how linked payment receipts appear.
+- Turn on the system's reduced-motion preference; transitions and smooth scrolling should stop while focus and discard protections keep working.

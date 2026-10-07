@@ -11,6 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE || path.join(root, "release", "win-unpacked", "Rental Tracker.exe");
 const outputPath = path.resolve(process.argv[2] || path.join(root, "output", "playwright", "desktop-benchmark.json"));
 const sampleCount = Number(process.env.RENTAL_TRACKER_BENCH_SAMPLES || 5);
+const viewport = { width: 1920, height: 1200 };
 if (!Number.isInteger(sampleCount) || sampleCount < 3 || sampleCount > 20) throw new Error("Use 3–20 benchmark samples.");
 if (process.env.RENTAL_TRACKER_BENCH_SIZE && !["small", "medium", "large"].includes(process.env.RENTAL_TRACKER_BENCH_SIZE)) throw new Error("Use small, medium, or large as the benchmark size.");
 await fs.access(executablePath);
@@ -24,6 +25,13 @@ const measure = async (page, action) => {
 async function launch(profilePath) {
   return electron.launch({ executablePath, args: ["--disable-gpu"], timeout: 60_000, env: { ...process.env, RENTAL_TRACKER_E2E: "1", RENTAL_TRACKER_E2E_USER_DATA_PATH: profilePath, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" } });
 }
+async function prepareWindow(app) {
+  const page = await app.firstWindow();
+  // Keep both comparison packages at the same size even on smaller CI displays.
+  await app.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(size.width, size.height), viewport);
+  await page.setViewportSize(viewport);
+  return page;
+}
 async function dismissReleaseNotes(page) {
   const heading = page.getByRole("heading", { name: /What's new in/i });
   await heading.waitFor({ state: "visible", timeout: 2_000 }).catch(() => {});
@@ -32,7 +40,8 @@ async function dismissReleaseNotes(page) {
 async function seed(profilePath, counts) {
   const app = await launch(profilePath);
   try {
-    const page = await app.firstWindow();
+    const page = await prepareWindow(app);
+    const appVersion = await app.evaluate(({ app }) => app.getVersion());
     await page.getByRole("button", { name: "Transactions", exact: true }).waitFor();
     await page.waitForFunction(() => Boolean(window.desktopPersistence));
     await page.evaluate(async ({ counts, pdf, year }) => {
@@ -54,13 +63,14 @@ async function seed(profilePath, counts) {
       const saved = await window.desktopPersistence.saveAppData(backup);
       if (saved?.ok === false) throw new Error(saved.message);
     }, { counts, year: new Date().getFullYear(), pdf: `data:application/pdf;base64,${makeTextPdf([[{ text: "Example fictional benchmark invoice" }]]).toString("base64")}` });
+    return appVersion;
   } finally { await app.close(); }
 }
 async function sample(profilePath) {
   const start = performance.now();
   const app = await launch(profilePath);
   try {
-    const page = await app.firstWindow();
+    const page = await prepareWindow(app);
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
     await expect(page.getByRole("option", { name: "Example performance property", exact: true })).toHaveCount(1, { timeout: 60_000 });
@@ -69,10 +79,25 @@ async function sample(profilePath) {
     const result = { startupHydratedMs: Number((performance.now() - start).toFixed(1)) };
     await dismissReleaseNotes(page);
     const pager = page.getByRole("navigation", { name: "Transactions pages" });
+    await page.getByRole("button", { name: "Transactions", exact: true }).evaluate((button) => {
+      window.__benchTransactionFirstPaintMs = null;
+      button.addEventListener("click", () => {
+        const startedAt = performance.now();
+        const observeReady = () => {
+          const element = document.querySelector('[aria-label="Transactions pages"]');
+          if (element?.textContent.includes("1–50") && element.getBoundingClientRect().height > 0) {
+            requestAnimationFrame(() => { window.__benchTransactionFirstPaintMs = performance.now() - startedAt; });
+          } else if (performance.now() - startedAt < 60_000) requestAnimationFrame(observeReady);
+        };
+        requestAnimationFrame(observeReady);
+      }, { once: true, capture: true });
+    });
     result.transactionsFirstOpenMs = await measure(page, async () => {
       await page.getByRole("button", { name: "Transactions", exact: true }).click();
       await expect(pager).toContainText("1–50");
     });
+    await page.waitForFunction(() => Number.isFinite(window.__benchTransactionFirstPaintMs));
+    result.transactionsFirstPaintMs = Number((await page.evaluate(() => window.__benchTransactionFirstPaintMs)).toFixed(1));
     result.transactionsNextPageMs = await measure(page, async () => {
       await pager.getByRole("button", { name: "Next", exact: true }).click();
       await expect(pager).toContainText("51–100");
@@ -120,16 +145,35 @@ async function sample(profilePath) {
       await page.getByRole("button", { name: "Transactions", exact: true }).click();
       await expect(pager).toBeVisible();
     });
+    // Open and edit outside the timed save, then verify the stored value via the
+    // desktop bridge. This includes the UI save queue and verification-read cost.
+    await page.keyboard.press("Control+k");
+    await search.fill("benchmark target transaction");
+    await expect(page.getByRole("listbox", { name: "Search results" }).getByRole("option")).toHaveCount(1);
+    await search.press("Enter");
+    await page.getByRole("dialog", { name: "Example benchmark target transaction", exact: true }).getByRole("button", { name: "Edit", exact: true }).click();
+    const amountField = page.getByLabel("Amount", { exact: true });
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example benchmark target transaction");
+    const newAmount = Number(await amountField.inputValue()) + 1;
+    await amountField.fill(String(newAmount));
+    result.transactionSaveToDiskMs = await measure(page, async () => {
+      await page.getByRole("button", { name: "Save transaction", exact: true }).click();
+      await expect.poll(async () => page.evaluate(async () => {
+        const { backup } = await window.desktopPersistence.loadAppData();
+        return Number(backup.data.transactions.find((item) => item.id === "bench-txn-0")?.amount);
+      }), { timeout: 60_000, intervals: [50] }).toBe(newAmount);
+    });
     if (errors.length) throw new Error(errors.join("\n"));
     return result;
   } finally { await app.close(); }
 }
 const report = {
   complete: false,
-  measuredAt: new Date().toISOString(), appVersion: JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")).version,
+  measuredAt: new Date().toISOString(), appVersion: null,
   packageSha256: createHash("sha256").update(await fs.readFile(path.join(path.dirname(executablePath), "resources", "app.asar"))).digest("hex"),
-  environment: { platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, samples: sampleCount, gpuDisabled: true },
-  methodology: "Sequential fresh-process launches, one excluded warm-up per size, same seeded profile reused. OS disk cache is warm. Timings include Playwright action/observation overhead and two animation frames; startup ends at hydrated property controls. Panel readiness means loaded file bytes and visible iframe, not completed PDF rendering. No universal speed thresholds or before/after claims.",
+  runnerSha256: createHash("sha256").update(await fs.readFile(fileURLToPath(import.meta.url))).digest("hex"),
+  environment: { platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, samples: sampleCount, gpuDisabled: true, viewport },
+  methodology: "Sequential fresh-process launches, one excluded warm-up per size, same seeded profile reused. Version comes from the packaged Electron runtime. OS disk cache is warm. Timings include fixed window setup, Playwright action/observation overhead and two animation frames; startup ends at hydrated property controls. Transactions first-paint is separately measured inside the renderer from the actual click to a painted visible pager, excluding automation observation delay. Panel readiness means loaded file bytes and visible iframe, not completed PDF rendering. Save-to-disk includes UI submission, the save queue, IPC, and repeated snapshot verification reads; it is not raw SQLite write latency. No universal speed thresholds.",
   results: [],
 };
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -139,7 +183,9 @@ for (const [name, transactions, activity, documents] of [["small", 200, 400, 20]
   const profilePath = await fs.mkdtemp(path.join(os.tmpdir(), "rental-tracker-desktop-bench-"));
   try {
     const counts = { transactions, activity, documents };
-    await seed(profilePath, counts);
+    const packagedVersion = await seed(profilePath, counts);
+    if (report.appVersion && report.appVersion !== packagedVersion) throw new Error("Mixed package versions in one benchmark");
+    report.appVersion = packagedVersion;
     await sample(profilePath);
     const samples = [];
     for (let index = 0; index < sampleCount; index++) {

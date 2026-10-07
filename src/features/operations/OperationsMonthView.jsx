@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { FollowUpSelect, OperationsReminderDetails } from "./OperationsReminderDetails.jsx";
 import { buildCalendarMonthDays, shiftCalendarMonth } from "../../domain/operationsMonth.ts";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -117,21 +117,11 @@ export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFol
                   <div className="min-w-0">
                     <div className="font-medium text-slate-900">{item.title}</div>
                     <div className="mt-1 text-xs text-slate-600">{item.detail}</div>
+                    <OperationsReminderDetails item={item} />
                     <div className="mt-1.5 text-[11px] font-medium text-slate-500">{SOURCE_LABEL[item.source] || "Calendar"} · {propertyNameById?.[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide")}{item.unit ? ` · ${item.unit}` : ""}{item.role === "milestone" ? " · Milestone" : ""}</div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Button size="sm" variant="secondary" onClick={() => onOpen(item)}>Open source</Button>
-                      {item.role !== "milestone" ? (
-                        <Select value={item.followUpStatus || "open"} onValueChange={(value) => onFollowUp(item, value)}>
-                          <SelectTrigger className="h-9 w-36 text-xs" aria-label={`Follow-up status for ${item.title}`}><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="open">Open</SelectItem>
-                            <SelectItem value="done">Done</SelectItem>
-                            <SelectItem value="snoozed">Snooze 7 days</SelectItem>
-                            <SelectItem value="waiting">Waiting</SelectItem>
-                            <SelectItem value="intentional">Intentional</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      ) : null}
+                      <FollowUpSelect item={item} onFollowUp={onFollowUp} />
                     </div>
                   </div>
                 </div>

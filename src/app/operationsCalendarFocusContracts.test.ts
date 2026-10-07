@@ -5,6 +5,7 @@ import test from "node:test";
 const appSource = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
 const calendarSource = readFileSync(new URL("../features/operations/OperationsCalendarWorkspace.jsx", import.meta.url), "utf8");
 const monthViewSource = readFileSync(new URL("../features/operations/OperationsMonthView.jsx", import.meta.url), "utf8");
+const reminderDetailsSource = readFileSync(new URL("../features/operations/OperationsReminderDetails.jsx", import.meta.url), "utf8");
 const closeViewSource = readFileSync(new URL("../features/operations/MonthlyClosePanel.jsx", import.meta.url), "utf8");
 const maintenanceSource = readFileSync(new URL("../features/maintenance/MaintenanceWorkspace.jsx", import.meta.url), "utf8");
 const documentsSource = readFileSync(new URL("../features/documents/DocumentsWorkspace.jsx", import.meta.url), "utf8");
@@ -29,7 +30,9 @@ test("Operations Calendar smart checks review the ledger and can be marked inten
   assert.match(calendarSource, /setSearch\(item\.searchText \|\| ""\)/);
   assert.match(calendarSource, /recurringExpenseCheckAcknowledgements/);
   assert.match(calendarSource, /Intentional/);
-  assert.match(calendarSource, /Snooze 7 days/);
+  assert.match(calendarSource, /<FollowUpSelect item=/);
+  assert.match(monthViewSource, /<FollowUpSelect item=/);
+  assert.match(reminderDetailsSource, /Snooze 7 days/);
   assert.match(calendarSource, /Show handled/);
   assert.match(calendarSource, /No transaction was created/);
 });

@@ -1,3 +1,4 @@
+import { FollowUpSelect, OperationsReminderDetails } from "./OperationsReminderDetails.jsx";
 import { useWorkspaceMemory } from "../../app/WorkspaceMemory.jsx";
 import React, { useMemo } from "react";
 import {
@@ -68,24 +69,6 @@ function actionLabelForSource(source) {
   return "Open loans";
 }
 
-function FollowUpSelect({ item, onFollowUp }) {
-  if (item.role === "milestone") return null;
-  return (
-    <Select value={item.followUpStatus || "open"} onValueChange={(value) => onFollowUp(item, value)}>
-      <SelectTrigger className="h-9 w-36 bg-white text-xs" aria-label={`Follow-up status for ${item.title}`}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="open">Open</SelectItem>
-        <SelectItem value="done">Done</SelectItem>
-        <SelectItem value="snoozed">Snooze 7 days</SelectItem>
-        <SelectItem value="waiting">Waiting</SelectItem>
-        <SelectItem value="intentional">Intentional</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
-
 function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp }) {
   const meta = SOURCE_META[item.source] || SOURCE_META.planning;
   const Icon = meta.icon;
@@ -111,9 +94,10 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
               <div className="font-semibold text-slate-900">{item.title}</div>
               <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{item.source === "smart_check" ? "Suggested check" : formatDaysLeft(days)}</Badge>
               <Badge variant="outline" className="bg-white text-[11px]">{meta.label}</Badge>
-              {item.followUpStatus ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus}</Badge> : null}
+              {item.followUpStatus ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus === "done" ? "Review complete" : item.followUpStatus}</Badge> : null}
             </div>
             <div className="mt-1 text-xs leading-5 text-slate-600">{item.detail}</div>
+            <OperationsReminderDetails item={item} />
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
               <span>{formatDate(item.date)}</span>
               {item.originalDate && item.originalDate !== item.date ? <span>Originally {formatDate(item.originalDate)}</span> : null}
@@ -223,8 +207,8 @@ export function OperationsCalendarWorkspace({
   const allItems = useMemo(() => applyOperationsFollowUps(
     rawItems,
     appSettings.operationsFollowUps,
-    { showHandled },
-  ), [appSettings.operationsFollowUps, rawItems, showHandled]);
+    { showHandled, todayIso },
+  ), [appSettings.operationsFollowUps, rawItems, showHandled, todayIso]);
   const horizonItems = useMemo(() => selectOperationsCalendarItems(allItems, {
     horizonDays,
     propertyFilter,
@@ -334,7 +318,7 @@ export function OperationsCalendarWorkspace({
     }
     next[item.id] = operationsFollowUpRecord(item, status, todayIso, 7);
     setSetting("operationsFollowUps", next);
-    const label = status === "snoozed" ? "snoozed for 7 days" : `marked ${status}`;
+    const label = status === "snoozed" ? "snoozed for 7 days" : status === "done" ? "review complete" : `marked ${status}`;
     setNotice(`${item.title} ${label}. The source record was not changed.`);
   };
 

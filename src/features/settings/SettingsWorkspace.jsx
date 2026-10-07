@@ -470,9 +470,9 @@ export function SettingsWorkspace({
         >
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div className={SETTINGS_CARD_CLASS}>
-              <Label>Theme</Label>
+              <Label htmlFor="workspace-theme">Theme</Label>
               <Select value={appSettings.theme} onValueChange={(value) => setSetting("theme", value)}>
-                <SelectTrigger className="mt-1">
+                <SelectTrigger id="workspace-theme" className="mt-1">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

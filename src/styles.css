@@ -103,6 +103,15 @@ a:focus-visible {
   background: rgba(13, 148, 136, 0.18);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 ::-webkit-scrollbar {
   height: 10px;
   width: 10px;
@@ -359,11 +368,15 @@ a:focus-visible {
 .theme-dark .text-teal-700 { color: #5eead4 !important; }
 .theme-dark .text-teal-900 { color: #ccfbf1 !important; }
 .theme-dark .border-slate-100 { border-color: #263244 !important; }
+.theme-dark .rt-detail-heading,
+.theme-dark .rt-linked-lease { background-color: #24213a; border-color: #52466e !important; }
+.theme-dark .rt-file-empty { background-color: #132338; border-color: #334968 !important; }
 
 /* Native modal focus containment and one shared detail-panel layout. */
 .rt-dialog-host { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; padding: 1rem; background: transparent; overflow: hidden; color: #0f172a; }
 .rt-dialog-host[open] { display: flex; align-items: center; justify-content: center; }
 .rt-dialog-host::backdrop { background: rgb(15 23 42 / 40%); }
+.theme-dark .rt-dialog-host { color: var(--rt-text); }
 .rt-dialog-panel[open] { align-items: stretch; justify-content: flex-end; padding: 0; }
 .rt-dialog-panel > div:not([hidden]) { max-width: 1280px; }
 .rt-dialog-panel .rt-record-detail { height: 100%; max-height: 100%; border-radius: 0; margin-left: auto; margin-right: 0; }
