@@ -60,6 +60,17 @@ function bindings(): { DB: D1Database; UPLOADS: R2Bucket } {
   return { DB: bound.DB, UPLOADS: bound.UPLOADS };
 }
 
+export async function recentImportConfirmations(owner: string) {
+  await ensureRetentionSchema();
+  const result = await bindings().DB.prepare(`
+    SELECT id, kind, imported_at, captured_at FROM mobile_submission_receipts WHERE owner_fingerprint = ?
+    UNION
+    SELECT id, kind, imported_at, captured_at FROM mobile_submissions WHERE owner_fingerprint = ? AND status = 'imported'
+    ORDER BY imported_at DESC LIMIT 30
+  `).bind(owner, owner).all<{ id: string; kind: string; imported_at: string; captured_at: string }>();
+  return result.results.map((row) => ({ id: row.id, kind: row.kind, importedAt: row.imported_at, capturedAt: row.captured_at }));
+}
+
 export function normalizeRetentionDays(value: unknown): RetentionDays {
   const parsed = Number(value);
   return RETENTION_DAY_OPTIONS.includes(parsed as RetentionDays) ? parsed as RetentionDays : 0;

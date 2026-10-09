@@ -126,14 +126,22 @@ export async function createMileageEntry(ownerFingerprint: string, input: Valida
   return (await findMileageEntry(id))!;
 }
 
-export async function listOwnerMileageEntries(ownerFingerprint: string): Promise<MobileMileageEntry[]> {
+export async function listOwnerMileageEntries(ownerFingerprint: string, includeImported = false): Promise<MobileMileageEntry[]> {
   await ensureSchema();
   const result = await database().prepare(`
     SELECT * FROM mobile_mileage_entries
-    WHERE owner_fingerprint = ? AND status != 'imported'
+    WHERE owner_fingerprint = ? ${includeImported ? "" : "AND status != 'imported'"}
     ORDER BY created_at DESC LIMIT 100
   `).bind(ownerFingerprint).all<Record<string, unknown>>();
   return result.results.map(mapMileageEntry);
+}
+
+export async function updateOwnerMileageEntry(id: string, owner: string, expectedUpdatedAt: string, input: ValidatedMileageInput): Promise<MobileMileageEntry | null> {
+  await ensureSchema();
+  const row = await database().prepare(`UPDATE mobile_mileage_entries SET property_label = ?, unit_label = ?, trip_date = ?, business_miles_tenths = ?, purpose = ?, start_location = ?, end_location = ?, note = ?, updated_at = ?
+    WHERE id = ? AND owner_fingerprint = ? AND status = 'pending' AND updated_at = ? RETURNING *`)
+    .bind(input.propertyLabel, input.unitLabel, input.tripDate, Math.round(input.businessMiles * 10), input.purpose, input.startLocation, input.endLocation, input.note, new Date().toISOString(), id, owner, expectedUpdatedAt).first<Record<string, unknown>>();
+  return row ? mapMileageEntry(row) : null;
 }
 
 export async function deleteOwnerMileageEntry(id: string, ownerFingerprint: string): Promise<boolean> {

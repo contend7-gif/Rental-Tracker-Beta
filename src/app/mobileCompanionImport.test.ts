@@ -80,3 +80,13 @@ test("maintenance filenames remain recognizable to the already released desktop"
   assert.match(workOrder?.title || "", /maintenance|kitchen|sink/i);
   assert.equal(workOrder?.propertyId, "p1");
 });
+
+test("structured mobile maintenance seeds exact title, location, and urgency without estimating a cost", () => {
+  for (const [urgency, priority] of [["Routine", "Low"], ["Soon", "Medium"], ["Urgent", "Urgent"]]) {
+    const suggestion = inferDocumentWorkOrderSuggestion({ document: { name: "maintenance.jpg", type: "Maintenance Photo", propertyId: "p1", unit: "Upper", sourceRef: { provider: "rental-tracker-companion", kind: "maintenance", note: `Issue: Fix cabinet hinge\nLocation: Kitchen\nUrgency: ${urgency}\nDetails: Door hanging loose.` } }, property: { id: "p1", name: "Example duplex" } });
+    assert.equal(suggestion?.title, "Fix cabinet hinge");
+    assert.match(suggestion?.description || "", /Location: Kitchen/);
+    assert.equal(suggestion?.priority, priority);
+    assert.equal(suggestion?.estimatedCost, undefined);
+  }
+});

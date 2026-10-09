@@ -291,6 +291,7 @@ export async function cancelChunkedUpload(id: string, owner: string): Promise<bo
 }
 
 export async function createSubmission(input: {
+  requestId?: string | null;
   ownerFingerprint: string;
   kind: MobileSubmission["kind"];
   file: File;
@@ -301,7 +302,7 @@ export async function createSubmission(input: {
 }): Promise<MobileSubmission> {
   await ensureSchema();
   const { DB, UPLOADS } = bindings();
-  const id = crypto.randomUUID();
+  const id = input.requestId && /^[a-f0-9-]{36}$/.test(input.requestId) ? `${input.ownerFingerprint}:${input.requestId}` : crypto.randomUUID();
   const now = new Date().toISOString();
   const originalFileName = input.kind === "maintenance" && !/^maintenance-/i.test(input.file.name)
     ? `maintenance-${input.file.name}`
@@ -310,6 +311,12 @@ export async function createSubmission(input: {
   const storageKey = `${input.kind === "maintenance" ? "maintenance" : "receipts"}/${input.ownerFingerprint}/${id}/${safeName}`;
   const bytes = await input.file.arrayBuffer();
   const sha256 = toHex(await crypto.subtle.digest("SHA-256", bytes));
+  const existing = await findStoredSubmission(id);
+  if (existing) {
+    if (existing.ownerFingerprint !== input.ownerFingerprint || existing.sha256 !== sha256 || existing.kind !== input.kind) throw new Error("This upload retry does not match its original capture.");
+    return publicSubmission(existing);
+  }
+  if (await hasImportReceipt(id)) return { id, status: "imported", kind: input.kind, propertyLabel: input.propertyLabel, unitLabel: input.unitLabel, note: input.note, originalFileName, contentType: input.file.type, byteSize: input.file.size, sha256, capturedAt: input.capturedAt, createdAt: now, updatedAt: now };
 
   await UPLOADS.put(storageKey, bytes, {
     httpMetadata: { contentType: input.file.type },
@@ -329,6 +336,8 @@ export async function createSubmission(input: {
       input.capturedAt, now, now,
     ).run();
   } catch (error) {
+    const completed = await findStoredSubmission(id);
+    if (completed?.ownerFingerprint === input.ownerFingerprint && completed.sha256 === sha256 && completed.kind === input.kind) return publicSubmission(completed);
     await UPLOADS.delete(storageKey);
     throw error;
   }
@@ -347,6 +356,15 @@ export async function listOwnerSubmissions(owner: string): Promise<MobileSubmiss
     ORDER BY created_at DESC LIMIT 100
   `).bind(owner).all<Record<string, unknown>>();
   return result.results.map(mapSubmission);
+}
+
+export async function updateOwnerSubmission(id: string, owner: string, expectedUpdatedAt: string, input: { propertyLabel: string | null; unitLabel: string | null; note: string | null }): Promise<MobileSubmission | null> {
+  await ensureSchema();
+  const row = await bindings().DB.prepare(`UPDATE mobile_submissions SET property_label = ?, unit_label = ?, note = ?, updated_at = ?
+    WHERE id = ? AND owner_fingerprint = ? AND status = 'pending' AND updated_at = ?
+    AND (kind != 'maintenance' OR (? IS NOT NULL AND ? IS NOT NULL)) RETURNING *`)
+    .bind(input.propertyLabel, input.unitLabel, input.note, new Date().toISOString(), id, owner, expectedUpdatedAt, input.propertyLabel, input.note).first<Record<string, unknown>>();
+  return row ? mapSubmission(row) : null;
 }
 
 export async function deleteOwnerSubmission(id: string, owner: string): Promise<boolean> {

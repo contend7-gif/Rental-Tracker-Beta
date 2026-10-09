@@ -13,6 +13,8 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 html { background: var(--wash); }
 body {
   margin: 0;
@@ -176,3 +178,72 @@ footer { padding: 22px 0 0; color: #82938f; text-align: center; font-size: 10px;
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
 }
+
+/* Compact mobile workspaces with the desktop palette. */
+:root { --wash: #f0f3fa; --line: #d7dfea; --muted: #58677c; }
+body { background: radial-gradient(circle at 95% 0, #e5ddfa, transparent 28rem), var(--wash); }
+.hero { padding: 16px 4px 20px; }
+.hero h1 { font-family: inherit; font-size: clamp(25px, 6vw, 34px); line-height: 1.13; letter-spacing: -.035em; }
+.hero > p:last-child { font-size: 14px; margin-top: 10px; }
+.workspace-nav { display: flex; gap: 6px; padding: 5px; border: 1px solid #ccd6e6; background: #e7edf6; border-radius: 15px; }
+.workspace-nav button { flex: 1; min-height: 46px; border: 0; border-radius: 11px; background: transparent; color: #506078; font-weight: 750; cursor: pointer; }
+.workspace-nav button[aria-current] { background: white; color: #244775; box-shadow: 0 2px 8px #24395415; }
+.connection-strip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 3px; color: #53647b; font-size: 11px; }
+.connection-strip button { border: 0; background: transparent; color: #285aa1; padding: 10px; min-height: 44px; cursor: pointer; }
+.capture-card { border-color: #cdd8ea; box-shadow: 0 10px 28px #2439540d; }
+.queue-section { border-color: #cfd8ec; margin-top: 0; }
+.section-heading { border-bottom: 1px solid #dde4ef; padding-bottom: 14px; }
+.capture-kind { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.capture-kind button { min-height: 82px; padding: 10px 8px; }
+.capture-kind button:nth-child(1).active { background: #e7efff; border-color: #5477b4; box-shadow: inset 0 0 0 1px #5477b4; }
+.capture-kind button:nth-child(2).active { background: #fff1df; border-color: #bb8b4a; box-shadow: inset 0 0 0 1px #bb8b4a; }
+.capture-kind button:nth-child(3).active { background: #f0eafa; border-color: #8d70b8; box-shadow: inset 0 0 0 1px #8d70b8; }
+.capture-kind span { line-height: 1.4; }
+.draft-hint, .handoff-help { color: #58677c; font-size: 12px; line-height: 1.5; }
+.draft-notice { border: 1px solid #c6d5ee; border-radius: 10px; padding: 11px; background: #edf3ff; font-size: 12px; line-height: 1.5; }
+.purpose-shortcuts { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0; }
+.purpose-shortcuts button { border: 1px solid #d9cfea; border-radius: 10px; background: #f5f0fc; color: #654887; padding: 10px; min-height: 44px; font-size: 12px; text-align: left; }
+.import-confirmations { margin-top: 20px; border-top: 1px solid #d9e2ee; }
+.import-confirmations h3 { font-size: 15px; margin-bottom: 6px; }
+.import-confirmations p { font-size: 12px; color: #58677c; line-height: 1.5; }
+.import-confirmation { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; border: 1px solid #ccdfdf; background: #eef7f5; padding: 12px; border-radius: 10px; margin-top: 8px; font-size: 12px; }
+.import-confirmation span { color: #316757; }
+button:focus-visible, a:focus-visible { outline: 3px solid #5477b4; outline-offset: 3px; }
+.text-button { min-height: 44px; }
+@media (max-width: 360px) { .capture-kind strong { font-size: 11px; } .time-chip { font-size: 10px; } }
+
+.settings-panel { margin-top: 16px; border: 1px solid #cdd8e8; border-radius: 18px; padding: 20px; background: #fff; box-shadow: 0 6px 20px #24395408; }
+.settings-panel h2 { font-size: 20px; margin: 6px 0 12px; }
+.settings-panel p { color: #58677c; font-size: 13px; line-height: 1.6; }
+.connection-details { font-size: 12px; margin: 16px 0; }
+.connection-details div { padding: 10px 0; border-top: 1px solid #e2e8f1; }
+.connection-details dt { color: #58677c; }
+.connection-details dd { margin: 4px 0 0; font-weight: 650; }
+.saved-draft { border-top: 1px solid #e2e8f1; padding: 14px 0; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.saved-draft > div:first-child { min-width: 0; flex: 1 1 150px; }
+.saved-draft span, .saved-draft small { display: block; margin-top: 5px; color: #58677c; font-size: 12px; overflow-wrap: anywhere; }
+.draft-actions { display: flex; gap: 10px; align-items: center; }
+.settings-panel details { border-top: 1px solid #e2e8f1; padding: 12px 0; }
+.settings-panel summary { cursor: pointer; min-height: 32px; font-size: 14px; font-weight: 650; }
+.import-confirmation small { flex-basis: 100%; color: #58677c; }
+
+.capture-review { margin: auto; max-width: calc(100vw - 24px); width: min(520px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid #c3d2e8; border-radius: 20px; padding: 22px; color: var(--ink); background: #fff; box-shadow: 0 20px 70px #142b4940; }
+.capture-review::backdrop { background: #182f4c99; }
+.capture-review h2 { font-size: 23px; margin: 8px 0; }
+.review-intro { font-size: 13px; line-height: 1.5; color: #58677c; }
+.review-details { font-size: 13px; }
+.review-details div { padding: 10px 0; border-bottom: 1px solid #e2e8f1; }
+.review-details dt { color: #58677c; font-size: 12px; }
+.review-details dd { margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.capture-review h3 { font-size: 15px; }
+.review-files { padding-left: 20px; }
+.review-files li { margin: 12px 0; overflow-wrap: anywhere; font-size: 12px; }
+.review-files img { max-width: 100%; max-height: 200px; object-fit: contain; border-radius: 8px; background: #eef2f8; }
+.review-files span { display: block; color: #58677c; margin-top: 4px; }
+.review-actions { display: grid; gap: 10px; margin-top: 18px; }
+.review-actions button { margin: 0; width: 100%; }
+
+.maintenance-fields, .edit-fields { display: grid; gap: 12px; }
+.maintenance-fields label, .edit-fields label { display: grid; gap: 6px; }
+.edit-fields label span { font-size: 12px; color: #58677c; }
+.edit-fields input, .edit-fields select, .edit-fields textarea { width: 100%; min-width: 0; border: 1px solid #cdd8e8; border-radius: 10px; padding: 12px; background: #fff; color: #20314b; font: inherit; }

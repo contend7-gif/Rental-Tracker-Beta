@@ -1,15 +1,19 @@
+import { parseMaintenanceReport } from "../../../companion/lib/maintenance-report.ts";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Cloud, Loader2, MapPinned, RefreshCw, Settings2, Smartphone, Trash2, Wrench } from "lucide-react";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 
 export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDeleteRecords, onImport, onMileageReview, onOpenSettings, openConfirmDialog }) {
+  const [group, setGroup] = useState("all");
+  const [lastRefresh, setLastRefresh] = useState("");
   const [status, setStatus] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [mileageEntries, setMileageEntries] = useState([]);
   const [busy, setBusy] = useState(false);
   const [importingId, setImportingId] = useState("");
   const [removingId, setRemovingId] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [message, setMessage] = useState("");
   const refreshInFlightRef = useRef(false);
 
@@ -43,9 +47,10 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
       if (mileageResult?.ok === false) throw new Error(mileageResult.message || mileageResult.error || "Could not refresh mobile mileage.");
       setSubmissions(result?.submissions || []);
       setMileageEntries(mileageResult?.mileageEntries || []);
+      setLastRefresh(new Date().toISOString()); setSyncError("");
       if (!background && catalogWarning) setMessage(`Inbox refreshed, but ${catalogWarning}`);
     } catch (error) {
-      if (!background) setMessage(error instanceof Error ? error.message : "Could not refresh Mobile Inbox.");
+      setSyncError(error instanceof Error ? error.message : "Could not refresh Mobile Inbox.");
     } finally {
       refreshInFlightRef.current = false;
       if (!background) setBusy(false);
@@ -135,6 +140,11 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
     );
   }
 
+  const receipts = submissions.filter(item => item.kind !== "maintenance");
+  const maintenance = submissions.filter(item => item.kind === "maintenance");
+  const shownSubmissions = group === "mileage" ? [] : group === "maintenance" ? maintenance : group === "receipt" ? receipts : submissions;
+  const shownMileage = group === "all" || group === "mileage" ? mileageEntries : [];
+  const handoffGroups = [{ key: "receipt", label: "Receipts", count: receipts.length }, { key: "maintenance", label: "Maintenance", count: maintenance.length }, { key: "mileage", label: "Mileage", count: mileageEntries.length }];
   return (
     <section className="rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50/90 to-white p-3.5" aria-label="Mobile Inbox">
       <div className="flex flex-wrap items-center gap-3">
@@ -158,6 +168,10 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
         </Button>
       </div>
 
+      {status?.configured && <div className="mt-3 grid gap-2 sm:grid-cols-3" aria-label="Desktop handoff summary">{handoffGroups.map(item => <button key={item.key} type="button" aria-pressed={group === item.key} onClick={() => setGroup(item.key)} className={`rounded-lg border p-3 text-left ${group === item.key ? "border-blue-400 bg-blue-50" : "border-slate-200 bg-white"}`}><span className="block text-xs text-slate-600">{item.label}</span><strong className="mt-1 block text-xl text-slate-950">{item.count}</strong><span className="mt-1 block text-xs text-blue-700">Review {item.label.toLowerCase()}</span></button>)}</div>}
+      {status?.configured && <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600"><button type="button" className="rounded px-2 py-1 text-blue-700" aria-pressed={group === "all"} onClick={() => setGroup("all")}>Show all</button><span>{lastRefresh ? `Updated ${formatCaptureTime(lastRefresh)}` : "Waiting for refresh"} · Pickup locks phone editing</span></div>}
+      {syncError && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{syncError} · Displayed captures may be out of date.</p>}
+      {status?.configured && group !== "all" && shownSubmissions.length + shownMileage.length === 0 && <p className="mt-3 text-xs text-slate-600">No {handoffGroups.find(item => item.key === group)?.label.toLowerCase()} waiting. Choose another group or Show all.</p>}
       {message ? <p className="mt-3 rounded-lg bg-white px-3 py-2 text-xs text-slate-700">{message}</p> : null}
 
       {!status?.configured && !busy ? (
@@ -173,22 +187,23 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
         </div>
       ) : null}
 
-      {submissions.length > 0 ? (
+      {shownSubmissions.length > 0 ? (
         <div className="mt-3 grid gap-2">
-          {submissions.map((submission) => (
+          {shownSubmissions.map((submission) => (
             <article key={submission.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                 {submission.kind === "maintenance" ? <Wrench className="h-4 w-4" /> : <Cloud className="h-4 w-4" />}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <div className="truncate text-sm font-medium text-slate-950">{submission.kind === "maintenance" ? "Maintenance report" : submission.originalFileName}</div>
+                  <div className="truncate text-sm font-medium text-slate-950">{submission.kind === "maintenance" ? parseMaintenanceReport(submission.note)?.title || "Maintenance report" : submission.originalFileName}</div>
                   <Badge variant="secondary">{submission.kind === "maintenance" ? "Maintenance" : "Receipt"}</Badge>
                 </div>
                 <div className="truncate text-xs text-slate-500">
                   {submission.propertyLabel || "Property not assigned"}{submission.unitLabel ? ` · ${submission.unitLabel}` : ""} · {formatCaptureTime(submission.createdAt)}
                 </div>
-                {submission.note ? <div className="mt-1 truncate text-xs text-slate-600">“{submission.note}”</div> : null}
+                {submission.kind === "maintenance" && parseMaintenanceReport(submission.note) && <div className="mt-1 text-xs text-amber-800">{parseMaintenanceReport(submission.note).urgency} · {parseMaintenanceReport(submission.note).location}</div>}
+                {submission.note ? <div className="mt-1 truncate text-xs text-slate-600">“{parseMaintenanceReport(submission.note)?.details || submission.note}”</div> : null}
               </div>
               {submission.status === "claimed" ? <Badge variant="secondary">In review</Badge> : null}
               {canDeleteRecords && desktopCompanionApi?.remove ? (
@@ -206,9 +221,9 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
         </div>
       ) : null}
 
-      {mileageEntries.length > 0 ? (
+      {shownMileage.length > 0 ? (
         <div className="mt-3 grid gap-2">
-          {mileageEntries.map((entry) => (
+          {shownMileage.map((entry) => (
             <article key={entry.id} className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
                 <MapPinned className="h-4 w-4" />

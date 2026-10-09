@@ -1,3 +1,4 @@
+import { cleanCaptureNote } from "@/lib/maintenance-report";
 import { getRequestUser, ownerFingerprint } from "@/lib/auth";
 import {
   cleanOptionalText,
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
   const requestedKind = payload.kind === "maintenance" ? "maintenance" : "receipt";
   const propertyLabel = cleanOptionalText(typeof payload.propertyLabel === "string" ? payload.propertyLabel : null, 120);
   const unitLabel = cleanOptionalText(typeof payload.unitLabel === "string" ? payload.unitLabel : null, 80);
-  const note = cleanOptionalText(typeof payload.note === "string" ? payload.note : null, 500);
+  const note = cleanCaptureNote(payload.note);
   if (requestedKind === "maintenance" && !propertyLabel) {
     return Response.json({ error: "Choose or enter the property for this maintenance issue." }, { status: 400 });
   }

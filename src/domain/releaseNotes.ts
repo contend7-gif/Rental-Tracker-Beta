@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.10.0",
+    releaseDate: "2026-10-09",
+    title: "A clearer phone-to-desktop handoff",
+    summary: "Review receipts, maintenance reports, and mileage in focused Mobile Inbox groups, with structured maintenance details carried into work-order drafts.",
+    changes: [
+      "See separate receipt, maintenance, and mileage counts in Mobile Inbox and open each group's existing desktop review flow.",
+      "Show the latest successful inbox refresh and surface connection errors while keeping the previous captures visible.",
+      "Carry the phone's maintenance issue title, location, and urgency into a desktop work-order draft without assuming a repair cost or creating a work order automatically.",
+      "Support the refreshed private companion: capture review before sending, saved text drafts, upload retries, dated import confirmations, and editing Sent details before desktop pickup.",
+      "Keep desktop pickup in control: claimed captures are locked against phone edits and stale edits cannot overwrite newer details.",
+    ],
+  },
+  {
     version: "1.9.10",
     releaseDate: "2026-10-07",
     title: "Reliable drafts and connected rental records",

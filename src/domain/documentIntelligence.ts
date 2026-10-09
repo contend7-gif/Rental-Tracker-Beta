@@ -1,3 +1,4 @@
+import { parseMaintenanceReport } from "../../companion/lib/maintenance-report.ts";
 import type { DocumentItem, Lease, Property, Transaction, Unit, Vendor, WorkOrder } from "../models.ts";
 
 export type DocumentTagSuggestionSource = "name" | "context" | "ocr" | "ocr_match";
@@ -94,7 +95,7 @@ export type DocumentWorkOrderSuggestion = {
 };
 
 export type InferDocumentTagsArgs = {
-  document: Pick<DocumentItem, "name" | "type" | "tags" | "extractedText"> & Partial<Pick<DocumentItem, "propertyId" | "unit" | "unitScopeOverride" | "ocrFieldOverrides">>;
+  document: Pick<DocumentItem, "name" | "type" | "tags" | "extractedText"> & Partial<Pick<DocumentItem, "propertyId" | "unit" | "unitScopeOverride" | "ocrFieldOverrides" | "sourceRef">>;
   property?: Pick<Property, "id" | "name" | "address"> | null;
   lease?: Pick<Lease, "id" | "tenantName" | "unit" | "propertyId"> | null;
   transaction?: Pick<Transaction, "id" | "type" | "category" | "description" | "vendor" | "unit" | "propertyId" | "date" | "amount" | "invoiceRef"> | null;
@@ -1646,6 +1647,18 @@ export function inferDocumentExpenseSuggestion(args: InferDocumentTagsArgs, prep
 
 export function inferDocumentWorkOrderSuggestion(args: InferDocumentTagsArgs, prepared?: PreparedDocumentAnalysis): DocumentWorkOrderSuggestion | null {
   const { document, property, lease, transaction, workOrder, vendor, candidateVendors = [] } = args;
+  const mobileSource = document.sourceRef;
+  const mobileReport = mobileSource?.provider === "rental-tracker-companion" && mobileSource?.kind === "maintenance" ? parseMaintenanceReport(String(mobileSource.note || "")) : null;
+  if (mobileReport && !workOrder) {
+    const propertyId = String(document.propertyId || property?.id || "").trim();
+    if (!propertyId) return null;
+    return { propertyId, unit: String(document.unit || "Shared"), title: mobileReport.title,
+      description: `Location: ${mobileReport.location}
+${mobileReport.details}`,
+      priority: mobileReport.urgency === "Urgent" ? "Urgent" : mobileReport.urgency === "Soon" ? "Medium" : "Low",
+      vendor: "", confidence: "high", sources: ["context"] };
+  }
+
   const extractedText = normalizeExtractedDocumentText(document.extractedText);
   const extractedSearchText = normalizeSearchText(extractedText);
   const nameText = String(document.name || "").toLowerCase();
