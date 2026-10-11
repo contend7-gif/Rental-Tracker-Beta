@@ -8,6 +8,17 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.10.1",
+    releaseDate: "2026-10-10",
+    title: "Companion captures open for review",
+    summary: "Fix the Invalid Mobile Companion capture id error when reviewing newer phone uploads in the desktop app.",
+    changes: [
+      "Accept retry-safe companion capture IDs when reviewing, downloading, completing, or removing captures, while keeping older uploads compatible.",
+      "Review and import captures already waiting in Mobile Inbox without uploading them again.",
+      "Show feedback in Mobile Inbox when a capture or mileage review cannot open, instead of leaving the button with no visible response.",
+    ],
+  },
+  {
     version: "1.10.0",
     releaseDate: "2026-10-09",
     title: "A clearer phone-to-desktop handoff",

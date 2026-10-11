@@ -78,13 +78,18 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
     setImportingId(submission.id);
     setMessage("");
     try {
-      const opened = await onImport?.(submission);
+      if (!onImport) throw new Error("Capture review is unavailable. Reopen the desktop app and try again.");
+      const opened = await onImport(submission);
       if (opened) {
         setSubmissions((current) => current.map((item) =>
           item.id === submission.id ? { ...item, status: "claimed" } : item,
         ));
         setMessage("Capture opened in the existing document review flow.");
+      } else {
+        setMessage("This capture could not open. Check the message at the top of Documents, then try again.");
       }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "This capture could not open. Try again.");
     } finally {
       setImportingId("");
     }
@@ -94,12 +99,17 @@ export function MobileInboxPanel({ desktopCompanionApi, propertyCatalog, canDele
     setImportingId(entry.id);
     setMessage("");
     try {
-      const opened = await onMileageReview?.(entry);
+      if (!onMileageReview) throw new Error("Mileage review is unavailable. Reopen the desktop app and try again.");
+      const opened = await onMileageReview(entry);
       if (opened) {
         setMileageEntries((current) => current.map((item) =>
           item.id === entry.id ? { ...item, status: "claimed" } : item,
         ));
+      } else {
+        setMessage("This trip could not open. Check the message at the top of Documents, then try again.");
       }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "This trip could not open. Try again.");
     } finally {
       setImportingId("");
     }

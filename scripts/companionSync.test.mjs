@@ -2,6 +2,34 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createCompanionSyncService } from "../electron/companionSyncService.mjs";
 
+test("retry-safe companion capture IDs survive claim, download, completion, and removal", async () => {
+  const id = `${"a".repeat(64)}:a1b2c3d4-e5f6-7890-abcd-123456789012`;
+  const paths = [];
+  const service = createCompanionSyncService({
+    secretStore: createMemorySecretStore({ "companion.siteUrl": "https://companion.example.test", "companion.syncSecret": "fictional-key" }),
+    fetchImpl: async (url) => {
+      paths.push(new URL(url).pathname);
+      return String(url).endsWith("/file")
+        ? new Response("example capture", { headers: { "content-type": "image/png", "x-rental-submission": encodeURIComponent(JSON.stringify({ id })) } })
+        : Response.json({ submission: { id } });
+    },
+  });
+  await service.claim(id);
+  const downloaded = await service.download(id);
+  await service.complete(id);
+  await service.remove(id);
+  assert.equal(downloaded.submission.id, id);
+  assert.equal(downloaded.dataUrl, `data:image/png;base64,${Buffer.from("example capture").toString("base64")}`);
+  assert.deepEqual(paths, ["/claim", "/file", "/complete", ""].map(suffix => `/api/desktop/submissions/${encodeURIComponent(id)}${suffix}`));
+});
+
+test("capture ID validation rejects malformed prefixes and route injection before fetching", async () => {
+  const service = createCompanionSyncService({ secretStore: createMemorySecretStore(), fetchImpl: () => { throw new Error("Unexpected fetch"); } });
+  for (const id of ["../submissions", `${"a".repeat(63)}:a1b2c3d4-e5f6-7890-abcd-123456789012`, `${"a".repeat(64)}:../anything`, `${"a".repeat(64)}:a1b2c3d4-e5f6-7890-abcd-123456789012/file`]) {
+    await assert.rejects(service.claim(id), /Invalid Mobile Companion capture id/);
+  }
+});
+
 function createMemorySecretStore(initial = {}) {
   const values = new Map(Object.entries(initial));
   return {

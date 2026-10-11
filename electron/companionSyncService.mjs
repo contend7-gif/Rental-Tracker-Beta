@@ -173,6 +173,10 @@ function normalizeSiteUrl(value) {
 
 function requireSubmissionId(value) {
   const id = String(value || "").trim();
-  if (!/^[a-f0-9-]{20,80}$/i.test(id)) throw new Error("Invalid Mobile Companion capture id.");
+  // Standard uploads use an owner SHA256 prefix plus their retry UUID.
+  // Chunked uploads and older captures still use the unprefixed identifier.
+  const legacyId = /^[a-f0-9-]{20,80}$/i.test(id);
+  const retrySafeId = /^[a-f0-9]{64}:[a-f0-9-]{36}$/i.test(id);
+  if (!legacyId && !retrySafeId) throw new Error("Invalid Mobile Companion capture id.");
   return encodeURIComponent(id);
 }
