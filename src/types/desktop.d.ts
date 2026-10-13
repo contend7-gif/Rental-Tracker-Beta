@@ -79,6 +79,8 @@ export type CompanionMileageEntry = {
 };
 
 export type DesktopCompanionApi = {
+  syncSnapshot?: (snapshot: import('../../companion/lib/desktop-snapshot.ts').DesktopSnapshot) => Promise<DesktopResult & { generatedAt?: string; receivedAt?: string }>;
+  clearSnapshot?: () => Promise<DesktopResult>;
   getStatus: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string; hasSyncSecret?: boolean; hasSitesBypassToken?: boolean }>;
   configure: (payload: { siteUrl: string; syncSecret: string; sitesBypassToken?: string }) => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;
   disconnect: () => Promise<DesktopResult & { configured?: boolean; siteUrl?: string }>;

@@ -18,6 +18,29 @@ immediately by default, or after an optional 7- or 30-day recovery window. The
 companion keeps only a minimal audit receipt after cloud file cleanup and never
 creates a permanent offline document cache on the phone.
 
+## Read-only desktop snapshots
+
+Desktop snapshot sharing is off by default, including on existing installations.
+An Admin enables it under Settings → Admin & Tools → Mobile companion. The
+desktop pushes an allowlisted snapshot after changes and refreshes its timestamp
+at least every five minutes while open and paired. No source files, private notes,
+credentials, or attachment bytes are sent. Overview reads the last cloud copy,
+clearly timestamps it, and warns when it is over 24 hours old.
+
+The snapshot contains active properties and units, ongoing lease records, open
+work orders, the latest 200 non-voided transactions, and recorded loan details.
+Transaction filters operate on those 200 records, not full desktop history.
+Optional payoff dates reuse the desktop planning calculation and show their
+constant-rate/payment assumptions; they are estimates, not lender payoff quotes.
+Dates follow the desktop's local calendar day. The server refuses future-clock
+uploads and prevents an older upload from replacing a newer snapshot.
+
+Turning sharing off stops uploads but retains the last cloud copy. The desktop's
+Stop sharing & clear cloud snapshot control removes it. Capture-file retention
+is separate and never deletes desktop records. Snapshot writes and clearing
+require desktop authorization; reads rely on the owner-private Site boundary
+and signed-in browser identity. Keep the Site owner-private.
+
 ## Local development
 
 ```text

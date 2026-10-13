@@ -89,6 +89,7 @@ function SettingsSectionShell({ title, description, badge, collapsed, onToggle, 
 }
 
 export function SettingsWorkspace({
+  companionSnapshotSync,
   activeAccessRoleOption,
   aiDocumentCopilotReady,
   appSettings,
@@ -397,6 +398,8 @@ export function SettingsWorkspace({
           onToggle={() => setSettingsSectionCollapsed((prev) => ({ ...prev, companion: !prev.companion }))}
         >
           <MobileCompanionSettings
+            companionSnapshotSync={companionSnapshotSync}
+            canManageDataAdmin={canManageDataAdmin}
             appSettings={appSettings}
             desktopCompanionApi={desktopCompanionApi}
             setSetting={setSetting}

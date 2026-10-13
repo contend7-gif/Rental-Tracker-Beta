@@ -330,6 +330,10 @@ test("AI settings are sanitized and preserved", () => {
 });
 
 test("mobile companion is opt-in for fresh installs and preserves older installs", () => {
+  assert.equal(DEFAULT_APP_SETTINGS.mobileCompanionSnapshotEnabled, false);
+  assert.equal(sanitizeAppSettings({ theme: "light" }).mobileCompanionSnapshotEnabled, false);
+  assert.equal(sanitizeAppSettings({ mobileCompanionSnapshotEnabled: "yes" }).mobileCompanionSnapshotEnabled, false);
+  assert.equal(sanitizeAppSettings({ mobileCompanionSnapshotEnabled: true }).mobileCompanionSnapshotEnabled, true);
   assert.equal(DEFAULT_APP_SETTINGS.mobileCompanionEnabled, false);
   assert.equal(sanitizeAppSettings({}).mobileCompanionEnabled, false);
   assert.equal(sanitizeAppSettings({ theme: "light", defaultView: "dashboard" }).mobileCompanionEnabled, true);

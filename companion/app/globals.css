@@ -244,6 +244,28 @@ button:focus-visible, a:focus-visible { outline: 3px solid #5477b4; outline-offs
 .review-actions button { margin: 0; width: 100%; }
 
 .maintenance-fields, .edit-fields { display: grid; gap: 12px; }
+.workspace-nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.workspace-nav button { min-width: 0; padding-left: 5px; padding-right: 5px; }
+.overview-panel { margin-top: 18px; padding: 20px; border: 1px solid #c7d6ea; border-radius: 20px; background: linear-gradient(145deg,#f2f6ff,#fff 65%); }
+.overview-panel[hidden] { display: none; }
+.snapshot-stamp,.snapshot-help { font-size: 12px; line-height: 1.6; color: #58677c; }
+.snapshot-empty,.snapshot-card { padding: 16px; border: 1px solid #d0dbee; border-radius: 14px; background: #fff; margin-top: 14px; }
+.snapshot-filters { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap: 10px; margin: 16px 0; }
+.snapshot-filters label { min-width: 0; display: grid; gap: 6px; font-size: 12px; color: #58677c; }
+.snapshot-filters select,.snapshot-filters input { min-width: 0; width: 100%; padding: 11px 8px; border: 1px solid #c7d6ea; border-radius: 10px; background: white; color: var(--ink); font: inherit; font-size: 14px; }
+.snapshot-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.snapshot-metrics div { border: 1px solid #c8d8ef; border-radius: 12px; background: #eaf1ff; padding: 12px 8px; }
+.snapshot-metrics strong,.snapshot-metrics span { display: block; }
+.snapshot-metrics strong { font-size: 23px; color: #244c89; }.snapshot-metrics span { font-size: 11px; color: #58677c; margin-top: 4px; }
+.snapshot-modes { display: flex; gap: 6px; margin: 18px 0; }.snapshot-modes button { flex: 1; min-width: 0; padding: 10px 4px; font: inherit; font-size: 12px; border: 1px solid #c8d8ef; border-radius: 10px; background: #fff; color: #324a6b; }
+.snapshot-modes button[aria-pressed=true] { background: #294f8d; color: white; border-color: #294f8d; }
+.snapshot-record { border: 1px solid #c7d6ea; border-left: 4px solid #6c92c7; border-radius: 12px; background: #fff; padding: 14px; margin-bottom: 12px; overflow-wrap: anywhere; }
+.snapshot-record summary { cursor: pointer; font-size: 14px; }.snapshot-record summary strong,.snapshot-record summary span { display: block; }.snapshot-record summary span { color: #58677c; font-size: 12px; margin-top: 5px; }.snapshot-record summary b { display: block; margin-top: 8px; font-size: 15px; }
+.snapshot-record.transaction { border-left-color: #bd8b58; }.snapshot-record.income { border-left-color: #5b947d; }.snapshot-record.mortgage { border-left-color: #8d77ad; }
+.snapshot-detail,.snapshot-line { padding: 10px 0; border-top: 1px solid #e1e8f4; font-size: 13px; }.snapshot-line { display: flex; justify-content: space-between; gap: 12px; }
+.snapshot-detail p,.snapshot-record p { font-size: 12px; line-height: 1.6; color: #58677c; }.overview-panel h3 { font-size: 14px; margin: 16px 0 10px; }
+.snapshot-values { font-size: 12px; }.snapshot-values div { display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; border-top: 1px solid #e1e8f4; padding: 10px 0; }.snapshot-values dt { color: #58677c; }.snapshot-values dd { margin: 0; }
+@media(max-width:360px) { .overview-panel { padding: 14px; }.snapshot-filters { grid-template-columns: minmax(0,1fr); }.workspace-nav button { font-size: 12px; } }
 .maintenance-fields label, .edit-fields label { display: grid; gap: 6px; }
 .edit-fields label span { font-size: 12px; color: #58677c; }
 .edit-fields input, .edit-fields select, .edit-fields textarea { width: 100%; min-width: 0; border: 1px solid #cdd8e8; border-radius: 10px; padding: 12px; background: #fff; color: #20314b; font: inherit; }

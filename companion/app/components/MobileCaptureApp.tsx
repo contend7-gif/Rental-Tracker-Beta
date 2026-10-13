@@ -9,6 +9,7 @@ import type { RetentionOverview } from "@/lib/retention";
 import { emptyMemory, hasDraftContent, parseCaptureMemory, rememberPurpose, type CaptureDraft, type CaptureMemory } from "@/lib/capture-drafts";
 
 import { formatMaintenanceReport, parseMaintenanceReport, type MaintenanceReport } from "@/lib/maintenance-report";
+import { DesktopOverview } from './DesktopOverview';
 
 type PendingEdit = { id: string; type: "capture" | "mileage"; kind: CaptureKind; expectedUpdatedAt: string; propertyLabel: string; unitLabel: string; note: string; tripDate: string; businessMiles: string; purpose: string; startLocation: string; endLocation: string; maintenanceTitle: string; maintenanceLocation: string; maintenanceUrgency: MaintenanceReport["urgency"] };
 
@@ -42,7 +43,7 @@ export function MobileCaptureApp({ displayName, signOutPath, draftOwner, compani
   const [reviewing, setReviewing] = useState(false);
   const [reviewImages, setReviewImages] = useState<string[]>([]);
   const reviewDialogRef = useRef<HTMLDialogElement>(null);
-  const [screen, setScreen] = useState<"capture" | "inbox" | "settings">("capture");
+  const [screen, setScreen] = useState<"overview" | "capture" | "inbox" | "settings">("overview");
   const [memoryReady, setMemoryReady] = useState(false);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -628,16 +629,17 @@ export function MobileCaptureApp({ displayName, signOutPath, draftOwner, compani
       </header>
 
       <section className="hero">
-        <p className="eyebrow">{screen === "capture" ? "FIELD CAPTURE" : screen === "inbox" ? "PHONE → DESKTOP" : "YOUR COMPANION"}</p>
-        <h1>{screen === "capture" ? "Capture it now. Finish it at your desk." : screen === "inbox" ? "Your capture inbox" : "Settings"}</h1>
-        <p>{screen === "capture" ? "Send receipts, maintenance photos, and business mileage while the details are fresh." : screen === "inbox" ? "Track what is waiting for review and what your desktop has imported." : "Manage your connection, saved drafts, and private cloud storage."}</p>
+        <p className="eyebrow">{screen === "overview" ? "YOUR RENTALS, WITH YOU" : screen === "capture" ? "FIELD CAPTURE" : screen === "inbox" ? "PHONE → DESKTOP" : "YOUR COMPANION"}</p>
+        <h1>{screen === "overview" ? "Check in from anywhere." : screen === "capture" ? "Capture it now. Finish it at your desk." : screen === "inbox" ? "Your capture inbox" : "Settings"}</h1>
+        <p>{screen === "overview" ? "Check your properties, recent transactions, and mortgages from the latest desktop snapshot." : screen === "capture" ? "Send receipts, maintenance photos, and business mileage while the details are fresh." : screen === "inbox" ? "Track what is waiting for review and what your desktop has imported." : "Manage your connection, saved drafts, and private cloud storage."}</p>
       </section>
 
       <nav className="workspace-nav" aria-label="Companion sections">
-        {(["capture", "inbox", "settings"] as const).map((tab) => <button type="button" key={tab} aria-current={screen === tab ? "page" : undefined} onClick={() => setScreen(tab)}>{tab === "capture" ? "Capture" : tab === "inbox" ? `Inbox${pendingCount ? ` · ${pendingCount}` : ""}` : "Settings"}</button>)}
+        {(["overview", "capture", "inbox", "settings"] as const).map((tab) => <button type="button" key={tab} aria-current={screen === tab ? "page" : undefined} onClick={() => setScreen(tab)}>{tab === "overview" ? "Overview" : tab === "capture" ? "Capture" : tab === "inbox" ? `Inbox${pendingCount ? ` · ${pendingCount}` : ""}` : "Settings"}</button>)}
       </nav>
-      <div className="connection-strip" role="status"><span>{!online ? "Offline · keep selected files open" : syncError ? "Sync needs attention" : lastSync ? `Updated ${new Date(lastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Connecting to your inbox…"}</span><button type="button" onClick={() => void loadData()}>Refresh</button></div>
-      {syncError && <p className="alert error" role="alert">{syncError} Your unfinished capture is still here.</p>}
+      {screen !== "overview" && <div className="connection-strip" role="status"><span>{!online ? "Offline · keep selected files open" : syncError ? "Sync needs attention" : lastSync ? `Updated ${new Date(lastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Connecting to your inbox…"}</span><button type="button" onClick={() => void loadData()}>Refresh</button></div>}
+      {screen !== "overview" && syncError && <p className="alert error" role="alert">{syncError} Your unfinished capture is still here.</p>}
+      <DesktopOverview active={screen === "overview"} />
 
       <section hidden={screen !== "capture"} className="capture-card" aria-labelledby="capture-title">
         <div className="section-heading">
@@ -921,6 +923,7 @@ export function MobileCaptureApp({ displayName, signOutPath, draftOwner, compani
         <p>{catalogError || (usePropertyChoices ? `${propertyCatalog.length} ${propertyCatalog.length === 1 ? "property" : "properties"} available from your desktop.` : "No property choices have arrived yet. Manual entry is available for receipts and maintenance.")}</p>
         <dl className="connection-details"><div><dt>Desktop supplied choices</dt><dd>{catalogUpdatedAt ? formatConfirmationDate(catalogUpdatedAt) : "Not available yet"}</dd></div><div><dt>Companion refreshed</dt><dd>{lastSync ? formatConfirmationDate(lastSync) : "Waiting for a successful refresh"}</dd></div></dl>
         <button className="secondary-button" type="button" onClick={() => void loadData()}>Refresh connection</button>
+        <details><summary>Read-only desktop overview</summary><p>Enable Read-only phone overview in desktop Settings → Admin &amp; Tools → Mobile companion. The desktop shares properties, leases, recent transactions, open maintenance, and mortgage details while it is open. Overview shows the snapshot timestamp; refreshing this phone page cannot wake your laptop. Turn sharing off and clear the cloud snapshot from desktop Settings to remove that copy. Capture-file retention does not clear the snapshot.</p></details>
         <p className="draft-hint">This shows property sync history, not whether your desktop is currently running. Mileage needs synced property choices.</p>
       </section>
       <section hidden={screen !== "settings"} className="settings-panel" aria-labelledby="drafts-title">
@@ -1052,7 +1055,7 @@ async function prepareSelectedCapture(
   }
   const pdfBytes = buildJpegPagesPdf(pages);
   const bundle = new File(
-    [pdfBytes],
+    [new Uint8Array(pdfBytes)],
     `${captureKind === "maintenance" ? "maintenance" : "receipt"}-pages-${localIsoDate()}.pdf`,
     { type: "application/pdf", lastModified: Date.now() },
   );

@@ -671,6 +671,7 @@ export function AppWorkspaces(props) {
   const taxWorkspaceContract = buildTaxWorkspaceContract(props, { taxWorkspaceUiProps });
   const taxWorkspaceProps = flattenWorkspaceContract(taxWorkspaceContract);
   const settingsWorkspaceProps = {
+    companionSnapshotSync: props.companionSnapshotSync,
     ...formattingProps,
     ...pickProps(props, SETTINGS_WORKSPACE_PROP_KEYS),
     desktopDiagnosticEventClass: props.desktopDiagnosticEventClass,

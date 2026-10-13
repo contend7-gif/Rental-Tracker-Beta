@@ -7,6 +7,8 @@ export const COMPANION_CHANNELS = {
   disconnect: "companion:disconnect",
   list: "companion:list",
   syncPropertyCatalog: "companion:sync-property-catalog",
+  syncSnapshot: "companion:sync-snapshot",
+  clearSnapshot: "companion:clear-snapshot",
   listMileage: "companion:mileage-list",
   claimMileage: "companion:mileage-claim",
   completeMileage: "companion:mileage-complete",
@@ -34,6 +36,8 @@ export function registerCompanionSyncIpc({ secretStore, recordDesktopHealthEvent
   handle(COMPANION_CHANNELS.configure, (payload) => service.configure(payload));
   handle(COMPANION_CHANNELS.disconnect, () => service.disconnect());
   handle(COMPANION_CHANNELS.list, () => service.list());
+  handle(COMPANION_CHANNELS.syncSnapshot, (payload) => service.syncSnapshot(payload));
+  handle(COMPANION_CHANNELS.clearSnapshot, () => service.clearSnapshot());
   handle(COMPANION_CHANNELS.syncPropertyCatalog, (payload) => service.syncPropertyCatalog(payload));
   handle(COMPANION_CHANNELS.listMileage, () => service.listMileage());
   handle(COMPANION_CHANNELS.claimMileage, (payload) => service.claimMileage(payload?.id));

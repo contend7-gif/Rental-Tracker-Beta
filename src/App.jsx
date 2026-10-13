@@ -1,5 +1,5 @@
 import { usePlanningWorkspace } from "./app/usePlanningWorkspace.js";
-import React, { lazy, Suspense, useEffect, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { currency, getRentalUsePctForDate, getRentalUsePctForRange } from "./domain/accounting.ts";
 import { adjustedAssetDepreciationForYear } from "./domain/assetDepreciation.ts";
 import {
@@ -96,6 +96,8 @@ import { useDocumentAttachmentWorkflow } from "./app/useDocumentAttachmentWorkfl
 import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollections.ts";
 import { useDesktopBridgeController } from "./app/useDesktopBridgeController.ts";
 import { useMobileCompanionInboxPolling } from "./app/useMobileCompanionInboxPolling.ts";
+import { buildMobileCompanionSnapshot } from "./app/mobileCompanionSnapshot.ts";
+import { useMobileCompanionSnapshot } from "./app/useMobileCompanionSnapshot.ts";
 import { useDesktopRuntimeStatus } from "./app/useDesktopRuntimeStatus.ts";
 import { useDocumentWorkspaceUiState } from "./app/useDocumentWorkspaceUiState.ts";
 import { useDocumentReviewModel } from "./app/useDocumentReviewModel.js";
@@ -984,6 +986,9 @@ function AppContent() {
     workOrderById,
     workOrders,
   });
+
+  const companionSnapshot = useMemo(() => buildMobileCompanionSnapshot(appSettings.mobileCompanionSnapshotEnabled ? { properties, units, leases, transactions, loans, loanPayments, workOrders, asOfDate: todayIso } : { properties: [], units: [], leases: [], transactions: [], loans: [], loanPayments: [], workOrders: [], asOfDate: todayIso }), [appSettings.mobileCompanionSnapshotEnabled, properties, units, leases, transactions, loans, loanPayments, workOrders, todayIso]);
+  const companionSnapshotSync = useMobileCompanionSnapshot({ enabled: appSettings.mobileCompanionEnabled && appSettings.mobileCompanionSnapshotEnabled && canManageDataAdmin, hydrated: isDataHydrated, api: desktopCompanionApi, snapshot: companionSnapshot });
 
   useAppLifecycleEffects({
     actions,
@@ -1882,6 +1887,7 @@ function AppContent() {
   });
 
   const appWorkspaceProps = {
+    companionSnapshotSync,
     acceptVisibleSafeSuggestions,
     actions,
     requirePermission,

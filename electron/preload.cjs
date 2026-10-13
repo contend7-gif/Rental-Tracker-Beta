@@ -112,6 +112,8 @@ contextBridge.exposeInMainWorld("desktopSecrets", {
 });
 
 contextBridge.exposeInMainWorld("desktopCompanion", {
+  syncSnapshot: (snapshot) => ipcRenderer.invoke("companion:sync-snapshot", snapshot),
+  clearSnapshot: () => ipcRenderer.invoke("companion:clear-snapshot"),
   getStatus: () => ipcRenderer.invoke(COMPANION_STATUS_CHANNEL),
   configure: (payload) => ipcRenderer.invoke(COMPANION_CONFIGURE_CHANNEL, payload),
   disconnect: () => ipcRenderer.invoke(COMPANION_DISCONNECT_CHANNEL),

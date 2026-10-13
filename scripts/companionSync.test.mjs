@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCompanionSyncService } from "../electron/companionSyncService.mjs";
+test("desktop snapshot uploads and clearing preserve both private authorization layers", async () => {
+  const requests = [];
+  const service = createCompanionSyncService({ secretStore: createMemorySecretStore({ 'companion.siteUrl':'https://companion.example.test', 'companion.syncSecret':'fictional-sync', 'companion.sitesBypassToken':'fictional-private' }), fetchImpl: async(url,options)=>{ requests.push({url:String(url),options}); return Response.json({generatedAt:'2026-10-12T12:00:00Z'}); } });
+  const snapshot={version:1,generatedAt:'2026-10-12T12:00:00Z',properties:[]};
+  await service.syncSnapshot(snapshot); await service.clearSnapshot();
+  assert.deepEqual(requests.map(r=>r.options.method),['PUT','DELETE']);
+  assert.deepEqual(JSON.parse(requests[0].options.body),snapshot);
+  assert.ok(requests.every(r=>r.url==='https://companion.example.test/api/desktop/snapshot' && r.options.headers.get('authorization')==='Bearer fictional-sync' && r.options.headers.get('OAI-Sites-Authorization')==='Bearer fictional-private'));
+});
 
 test("retry-safe companion capture IDs survive claim, download, completion, and removal", async () => {
   const id = `${"a".repeat(64)}:a1b2c3d4-e5f6-7890-abcd-123456789012`;

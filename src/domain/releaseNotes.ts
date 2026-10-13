@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.0",
+    releaseDate: "2026-10-12",
+    title: "Your desktop records, on your phone",
+    summary: "Optionally share a read-only snapshot of your properties, leases, recent transactions, maintenance, and mortgages with your private companion.",
+    changes: [
+      "Enable Read-only phone overview under Settings → Admin & Tools → Mobile companion. Sharing is off by default and requires Admin access.",
+      "Sync property and unit details, ongoing lease records, open maintenance, and the latest 200 recorded transactions while the desktop app is open.",
+      "Check recorded mortgage balances, rates, payment components, next payment dates, latest recorded payments, and eligible payoff estimates in the companion Overview.",
+      "Keep snapshot timestamps and stale-data warnings clear, preserve the last loaded snapshot during connection failures, and prevent older uploads from replacing newer data.",
+      "Use Sync snapshot now or Stop sharing & clear cloud snapshot without changing desktop records. Attachments, private-note fields, and credentials are excluded.",
+    ],
+  },
+  {
     version: "1.10.1",
     releaseDate: "2026-10-10",
     title: "Companion captures open for review",

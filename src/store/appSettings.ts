@@ -131,6 +131,7 @@ export type AppSettings = {
   operatorName: string;
   aiDocumentCopilotEnabled: boolean;
   mobileCompanionEnabled: boolean;
+  mobileCompanionSnapshotEnabled: boolean;
   aiOpenAiApiKey: string;
   hasAiOpenAiApiKey: boolean;
   aiOpenAiModel: string;
@@ -190,6 +191,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   operatorName: "Local admin",
   aiDocumentCopilotEnabled: false,
   mobileCompanionEnabled: false,
+  mobileCompanionSnapshotEnabled: false,
   aiOpenAiApiKey: "",
   hasAiOpenAiApiKey: false,
   aiOpenAiModel: "gpt-4o-mini",
@@ -401,6 +403,7 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
         : "admin",
     operatorName: sanitizeShortText(raw.operatorName, 80) || DEFAULT_APP_SETTINGS.operatorName,
     aiDocumentCopilotEnabled: raw.aiDocumentCopilotEnabled === true,
+    mobileCompanionSnapshotEnabled: raw.mobileCompanionSnapshotEnabled === true,
     // Older installs already exposed Mobile Inbox. Preserve that behavior when
     // migrating their saved settings, while keeping fresh installs opt-in.
     mobileCompanionEnabled: Object.prototype.hasOwnProperty.call(raw, "mobileCompanionEnabled")

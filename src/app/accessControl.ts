@@ -98,6 +98,7 @@ export const SETTING_CAPABILITY_BY_KEY: Partial<Record<keyof AppSettings, Access
   bankReconciliationRecords: "reconcile_records",
   backupIntervalDays: "manage_data_admin",
   backupRetentionCount: "manage_data_admin",
+  mobileCompanionSnapshotEnabled: "manage_data_admin",
   statementBusinessName: "manage_statement_branding",
   statementBusinessAddress: "manage_statement_branding",
   statementBusinessEmail: "manage_statement_branding",

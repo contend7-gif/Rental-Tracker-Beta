@@ -82,6 +82,16 @@ export function createCompanionSyncService({ secretStore, fetchImpl = fetch } = 
       return { ok: true, configured: false, siteUrl: "" };
     },
 
+    async syncSnapshot(snapshot) {
+      const response = await request("api/desktop/snapshot", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) });
+      return { ok: true, ...(await response.json()) };
+    },
+
+    async clearSnapshot() {
+      await request("api/desktop/snapshot", { method: "DELETE" });
+      return { ok: true };
+    },
+
     async list() {
       const response = await request("api/desktop/submissions");
       const body = await response.json();
