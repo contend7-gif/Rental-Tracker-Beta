@@ -34,7 +34,7 @@ export async function createDemoDataState(): Promise<RentalStoreData> {
   const demo = createSampleDatasetReplacement();
   return {
     transactions: cloneItems(demo.transactions),
-    mileageEntries: [],
+    mileageEntries: cloneItems(demo.mileageEntries),
     assets: cloneItems(demo.assets).map((asset) => normalizeAsset(asset as Asset)),
     documents: cloneItems(demo.documents).map((document) => normalizeDocument(document as DocumentItem)),
     loans: normalizeLoansWithUniqueIds(cloneItems(demo.loans) as Loan[]),

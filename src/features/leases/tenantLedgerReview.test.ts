@@ -24,6 +24,25 @@ const lease = {
 
 const baseContext = { todayIso: "2026-07-15", yearFilter: "2026", documents: [], workOrders: [], transactions: [] };
 
+test("reviewed fee charge is classified through its allocated income receipt", () => {
+  for (const fee of ["Pet", "Cleaning", "Nonrefundable"]) {
+    const charge = { id: "fee", leaseId: lease.id, date: "2026-01-01", kind: "charge", amount: 200, memo: `${fee} fee`, accountingTreatment: "none", reviewed: true, createdAt: "2026-01-01T00:00:00Z" };
+    const payment = { ...charge, id: "paid", kind: "payment", accountingTreatment: "other_income", transactionId: "income", createdAt: "2026-01-01T01:00:00Z" };
+    const context = { ...baseContext, transactions: [{ id: "income", type: "Income", status: "active" }] };
+    const flagged = (entries, ctx = context) => getTenantLedgerReviewIssues(lease, entries, ctx).some((issue) => issue.entryId === "fee" && issue.key.endsWith("fee_not_classified"));
+    assert.equal(flagged([charge, payment]), false);
+    const advanceRent = { ...payment, id: "advance", amount: 1400, memo: "January rent", accountingTreatment: "rent_income", createdAt: "2025-12-31T00:00:00Z" };
+    assert.equal(flagged([advanceRent, charge, payment]), false);
+    assert.equal(flagged([advanceRent, charge, { ...payment, memo: "Unrelated fee" }]), true);
+    assert.equal(flagged([advanceRent, charge, { ...charge, id: "duplicate-charge" }, payment]), true);
+    assert.equal(flagged([charge, { ...payment, amount: 100 }]), true);
+    assert.equal(flagged([charge, payment], baseContext), true);
+    assert.equal(flagged([charge, { ...payment, voidedAt: "2026-01-02" }]), true);
+    assert.equal(flagged([charge, { ...payment, accountingTreatment: "rent_income" }]), true);
+    assert.equal(flagged([charge, payment], { ...context, transactions: [{ id: "income", type: "Income", status: "void" }] }), true);
+  }
+});
+
 test("lease with security deposit and no liability entry returns missing liability issue", () => {
   const issues = getTenantLedgerReviewIssues(lease, [], baseContext);
 

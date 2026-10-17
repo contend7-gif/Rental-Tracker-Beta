@@ -1,6 +1,9 @@
-import type { Asset, DocumentItem, Lease, Loan, LoanPayment, Property, RecurringDraft, RecurringTemplate, TenantLedgerEntry, Transaction, Unit, UsePeriod, Vendor, WorkOrder } from "../models.ts";
+import { standardMileageRate } from "./mileageRates.ts";
+import { buildMileagePosting } from "./mileageLog.ts";
+import type { MileageEntry, Asset, DocumentItem, Lease, Loan, LoanPayment, Property, RecurringDraft, RecurringTemplate, TenantLedgerEntry, Transaction, Unit, UsePeriod, Vendor, WorkOrder } from "../models.ts";
 
 export type DemoScenarioState = {
+  mileageEntries: MileageEntry[];
   transactions: Transaction[];
   assets: Asset[];
   documents: DocumentItem[];
@@ -333,7 +336,19 @@ export function createFullYearDemoScenario(): DemoScenarioState {
 
   const recurringDrafts: RecurringDraft[] = [];
 
+  const mileageEntries: MileageEntry[] = [
+    { id: "demo-mile-june", date: iso(6, 12), propertyId: "demo-property-1", unit: "Unit B", destination: "Example Hardware", purpose: "Pick up rental repair supplies", miles: 18, rate: standardMileageRate(iso(6, 12))! },
+    { id: "demo-mile-july", date: iso(7, 14), propertyId: "demo-property-1", unit: "Unit B", destination: "Sample Duplex", purpose: "Rental maintenance inspection", miles: 12, rate: standardMileageRate(iso(7, 14))! },
+    { id: "demo-mile-unposted", date: iso(9, 18), propertyId: "demo-property-1", unit: "Shared", destination: "Example Hardware", purpose: "Shared property supply pickup", miles: 24, rate: standardMileageRate(iso(9, 18))! },
+  ];
+  for (const entry of mileageEntries.slice(0, 2)) {
+    const posting = buildMileagePosting([entry], { transactions, usePeriods, leases, units, todayIso: "2027-01-01" });
+    if (posting) transactions.push({ ...posting, id: `demo-post-${entry.id}`, taxChecked: true, reconciled: true });
+  }
+
+
   return {
+    mileageEntries,
     transactions,
     assets,
     documents,

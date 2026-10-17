@@ -50,3 +50,9 @@ test("fictional full-year demo scenario produces nonzero tax summary lines", () 
   assert.ok(summary.totals.mortgageInterest > 0);
   assert.ok(summary.totals.depreciation > 0);
 });
+
+
+test("demo mileage amounts produce a tax net rounded to cents", () => {
+  const summary = buildDemoTaxSummary();
+  assert.equal(summary.netRentalIncomeLoss, -7807.35);
+});

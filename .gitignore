@@ -29,3 +29,6 @@ coverage/
 output/playwright/
 output/maintenance/
 .DS_Store
+
+# Local transaction audit reports may contain private rental records.
+output/transaction-audit-*/

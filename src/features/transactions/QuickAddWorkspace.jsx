@@ -1,3 +1,4 @@
+import { standardMileageRate, mileageRateHint } from "../../domain/mileageRates.ts";
 import { DraftRecoveryControls, useTransactionDraftGuard } from "../shared/DraftRecovery.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
@@ -751,7 +752,7 @@ export function QuickAddWorkspace({
                 </div>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   {field("Business miles", <Input type="number" min="0" step="0.1" value={form.mileageMiles} onChange={(e) => setForm({ ...form, mileageMiles: e.target.value })} />, { hint: "Total business miles for this trip or support entry." })}
-                  {field("Mileage rate", <Input type="number" min="0" step="0.001" value={form.mileageRate} onChange={(e) => setForm({ ...form, mileageRate: e.target.value })} />, { hint: "Enter the per-mile rate you intend to support." })}
+                  {field("Mileage rate", <Input type="number" min="0" step="0.001" placeholder={String(standardMileageRate(form.date) ?? "Enter rate")} value={form.mileageRate} onChange={(e) => setForm({ ...form, mileageRate: e.target.value })} />, { hint: mileageRateHint(form.date) })}
                 </div>
                 <div className="mt-2 rounded-lg border border-blue-100 bg-white/70 p-2 text-xs text-slate-700">
                   {form.date || "No date"} | {propertyNameById[form.propertyId] || "No property"} | Unit {form.unit || "Shared"} | Purpose: {form.description || "Add trip purpose in Description"}.

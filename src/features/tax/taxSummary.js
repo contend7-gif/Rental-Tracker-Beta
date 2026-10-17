@@ -585,7 +585,7 @@ export function buildTaxSummary(args = {}) {
     totals,
     totalIncome,
     totalExpenses,
-    netRentalIncomeLoss: totalIncome - totalExpenses,
+    netRentalIncomeLoss: Math.round((totalIncome - totalExpenses) * 100) / 100,
     filedDifferences: compareFiledAmounts(computed, args.filedAmounts || {}),
     computedFiledRows: buildComputedFiledRows(computed, args.filedAmounts || {}, overrideNotes),
     doubleCountingWarnings: getTaxDoubleCountingWarnings(args),

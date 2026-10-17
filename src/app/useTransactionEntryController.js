@@ -1,3 +1,4 @@
+import { resolveMileageRate } from "../domain/mileageRates.ts";
 import { useEffect, useMemo } from "react";
 import {
   clampPercentInput,
@@ -94,7 +95,7 @@ export function useTransactionEntryController({
     ? clampPercentInput(Number(form.ownerUsePct || 0)) / 100
     : autoOwnerUsePct / 100;
   const mileageMiles = Number(form.mileageMiles || 0);
-  const mileageRate = Number(form.mileageRate || 0);
+  const mileageRate = (resolveMileageRate(form.date, form.mileageRate) ?? 0);
   const mileageAmount = form.type === "Expense" && form.category === "Auto and travel" && mileageMiles > 0 && mileageRate > 0
     ? Number((mileageMiles * mileageRate).toFixed(2))
     : 0;

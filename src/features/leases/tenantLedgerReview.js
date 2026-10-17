@@ -95,6 +95,27 @@ export function getTenantLedgerReviewIssues(lease, entries = [], context = {}) {
   const leaseEntries = entries.filter((entry) => !entry.voidedAt && entry.leaseId === lease.id);
   const summary = buildTenantLedgerSummary(leaseEntries);
   const summaryRowById = Object.fromEntries(summary.rows.map((row) => [row.id, row]));
+  // Charges stay unposted when the corresponding receipt already posts the income.
+  const hasClassifiedFeeReceipt = (entry) => {
+    if (entry.kind !== "charge" || !entry.reviewed || money(entry.amount) <= 0) return false;
+    const feeType = (item) => ["pet", "cleaning", "nonrefundable"].filter((word) => entryText(item).includes(word)).join("|");
+    const matchesFee = (item) => item.date === entry.date && money(item.amount) === money(entry.amount) && feeType(item) === feeType(entry);
+    const validReceipt = (row) => {
+      if (row.kind !== "payment" || row.accountingTreatment !== "other_income") return false;
+      const transaction = (context.transactions || []).find((item) => item.id === row.transactionId);
+      return transaction?.type === "Income" && !["void", "voided"].includes(transaction.status);
+    };
+    // Earlier rent prepayments can consume fee charges in the FIFO balance calculation.
+    // Accept only an unambiguous same-day fee pair in that case.
+    if (feeType(entry) && leaseEntries.filter((item) => item.kind === "charge" && matchesFee(item)).length === 1 &&
+        leaseEntries.filter((item) => validReceipt(item) && matchesFee(item)).length === 1) return true;
+    const classifiedAmount = summary.rows.reduce((total, row) => {
+      if (!validReceipt(row)) return total;
+      return total + row.allocations.filter((allocation) => allocation.chargeEntryId === entry.id)
+        .reduce((amount, allocation) => amount + allocation.amount, 0);
+    }, 0);
+    return classifiedAmount >= money(entry.amount) - 0.005;
+  };
   const ended = isLeaseEnded(lease, todayIso);
   const issues = [];
   const depositAmount = money(lease.securityDeposit);
@@ -139,13 +160,14 @@ export function getTenantLedgerReviewIssues(lease, entries = [], context = {}) {
       issues.push(issue("rent_charge_without_payment_or_balance_review", "reviewed", entry.id));
     }
 
-    if (text.includes("nonrefundable") && isGenericTreatment(entry)) {
+    const feeNeedsClassification = isGenericTreatment(entry) && !hasClassifiedFeeReceipt(entry);
+    if (text.includes("nonrefundable") && feeNeedsClassification) {
       issues.push(issue("nonrefundable_fee_not_classified", "accountingTreatment", entry.id));
     }
-    if (text.includes("cleaning") && isGenericTreatment(entry)) {
+    if (text.includes("cleaning") && feeNeedsClassification) {
       issues.push(issue("cleaning_fee_not_classified", "accountingTreatment", entry.id));
     }
-    if (text.includes("pet") && isGenericTreatment(entry)) {
+    if (text.includes("pet") && feeNeedsClassification) {
       issues.push(issue("pet_fee_not_classified", "accountingTreatment", entry.id));
     }
 

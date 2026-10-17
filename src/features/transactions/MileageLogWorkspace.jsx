@@ -1,3 +1,4 @@
+import { resolveMileageRate, standardMileageRate, mileageRateHint } from "../../domain/mileageRates.ts";
 import React, { useMemo, useState } from "react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -33,7 +34,7 @@ export function MileageLogWorkspace({ actions, mileageEntries = [], transactions
     && (propertyFilter === "all" || transaction.propertyId === propertyFilter)
     && (unitFilter === "all" || transaction.unit === unitFilter)
   ).sort((a, b) => b.date.localeCompare(a.date)), [transactions, yearFilter, propertyFilter, unitFilter]);
-  const formEntry = { ...form, miles: Number(form.miles), rate: Number(form.rate) };
+  const formEntry = { ...form, miles: Number(form.miles), rate: resolveMileageRate(form.date, form.rate) ?? 0 };
   const formValid = validateMileageEntry(formEntry) && form.date <= todayIso;
   const selectedPropertyUnits = units.filter((unit) => unit.propertyId === form.propertyId).map((unit) => unit.name).filter(Boolean);
 
@@ -77,7 +78,7 @@ export function MileageLogWorkspace({ actions, mileageEntries = [], transactions
         <div><Label htmlFor="mileage-destination">Destination</Label><Input id="mileage-destination" value={form.destination} onChange={(event) => setForm({ ...form, destination: event.target.value })} placeholder="Where you went" /></div>
         <div className="sm:col-span-2"><Label htmlFor="mileage-purpose">Business purpose</Label><Input id="mileage-purpose" value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} placeholder="Why this trip was for the rental" /></div>
         <div><Label htmlFor="mileage-miles">Business miles</Label><Input id="mileage-miles" type="number" min="0" step="0.1" value={form.miles} onChange={(event) => setForm({ ...form, miles: event.target.value })} /></div>
-        <div><Label htmlFor="mileage-rate">Rate per mile</Label><Input id="mileage-rate" type="number" min="0" step="0.001" value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /></div>
+        <div><Label htmlFor="mileage-rate">Rate per mile</Label><Input id="mileage-rate" type="number" min="0" step="0.001" placeholder={String(standardMileageRate(form.date) ?? "Enter rate")} value={form.rate} onChange={(event) => setForm({ ...form, rate: event.target.value })} /><p className="mt-1 text-xs text-slate-600">{mileageRateHint(form.date)}</p></div>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3"><Button disabled={!formValid} onClick={saveTrip}>Save trip</Button><span className="text-sm text-slate-600">Trip amount: {currency(formValid ? mileageTripAmount(formEntry) : 0)}</span></div>
       {message ? <p role="status" className="mt-2 text-sm text-blue-800">{message}</p> : null}

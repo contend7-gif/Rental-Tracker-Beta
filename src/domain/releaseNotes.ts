@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.1",
+    releaseDate: "2026-10-16",
+    title: "Automatic mileage rates and cleaner fee reviews",
+    summary: "Choose the verified IRS mileage rate from the trip date, explore linked demo mileage, and avoid repeat fee warnings after income is recorded.",
+    changes: [
+      "Select verified IRS business mileage rates automatically for trips dated 2020 through 2026, including midyear changes. Keep saved rates and manual overrides; request a verified rate for dates outside that range.",
+      "Recognize reviewed fee charges covered by classified income receipts, including matching fee receipts after advance rent, while retaining warnings for missing or ambiguous support.",
+      "Include posted and unposted mileage trips in the fictional demo, with their linked monthly expenses preserved when the demo loads.",
+      "Round the tax summary net rental income or loss to cents.",
+    ],
+  },
+  {
     version: "1.11.0",
     releaseDate: "2026-10-12",
     title: "Your desktop records, on your phone",
