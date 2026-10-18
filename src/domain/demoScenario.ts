@@ -73,7 +73,7 @@ function monthlyRentTransactions(): Transaction[] {
       notes: "",
       taxChecked: true,
       reconciled: true,
-      tenantLedgerEntryId: month === 1 ? "demo-ledger-payment-jan" : undefined,
+      tenantLedgerEntryId: month === 1 ? "demo-ledger-payment-jan" : `demo-ledger-payment-${month}`,
       status: "active",
     };
   });
@@ -310,8 +310,20 @@ export function createFullYearDemoScenario(): DemoScenarioState {
 
   const tenantLedgerEntries: TenantLedgerEntry[] = [
     { id: "demo-ledger-deposit", leaseId: "demo-lease-b", date: "2026-01-01", kind: "charge", amount: 1450, memo: "Security deposit liability", accountingTreatment: "security_deposit_liability", reviewed: true, reviewedAt: "2026-01-01T12:00:00.000Z", reviewNotes: "Starting deposit liability.", createdAt: "2026-01-01T12:00:00.000Z" },
-    { id: "demo-ledger-rent-jan", leaseId: "demo-lease-b", date: "2026-01-05", kind: "charge", amount: 1450, memo: "January rent charge", accountingTreatment: "rent_income", transactionId: "demo-rent-1", reviewed: true, reviewedAt: "2026-01-05T12:00:00.000Z", createdAt: "2026-01-05T12:00:00.000Z" },
-    { id: "demo-ledger-payment-jan", leaseId: "demo-lease-b", date: "2026-01-05", kind: "payment", amount: 1450, memo: "January rent payment", accountingTreatment: "rent_income", transactionId: "demo-rent-1", reviewed: true, reviewedAt: "2026-01-05T12:00:00.000Z", createdAt: "2026-01-05T12:00:00.000Z" },
+    ...rentTransactions.flatMap((transaction, index): TenantLedgerEntry[] => {
+      const month = index + 1;
+      const monthLabel = new Intl.DateTimeFormat("en-US", { month: "long", timeZone: "UTC" }).format(new Date(`${transaction.date}T12:00:00.000Z`));
+      const common = {
+        leaseId: "demo-lease-b", date: transaction.date, amount: transaction.amount,
+        transactionId: transaction.id,
+        accountingTreatment: "rent_income" as const, reviewed: true,
+        reviewedAt: `${transaction.date}T12:00:00.000Z`, createdAt: `${transaction.date}T12:00:00.000Z`,
+      };
+      return [
+        { ...common, id: month === 1 ? "demo-ledger-rent-jan" : `demo-ledger-rent-${month}`, kind: "charge", memo: `${monthLabel} rent charge` },
+        { ...common, id: transaction.tenantLedgerEntryId!, kind: "payment", memo: `${monthLabel} rent payment` },
+      ];
+    }),
   ];
 
   const vendors: Vendor[] = [

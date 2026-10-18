@@ -315,9 +315,14 @@ function registerUpdateIpc() {
 }
 
 function registerNotificationIpc() {
-  ipcMain.handle(NOTIFICATION_SUPPORTED_CHANNEL, () => Notification.isSupported());
+  // Keep the renderer on the desktop bridge during tests so it never falls
+  // through to browser notifications or permission prompts.
+  ipcMain.handle(NOTIFICATION_SUPPORTED_CHANNEL, () => isEndToEndTest || Notification.isSupported());
 
   ipcMain.handle(NOTIFICATION_SEND_CHANNEL, (_event, rawPayload) => {
+    if (isEndToEndTest) {
+      return { ok: true, suppressed: true, reason: "automated-test" };
+    }
     if (!Notification.isSupported()) {
       return { ok: false, reason: "unsupported" };
     }

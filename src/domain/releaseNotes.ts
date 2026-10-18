@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.3",
+    releaseDate: "2026-10-17",
+    title: "Quiet desktop checks and consistent demo rent",
+    summary: "Keep automated desktop checks from displaying Windows notifications and prevent false overdue rent reminders in newly loaded sample data.",
+    changes: [
+      "Suppress operating system notifications during automated desktop tests, including the browser fallback path, while preserving normal desktop reminders.",
+      "Link all 12 sample rent transactions to their matching lease charges and payment receipts so February and later months do not appear falsely unpaid.",
+      "Verify every sample month stays paid without duplicate rent charges or late fees, while preserving the demo's tax totals and fictional full-year dates.",
+      "Apply the sample-data correction when loading a new demo; existing saved records are not rewritten.",
+    ],
+  },
+  {
     version: "1.11.2",
     releaseDate: "2026-10-17",
     title: "Quieter desktop updates",

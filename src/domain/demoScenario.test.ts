@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import { createFullYearDemoScenario } from "./demoScenario.ts";
 import { buildTaxSummary } from "../features/tax/taxSummary.js";
+import { buildLeaseAutomationPlan } from "./leaseAutomation.ts";
+import { buildTenantLedgerSummary } from "./tenantLedger.ts";
 
 function buildDemoTaxSummary() {
   const scenario = createFullYearDemoScenario();
@@ -30,6 +32,28 @@ test("fictional full-year demo scenario contains required entities", () => {
   assert.ok(scenario.loans[0].yearEndReviews?.some((review) => review.year === "2026" && review.reviewed));
   assert.ok(scenario.documents.some((document) => document.transactionId));
   assert.ok(scenario.tenantLedgerEntries.some((entry) => entry.accountingTreatment === "security_deposit_liability"));
+});
+
+test("demo rent receipts cover every sample month without false overdue reminders", () => {
+  const scenario = createFullYearDemoScenario();
+  const rentTransactions = scenario.transactions.filter((transaction) => transaction.category === "Rent");
+  assert.equal(rentTransactions.length, 12);
+  for (const transaction of rentTransactions) {
+    const receipts = scenario.tenantLedgerEntries.filter((entry) => entry.kind === "payment" && entry.transactionId === transaction.id);
+    assert.equal(receipts.length, 1);
+    assert.equal(receipts[0].id, transaction.tenantLedgerEntryId);
+    assert.equal(receipts[0].amount, transaction.amount);
+    assert.equal(receipts[0].date, transaction.date);
+  }
+  const defaults = { rentDueDay: 1, reminderDaysBefore: 3, lateFeeGraceDays: 5, lateFeeType: "flat" as const, lateFeeValue: 50, autoLateFeeEnabled: true };
+  for (const month of Array.from({ length: 12 }, (_, index) => index + 1)) {
+    const todayIso = `2026-${String(month).padStart(2, "0")}-20`;
+    const entriesThroughToday = scenario.tenantLedgerEntries.filter((entry) => entry.date <= todayIso);
+    assert.equal(buildTenantLedgerSummary(entriesThroughToday).totalDue, 0);
+    const plan = buildLeaseAutomationPlan({ leases: scenario.leases, tenantLedgerEntries: entriesThroughToday, todayIso, defaults });
+    assert.deepEqual(plan.entries, [], todayIso);
+    assert.deepEqual(plan.reminders, [], todayIso);
+  }
 });
 
 test("fictional full-year demo scenario avoids known private-data markers", () => {

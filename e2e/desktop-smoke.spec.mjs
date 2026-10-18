@@ -45,6 +45,21 @@ async function launchDesktopApp(profilePath) {
   return { electronApp, page, rendererErrors };
 }
 
+test("automated desktop checks suppress operating system notifications", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-notifications-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    expect(await page.evaluate(() => window.desktopNotifications.isSupported())).toBe(true);
+    expect(await page.evaluate(() => window.desktopNotifications.notify({
+      title: "Example overdue rent", body: "Example February reminder", silent: false,
+    }))).toEqual({ ok: true, suppressed: true, reason: "automated-test" });
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test("sidebar updates stay quiet, support compact navigation, and save before restart", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-updates-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
