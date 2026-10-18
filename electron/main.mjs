@@ -309,7 +309,7 @@ function registerUpdateIpc() {
     if (updateState.status !== "downloaded") {
       return { ok: false, reason: "not-ready" };
     }
-    autoUpdater.quitAndInstall();
+    autoUpdater.quitAndInstall(true, true);
     return { ok: true };
   });
 }
@@ -573,7 +573,8 @@ function configureAutoUpdates() {
   }
 
   autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Apply only through the explicit restart action, after the renderer saves.
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("checking-for-update", () => {
     pushUpdateState({
@@ -638,7 +639,7 @@ function configureAutoUpdates() {
     });
   });
 
-  autoUpdater.on("update-downloaded", async (info) => {
+  autoUpdater.on("update-downloaded", (info) => {
     pushUpdateState({
       status: "downloaded",
       message: "Update downloaded. Restart to apply.",
@@ -653,20 +654,6 @@ function configureAutoUpdates() {
       error: "",
     });
 
-    const targetWindow = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-    const result = await dialog.showMessageBox(targetWindow, {
-      type: "info",
-      buttons: ["Restart now", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-      title: "Update ready",
-      message: "A new version has been downloaded.",
-      detail: "Restart the app now to apply the update.",
-    });
-
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall();
-    }
   });
 
   const runAutoCheck = () => {

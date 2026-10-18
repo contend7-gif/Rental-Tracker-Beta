@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { moveNavigation, pushNavigation } from "./navigationHistory.ts";
 
-function requestNavigation(proceed) {
+export function requestNavigation(proceed) {
   const event = new CustomEvent("rental-tracker:before-navigate", { cancelable: true, detail: { proceed } });
   if (window.dispatchEvent(event)) proceed();
 }

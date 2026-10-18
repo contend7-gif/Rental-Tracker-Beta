@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog";
-import { Building2, ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Download, Menu, RefreshCw, TriangleAlert } from "lucide-react";
 
-export function AppSidebar({ mobileCompanionWaitingCount, navGroups, prefetchWorkspace, setSidebarCollapsed, setView, sidebarCollapsed, view }) {
+export function AppSidebar({ desktopUpdateCanRestart, desktopUpdateRestarting, desktopUpdateState, installDesktopUpdateNow, mobileCompanionWaitingCount, navGroups, prefetchWorkspace, setSidebarCollapsed, setView, sidebarCollapsed, view }) {
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationTrigger = useRef(null);
   const closeNavigation = (open) => {
@@ -35,6 +35,23 @@ export function AppSidebar({ mobileCompanionWaitingCount, navGroups, prefetchWor
         <Button variant="ghost" size="icon" className="rt-sidebar-collapse" onClick={() => setSidebarCollapsed((previous) => !previous)} aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>{sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</Button>
       </div>
       <div className="mt-6 hidden lg:block">{navigation(sidebarCollapsed)}</div>
+      {["available", "downloading", "downloaded", "error"].includes(desktopUpdateState?.status) && <div className="mt-4 border-t border-slate-200 pt-3" aria-live="polite">
+        {desktopUpdateState.status === "downloaded" ? <Button
+          variant="secondary" className={`w-full text-teal-800 ${sidebarCollapsed ? "lg:justify-center lg:!px-0" : "justify-start"}`}
+          onClick={installDesktopUpdateNow} disabled={!desktopUpdateCanRestart}
+          aria-label={desktopUpdateRestarting ? "Restarting..." : "Restart to update"}
+          title={desktopUpdateRestarting ? "Saving and restarting..." : "Restart to update"}>
+          <RefreshCw className={`h-4 w-4 shrink-0 ${desktopUpdateRestarting ? "animate-spin" : ""}`} aria-hidden="true" />
+          <span className={sidebarCollapsed ? "lg:hidden" : ""}>{desktopUpdateRestarting ? "Restarting..." : "Restart to update"}</span>
+        </Button> : desktopUpdateState.status === "error" ? <Button
+          variant="ghost" className={`w-full text-amber-700 ${sidebarCollapsed ? "lg:justify-center lg:!px-0" : "justify-start"}`}
+          onClick={() => setView("settings")} aria-label="Review update issue" title="Review update issue">
+          <TriangleAlert className="h-4 w-4 shrink-0" aria-hidden="true" /><span className={sidebarCollapsed ? "lg:hidden" : ""}>Update issue</span>
+        </Button> : <div className={`flex items-center gap-2 px-3 py-2 text-xs text-slate-500 ${sidebarCollapsed ? "lg:justify-center lg:px-0" : ""}`}
+          role="status" aria-label={`Downloading update ${Math.round(desktopUpdateState.progressPercent || 0)}%`} title={`Downloading update ${Math.round(desktopUpdateState.progressPercent || 0)}%`}>
+          <Download className="h-4 w-4 shrink-0" aria-hidden="true" /><span className={sidebarCollapsed ? "lg:hidden" : ""}>Updating {Math.round(desktopUpdateState.progressPercent || 0)}%</span>
+        </div>}
+      </div>}
     </aside>
     <Dialog open={navigationOpen} onOpenChange={closeNavigation} variant="panel">
       <DialogContent className="rt-navigation-content !max-w-sm !p-4">

@@ -45,6 +45,111 @@ async function launchDesktopApp(profilePath) {
   return { electronApp, page, rendererErrors };
 }
 
+test("sidebar updates stay quiet, support compact navigation, and save before restart", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-updates-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    const sidebar = page.locator("aside.rt-sidebar");
+    await expect(sidebar.getByRole("button", { name: "Restart to update", exact: true })).toHaveCount(0);
+    const sendStatus = (status) => electronApp.evaluate(({ BrowserWindow }, payload) => {
+      BrowserWindow.getAllWindows()[0].webContents.send("app-update:status", payload);
+    }, status);
+    await sendStatus({ status: "downloading", progressPercent: 42 });
+    await expect(sidebar.getByRole("status")).toHaveText("Updating 42%");
+    await expect(page.getByRole("dialog", { name: "Update ready" })).toHaveCount(0);
+    await sendStatus({ status: "downloaded", progressPercent: 100, downloadedVersion: "99.0.0" });
+    const restart = sidebar.getByRole("button", { name: "Restart to update", exact: true });
+    await expect(restart).toBeEnabled();
+    await sidebar.screenshot({ path: test.info().outputPath("sidebar-update-ready.png") });
+    await sidebar.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
+    await expect(restart).toBeVisible();
+    await sidebar.screenshot({ path: test.info().outputPath("sidebar-update-compact.png") });
+    await sidebar.getByRole("button", { name: "Expand sidebar", exact: true }).click();
+    await page.setViewportSize({ width: 760, height: 960 });
+    await expect(restart).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 960 });
+
+    // Keep the packaged app running: replace only the save/install IPC boundaries.
+    await electronApp.evaluate(({ ipcMain }) => {
+      globalThis.updateTestEvents = [];
+      globalThis.updateTestFailSave = true;
+      ipcMain.removeHandler("persistence:save-app-data");
+      ipcMain.handle("persistence:save-app-data", async () => {
+        globalThis.updateTestEvents.push("save");
+        if (globalThis.updateTestFailSave) return { ok: false, message: "Example save failure" };
+        await new Promise((resolve) => { globalThis.updateTestFinishSave = resolve; });
+        globalThis.updateTestEvents.push("saved");
+        return { ok: true };
+      });
+      ipcMain.removeHandler("app-update:install");
+      ipcMain.handle("app-update:install", () => {
+        globalThis.updateTestEvents.push("install");
+        return { ok: true };
+      });
+    });
+    await restart.click();
+    await expect(page.getByText("Unable to restart for update: Example save failure", { exact: true })).toBeVisible();
+    await expect(restart).toBeEnabled();
+    expect(await electronApp.evaluate(() => globalThis.updateTestEvents)).toEqual(["save"]);
+    await electronApp.evaluate(() => { globalThis.updateTestFailSave = false; globalThis.updateTestEvents = []; });
+    await restart.click();
+    const restarting = sidebar.getByRole("button", { name: "Restarting...", exact: true });
+    await expect(restarting).toBeDisabled();
+    expect(await electronApp.evaluate(() => globalThis.updateTestEvents)).toEqual(["save"]);
+    await electronApp.evaluate(() => globalThis.updateTestFinishSave());
+    await expect.poll(() => electronApp.evaluate(() => globalThis.updateTestEvents)).toEqual(["save", "saved", "install"]);
+    await expect(restarting).toBeDisabled();
+    await sendStatus({ status: "error", message: "Example installer failure" });
+    await sidebar.getByRole("button", { name: "Review update issue", exact: true }).click();
+    await page.getByRole("button", { name: /Admin & Tools/ }).click();
+    await expect(page.getByRole("button", { name: "Check for updates", exact: true })).toBeVisible();
+    await sendStatus({ status: "downloaded" });
+    await expect(restart).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Restart to update", exact: true })).toHaveCount(2);
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("update restart protects unsaved transaction edits with the existing draft choices", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-update-draft-"));
+  const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);
+  try {
+    await page.getByRole("button", { name: "New", exact: true }).click();
+    await page.getByRole("menuitem", { name: /^Transaction/ }).click();
+    await page.getByLabel("Description / memo", { exact: true }).fill("Example draft before updating");
+    await electronApp.evaluate(({ ipcMain, BrowserWindow }) => {
+      globalThis.updateTestInstallCount = 0;
+      ipcMain.removeHandler("app-update:install");
+      ipcMain.handle("app-update:install", () => {
+        globalThis.updateTestInstallCount += 1;
+        return { ok: false, reason: "not-ready" };
+      });
+      BrowserWindow.getAllWindows()[0].webContents.send("app-update:status", { status: "downloaded" });
+    });
+    const restart = page.locator("aside.rt-sidebar").getByRole("button", { name: "Restart to update", exact: true });
+    await restart.click();
+    const prompt = page.getByRole("dialog", { name: "Leave unsaved transaction?", exact: true });
+    await expect(prompt).toBeVisible();
+    expect(await electronApp.evaluate(() => globalThis.updateTestInstallCount)).toBe(0);
+    await prompt.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await expect(page.getByLabel("Description / memo", { exact: true })).toHaveValue("Example draft before updating");
+    await restart.click();
+    await prompt.getByRole("button", { name: "Save draft and leave", exact: true }).click();
+    await expect.poll(() => electronApp.evaluate(() => globalThis.updateTestInstallCount)).toBe(1);
+    expect(await page.evaluate(() => Object.keys(localStorage)
+      .filter((key) => key.startsWith("rental-tracker:draft:v2:transaction:"))
+      .map((key) => localStorage.getItem(key)).some((value) => value.includes("Example draft before updating")))).toBe(true);
+    await expect(restart).toBeEnabled();
+    expect(rendererErrors).toEqual([]);
+  } finally {
+    await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test("dialogs protect unsaved edits, contain focus, and keep invalid Quick Add entries open", async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-dialogs-"));
   const { electronApp, page, rendererErrors } = await launchDesktopApp(profilePath);

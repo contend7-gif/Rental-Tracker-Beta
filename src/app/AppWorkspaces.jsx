@@ -338,6 +338,7 @@ const SETTINGS_WORKSPACE_PROP_KEYS = [
   "desktopCompanionApi",
   "desktopDocumentAiApi",
   "desktopUpdateBusy",
+  "desktopUpdateRestarting",
   "desktopUpdateCanRestart",
   "desktopUpdateCheckedAtLabel",
   "desktopUpdateMessage",

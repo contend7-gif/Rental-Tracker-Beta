@@ -117,6 +117,7 @@ export function SettingsWorkspace({
   desktopDocumentAiApi,
   desktopUpdateBadgeClass,
   desktopUpdateBusy,
+  desktopUpdateRestarting,
   desktopUpdateCanRestart,
   desktopUpdateCheckedAtLabel,
   desktopUpdateMessage,
@@ -922,12 +923,12 @@ export function SettingsWorkspace({
                 </div>
               )}
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button variant="secondary" className="h-9" onClick={checkForDesktopUpdates} disabled={!desktopUpdaterAvailable || desktopUpdateBusy || desktopUpdateStatusKey === "checking"}>
+                <Button variant="secondary" className="h-9" onClick={checkForDesktopUpdates} disabled={!desktopUpdaterAvailable || desktopUpdateBusy || desktopUpdateRestarting || desktopUpdateStatusKey === "checking"}>
                   {desktopUpdateBusy || desktopUpdateStatusKey === "checking" ? "Checking..." : "Check for updates"}
                 </Button>
-                {desktopUpdateCanRestart && (
-                  <Button className="h-9" onClick={installDesktopUpdateNow}>
-                    Restart to update
+                {desktopUpdateStatusKey === "downloaded" && (
+                  <Button className="h-9" onClick={installDesktopUpdateNow} disabled={!desktopUpdateCanRestart}>
+                    {desktopUpdateRestarting ? "Restarting..." : "Restart to update"}
                   </Button>
                 )}
                 {currentReleaseNotesEntry && (

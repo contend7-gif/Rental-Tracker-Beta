@@ -24,6 +24,7 @@ import {
   normalizeReleaseNotesLines,
 } from "./desktopUpdateShared.ts";
 import { toLocalIsoDate } from "../lib/localDate.ts";
+import { requestNavigation } from "./useWorkspaceNavigation.js";
 
 const SQLITE_MIGRATION_STORAGE_KEY = "rental-tracker:sqlite-migrated:v1";
 
@@ -87,6 +88,8 @@ export function useDesktopPersistenceController({
       : "Update checks are available in installed desktop builds.",
   }));
   const [desktopUpdateBusy, setDesktopUpdateBusy] = useState(false);
+  const [desktopUpdateRestarting, setDesktopUpdateRestarting] = useState(false);
+  const desktopUpdateRestartingRef = useRef(false);
   const [releaseNotesDialog, setReleaseNotesDialog] = useState({ open: false, mode: "current" });
   const releaseNotesAutoShownVersionRef = useRef("");
   const [lastAutoBackupAt, setLastAutoBackupAt] = useState(() => {
@@ -111,7 +114,8 @@ export function useDesktopPersistenceController({
   const desktopUpdateCheckedAtLabel = formatDesktopUpdateDate(desktopUpdateState.checkedAt);
   const desktopUpdateReleaseDateLabel = formatDesktopUpdateDate(desktopUpdateState.releaseDate);
   const desktopUpdateProgress = Number(desktopUpdateState.progressPercent || 0);
-  const desktopUpdateCanRestart = desktopUpdaterAvailable && desktopUpdateStatusKey === "downloaded";
+  const desktopUpdateCanRestart = desktopUpdaterAvailable && desktopUpdateStatusKey === "downloaded"
+    && isDataHydrated && isDeferredDataHydrated && !desktopUpdateRestarting;
   const desktopUpdateMessage = desktopUpdateState.error
     ? `${desktopUpdateState.message || "Update issue."} (${desktopUpdateState.error})`
     : desktopUpdateState.message || "No updater status yet.";
@@ -360,6 +364,10 @@ export function useDesktopPersistenceController({
 
     const applyUpdateState = (payload) => {
       if (!payload || typeof payload !== "object" || cancelled) return;
+      if (payload.status === "error") {
+        desktopUpdateRestartingRef.current = false;
+        setDesktopUpdateRestarting(false);
+      }
       setDesktopUpdateState((prev) => ({
         ...prev,
         ...payload,
@@ -414,20 +422,33 @@ export function useDesktopPersistenceController({
     }
   };
 
-  const installDesktopUpdateNow = async () => {
+  const installDesktopUpdateNow = () => requestNavigation(() => { void restartForDesktopUpdate(); });
+
+  const restartForDesktopUpdate = async () => {
+    if (desktopUpdateRestartingRef.current) return;
     if (typeof window === "undefined" || !window.desktopUpdater) {
       setNotice("Update install is available in installed desktop builds.");
       return;
     }
 
+    if (!desktopUpdateCanRestart) {
+      setNotice(desktopUpdateStatusKey === "downloaded" ? "Wait for your saved data to finish loading before restarting." : "No downloaded update is ready yet.");
+      return;
+    }
+
+    desktopUpdateRestartingRef.current = true;
+    setDesktopUpdateRestarting(true);
     try {
+      await flushCurrentDesktopSave();
       const result = await window.desktopUpdater.installNow();
-      if (result?.ok === false && result.reason === "not-ready") {
-        setNotice("No downloaded update is ready yet.");
-      } else if (result?.ok === false && result.reason === "not-packaged") {
-        setNotice("Update install runs in the installed desktop app.");
+      if (result?.ok !== true) {
+        throw new Error(result?.reason === "not-ready" ? "No downloaded update is ready yet."
+          : result?.reason === "not-packaged" ? "Update install runs in the installed desktop app."
+          : result?.message || "The update could not be started. Try again.");
       }
     } catch (error) {
+      desktopUpdateRestartingRef.current = false;
+      setDesktopUpdateRestarting(false);
       const message = error instanceof Error ? error.message : String(error || "Unknown updater error.");
       setNotice(`Unable to restart for update: ${message}`);
     }
@@ -1054,6 +1075,7 @@ export function useDesktopPersistenceController({
     currentReleaseHistory,
     currentReleaseNotesEntry,
     desktopUpdateBusy,
+    desktopUpdateRestarting,
     desktopUpdateCanRestart,
     desktopUpdateCheckedAtLabel,
     desktopUpdateMessage,

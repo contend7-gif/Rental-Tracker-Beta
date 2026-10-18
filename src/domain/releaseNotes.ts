@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.2",
+    releaseDate: "2026-10-17",
+    title: "Quieter desktop updates",
+    summary: "Download updates in the background, then use Restart to update in the sidebar to save your work and request a quiet installation and relaunch.",
+    changes: [
+      "Show download progress and Restart to update at the bottom of the expanded or collapsed sidebar, with the same restart action available in Settings.",
+      "Apply updates in silent installer mode and reopen the app, without an update-ready popup. Windows may still request administrator permission when required.",
+      "Finish pending saves before restarting, keep the app open if saving fails, and protect unfinished transaction entries with the existing draft choices.",
+      "Wait for an explicit restart action to install a downloaded update instead of installing when the app closes normally.",
+    ],
+  },
+  {
     version: "1.11.1",
     releaseDate: "2026-10-16",
     title: "Automatic mileage rates and cleaner fee reviews",
