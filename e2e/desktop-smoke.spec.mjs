@@ -9,6 +9,93 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE
   || path.join(rootDir, "release", "win-unpacked", "Rental Tracker.exe");
 
+test("lease turnover saves photos and progress across restart without changing agreement or payments", async () => {
+  test.setTimeout(180_000);
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-turnover-"));
+  let run = await launchDesktopApp(profilePath);
+  const openTurnover = async () => {
+    await run.page.getByRole("button", { name: "Leases", exact: true }).click();
+    await run.page.getByRole("button", { name: /^All \d/ }).click();
+    await run.page.getByRole("button", { name: "Example Turnover Tenant", exact: true }).click();
+    await run.page.getByRole("button", { name: "Turnover", exact: true }).click();
+  };
+  try {
+    await expect(run.page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      backup.data.leases[0].tenantName = "Example Turnover Tenant";
+      backup.settings.leaseAutomationEnabled = false;
+      await window.desktopPersistence.saveAppData(backup);
+    });
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await openTurnover();
+    const before = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    await run.page.getByRole("button", { name: "Start turnover checklist", exact: true }).click();
+    await run.page.getByRole("checkbox", { name: "Inspect condition and take before photos", exact: true }).check();
+    await run.page.getByLabel("Due date: Clean kitchen, bathroom and living spaces", { exact: true }).fill("2026-01-01");
+    await run.page.getByLabel("Notes: Inspect condition and take before photos", { exact: true }).fill("Example before inspection recorded.");
+    await run.page.getByRole("combobox", { name: "Turnover status", exact: true }).selectOption("preparing");
+    await run.page.getByRole("textbox", { name: "New turnover task", exact: true }).fill("Check spare towels");
+    await run.page.getByRole("button", { name: "Add task", exact: true }).click();
+    await run.page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(run.page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+    await run.page.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await run.page.getByLabel("Add photo: Inspect condition and take before photos", { exact: true }).setInputFiles({
+      name: "example-before.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1kAAAAASUVORK5CYII=", "base64"),
+    });
+    await expect(run.page.getByRole("button", { name: "View photo", exact: true })).toBeVisible();
+    await expect(run.page.getByRole("button", { name: "Save turnover", exact: true })).toBeEnabled();
+    await run.electronApp.evaluate(({ ipcMain }) => {
+      globalThis.turnoverSaveHandler = ipcMain._invokeHandlers.get("persistence:save-app-data");
+      ipcMain.removeHandler("persistence:save-app-data");
+      ipcMain.handle("persistence:save-app-data", () => ({ ok: false, message: "Example turnover save failure" }));
+    });
+    await run.page.getByRole("button", { name: "Save turnover", exact: true }).click();
+    await expect(run.page.getByRole("status").filter({ hasText: "Example turnover save failure" }).first()).toBeVisible();
+    await run.page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(run.page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true })).toBeVisible();
+    await run.page.getByRole("button", { name: "Keep editing", exact: true }).click();
+    await run.electronApp.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler("persistence:save-app-data");
+      ipcMain.handle("persistence:save-app-data", globalThis.turnoverSaveHandler);
+    });
+    await run.page.getByRole("button", { name: "Save turnover", exact: true }).click();
+    await expect(run.page.getByRole("dialog").getByRole("status").filter({ hasText: "Turnover checklist saved." })).toHaveText("Turnover checklist saved.");
+    const after = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    expect(after.transactions).toEqual(before.transactions);
+    expect(after.tenantLedgerEntries).toEqual(before.tenantLedgerEntries);
+    expect(after.usePeriods).toEqual(before.usePeriods);
+    const beforeLease = before.leases.find((item) => item.tenantName === "Example Turnover Tenant");
+    const afterLease = after.leases.find((item) => item.id === beforeLease.id);
+    const { turnover, ...agreement } = afterLease;
+    expect(agreement).toEqual(beforeLease);
+    expect(turnover.tasks).toHaveLength(8);
+    expect(turnover.tasks[0].photoIds).toHaveLength(1);
+    await run.page.getByRole("button", { name: "Close", exact: true }).click();
+    await expect(run.page.getByRole("alertdialog")).toHaveCount(0);
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    await openTurnover();
+    await expect(run.page.getByRole("checkbox", { name: "Inspect condition and take before photos", exact: true })).toBeChecked();
+    await expect(run.page.getByLabel("Notes: Inspect condition and take before photos", { exact: true })).toHaveValue("Example before inspection recorded.");
+    await expect(run.page.getByRole("combobox", { name: "Turnover status", exact: true })).toHaveValue("preparing");
+    await expect(run.page.getByText("Overdue since 2026-01-01", { exact: true })).toBeVisible();
+    await run.page.screenshot({ path: path.join(rootDir, "output", "playwright", "lease-turnover-desktop.png") });
+    await run.page.setViewportSize({ width: 720, height: 900 });
+    await expect(run.page.getByRole("button", { name: "Save turnover", exact: true })).toBeInViewport();
+    await run.page.screenshot({ path: path.join(rootDir, "output", "playwright", "lease-turnover-narrow.png") });
+    await run.page.getByRole("button", { name: "View photo", exact: true }).click();
+    await expect(run.page.locator('img').filter({ visible: true }).last()).toBeVisible();
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 async function launchDesktopApp(profilePath) {
   if (!fs.existsSync(executablePath)) {
     throw new Error(`Packaged desktop executable not found at ${executablePath}. Run npm run desktop:pack first.`);

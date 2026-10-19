@@ -4,6 +4,14 @@ Use this checklist before publishing alpha builds or validating a real-world ren
 
 Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, then run `docs/real-duplex-dry-run.md` and `docs/loan-tax-reconciliation-qa.md` manually with fictional data. The automated scenarios protect tax/accounting and loan/tax reconciliation invariants, while the manual dry runs still cover UI behavior, backup restore, and desktop file handling.
 
+## v1.11.4 turnover checks
+
+- Open a saved lease, choose Turnover and start the furnished-rental checklist. Add a custom task, notes and a due date; check overdue and completed states.
+- Attach a fictional photo, link it to another task and preview it. Unlink it from a task and confirm the file remains in lease Documents.
+- Save from the fixed footer at desktop and narrow widths. Restart and confirm progress, status, notes, dates and photo previews remain available.
+- Simulate a save failure in an isolated profile, confirm unsaved-change protection and retry successfully. Confirm agreement terms, payment records and occupancy remain unchanged.
+- Verify ordinary lease drafts, extensions and linked payment receipts still work.
+
 ## Fresh App Flow
 
 ### v1.9.9 refresh checks

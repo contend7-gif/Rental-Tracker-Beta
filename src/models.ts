@@ -303,6 +303,20 @@ export type Asset = {
   createdFrom?: "manual" | "transaction" | "document" | "maintenance";
 };
 
+export type LeaseTurnoverTask = {
+  id: string;
+  title: string;
+  dueDate: string;
+  completedAt: string;
+  notes: string;
+  photoIds: string[];
+};
+
+export type LeaseTurnover = {
+  status: "departing" | "preparing" | "ready";
+  tasks: LeaseTurnoverTask[];
+};
+
 export type Lease = {
   id: string;
   propertyId: string;
@@ -331,6 +345,7 @@ export type Lease = {
   lateFeeType?: "flat" | "percent";
   lateFeeValue?: number;
   autoLateFeeEnabled?: boolean;
+  turnover?: LeaseTurnover;
   originalTerm?: LeaseOriginalTerm;
   extensions?: LeaseExtension[];
   extensionRevisions?: { extension: LeaseExtension; ledgerEntries: TenantLedgerEntry[]; transactions: Transaction[]; recordedAt: string }[];

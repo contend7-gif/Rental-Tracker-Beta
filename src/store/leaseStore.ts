@@ -9,6 +9,7 @@ import {
   normalizeLeaseDurationType,
 } from "../domain/leaseTerms.js";
 import { normalizeLeaseExtensions } from "../domain/leaseExtensions.ts";
+import { normalizeLeaseTurnover } from "../domain/leaseTurnover.ts";
 import type { AppendActivityLog } from "./activityStore.ts";
 
 type StateSetter<T> = (updater: T[] | ((previous: T[]) => T[])) => void;
@@ -76,6 +77,7 @@ export function normalizeLease(lease: Lease): Lease {
         }
       : undefined,
     extensions: normalizeLeaseExtensions(lease.extensions),
+    turnover: normalizeLeaseTurnover(lease.turnover),
   };
   return {
     ...baseLease,
@@ -102,6 +104,15 @@ export function createLeaseActions({
   appendActivityLog: AppendActivityLog;
 }) {
   return {
+    updateLeaseTurnover(id: string, turnover: Lease["turnover"]) {
+      const normalized = normalizeLeaseTurnover(turnover);
+      const lease = getLeases().find((item) => item.id === id);
+      if (!lease || !normalized) return false;
+      setLeases((previous) => previous.map((item) => item.id === id ? { ...item, turnover: normalized } : item));
+      appendActivityLog({ action: "update", entityType: "lease", entityId: id,
+        propertyId: lease.propertyId, unit: lease.unit, summary: "Turnover checklist updated." });
+      return true;
+    },
     updateLease(lease: Lease) {
       const normalizedLease = normalizeLease(lease);
       const existsBefore = getLeases().some((existing) => existing.id === normalizedLease.id);

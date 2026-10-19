@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.4",
+    releaseDate: "2026-10-18",
+    title: "Lease turnover checklists and photos",
+    summary: "Prepare for the next stay with a saved checklist inside each lease, including due dates, notes, progress and linked photos.",
+    changes: [
+      "Start a furnished-rental turnover checklist from the new Turnover tab in a saved lease, and add custom tasks for that stay.",
+      "Track completion, due dates, overdue work and notes, with Departing, Preparing and Ready for arrival statuses.",
+      "Attach JPEG, PNG and WebP photos or link existing lease photos to checklist tasks; unlinking keeps the original file in Documents.",
+      "Save turnover from the fixed footer without changing agreement terms, occupancy or payment records, with failed-save retry and unsaved-change protection.",
+      "Preserve checklist progress and linked photos across desktop restart and backup restore.",
+    ],
+  },
+  {
     version: "1.11.3",
     releaseDate: "2026-10-17",
     title: "Quiet desktop checks and consistent demo rent",

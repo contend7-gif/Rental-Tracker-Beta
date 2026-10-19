@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { DraftRecoveryControls } from "../shared/DraftRecovery.jsx";
+import { LeaseTurnoverPanel } from "./LeaseTurnoverPanel.jsx";
 import { leaseDraftKey } from "../../app/draftRecovery.ts";
 import { FileEmptyState, RecordDetailPanel } from "../shared/RecordDetailPanel.jsx";
 import { Button } from "../../components/ui/button";
@@ -67,6 +68,8 @@ export function LeaseEditorDialog({
   recommendedTenantLedgerAccountingTreatment,
   recommendedTenantLedgerKindForTreatment,
   saveLease,
+  saveLeaseTurnover,
+  attachTurnoverPhoto,
   saveTenantLedgerEntry,
   saveUnitOccupancyPeriod,
   selectedLeaseAutomationReminders,
@@ -93,12 +96,32 @@ export function LeaseEditorDialog({
   usePeriodDraft,
 }) {
   const isExistingLease = leases.some((lease) => lease.id === leaseDraft?.id);
+  const savedLease = leases.find((lease) => lease.id === leaseDraft?.id);
+  const turnoverDirty = JSON.stringify(leaseDraft?.turnover) !== JSON.stringify(savedLease?.turnover);
+  const [turnoverSaveFailed, setTurnoverSaveFailed] = useState(false);
+  const [turnoverSaveMessage, setTurnoverSaveMessage] = useState("");
+  const [turnoverBusy, setTurnoverBusy] = useState(false);
   const [detailTab, setDetailTab] = useState("overview");
   const [editingAgreement, setEditingAgreement] = useState(!isExistingLease);
   useEffect(() => {
+    setTurnoverSaveFailed(false);
+    setTurnoverSaveMessage("");
+    setTurnoverBusy(false);
     setDetailTab(leaseInitialSection);
     setEditingAgreement(!isExistingLease);
   }, [leaseDraft?.id, leaseEditorMode, leaseInitialSection]);
+  const handleSaveTurnover = async () => {
+    setTurnoverBusy(true);
+    setTurnoverSaveMessage("");
+    try {
+      await saveLeaseTurnover();
+      setTurnoverSaveFailed(false);
+      setTurnoverSaveMessage("Turnover checklist saved.");
+    } catch (error) {
+      setTurnoverSaveFailed(true);
+      setTurnoverSaveMessage(error.message || "Could not save turnover. Try again.");
+    } finally { setTurnoverBusy(false); }
+  };
   const propertyOptions = selectableProperties(properties, leaseDraft?.propertyId);
   const agreementType = normalizeLeaseAgreementType(leaseDraft);
   const billingCadence = normalizeLeaseBillingCadence(leaseDraft);
@@ -112,7 +135,7 @@ export function LeaseEditorDialog({
           ? "Rent each interval"
           : "Monthly rent";
   return (
-    <RecordDetailPanel className="flex flex-col overflow-hidden" draft={leaseEditorMode === "full" ? leaseDraft : undefined} dirty={leaseEditorMode === "full" && tenantLedgerDraftDirty} open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
+    <RecordDetailPanel closeDisabled={turnoverBusy} className="flex flex-col overflow-hidden" draft={leaseEditorMode === "full" ? { ...leaseDraft, turnover: undefined } : undefined} dirty={leaseEditorMode === "full" && (tenantLedgerDraftDirty || turnoverDirty || turnoverSaveFailed)} open={Boolean(leaseDraft)} onOpenChange={(isOpen) => { if (!isOpen) closeLeaseEditor(); }}>
 
         {!leaseDraft ? (
           <div className="p-4">
@@ -127,8 +150,8 @@ export function LeaseEditorDialog({
               </DialogHeader>
               {leaseEditorMode === "full" && <>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
-                  <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Lease detail sections">{[["overview", "Overview"], ["payments", "Payments"], ["documents", "Documents"], ["history", "History"]].map(([key, label]) => <button type="button" key={key} aria-pressed={detailTab === key} onClick={() => setDetailTab(key)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${detailTab === key ? "bg-teal-50 text-teal-900" : "text-slate-500 hover:bg-slate-50"}`}>{label}</button>)}</div>
-                  <div className="flex flex-wrap gap-2">{isExistingLease && <Button size="sm" variant="secondary" disabled={!canCreateEditRecords} onClick={() => { setEditingAgreement(true); setDetailTab("overview"); }}>Edit agreement</Button>}{isExistingLease && <Button size="sm" variant="secondary" disabled={!canCreateEditRecords} onClick={() => openLeaseExtension(leaseDraft)}>Extend lease</Button>}</div>
+                  <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1" aria-label="Lease detail sections">{[["overview", "Overview"], ["payments", "Payments"], ["documents", "Documents"], ["turnover", "Turnover"], ["history", "History"]].map(([key, label]) => <button type="button" key={key} disabled={turnoverBusy} aria-pressed={detailTab === key} onClick={() => setDetailTab(key)} className={`rounded-md px-3 py-1.5 text-sm font-medium ${detailTab === key ? "bg-teal-50 text-teal-900" : "text-slate-500 hover:bg-slate-50"}`}>{label}</button>)}</div>
+                  <div className="flex flex-wrap gap-2">{isExistingLease && <Button size="sm" variant="secondary" disabled={!canCreateEditRecords || turnoverBusy} onClick={() => { setEditingAgreement(true); setDetailTab("overview"); }}>Edit agreement</Button>}{isExistingLease && <Button size="sm" variant="secondary" disabled={!canCreateEditRecords || turnoverBusy} onClick={() => openLeaseExtension(leaseDraft)}>Extend lease</Button>}</div>
                 </div>
                 {detailTab === "overview" && !editingAgreement && <section aria-label="Lease overview" className="mt-4 space-y-4">
                   <div className="rounded-lg border border-teal-100 bg-teal-50 p-4"><h3 className="text-base font-semibold text-slate-900">{leaseDraft.tenantName || "Tenant name missing"}</h3><p className="mt-1 text-sm text-slate-600">{properties.find((property) => property.id === leaseDraft.propertyId)?.name || "Property not found"} / {leaseDraft.unit}</p></div>
@@ -141,6 +164,7 @@ export function LeaseEditorDialog({
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><h3 className="text-sm font-semibold text-slate-900">Payment records</h3><p className="mt-1 text-xs text-slate-600">{leaseTenantLedgerSummary.rows.length ? leaseTenantLedgerHeadline : "No tenant ledger entries recorded yet."}</p><p className="mt-1 text-xs text-slate-500">Based on recorded ledger entries. Review scheduled charges in Payments.</p><Button size="sm" variant="secondary" className="mt-2" onClick={() => setDetailTab("payments")}>Open tenant ledger</Button></div>
                   {leaseDraft.notes && <div><h3 className="text-sm font-semibold text-slate-900">Notes</h3><p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{leaseDraft.notes}</p></div>}
                 </section>}
+                {detailTab === "turnover" && <LeaseTurnoverPanel key={leaseDraft.id} lease={leaseDraft} setLeaseDraft={setLeaseDraft} savedLease={savedLease} canEdit={canCreateEditRecords && !turnoverBusy} documents={selectedLeaseDocuments} todayIso={todayIso} onBusyChange={setTurnoverBusy} onAttachPhoto={attachTurnoverPhoto} openDocumentPreview={openDocumentPreview} />}
                 {detailTab === "history" && <section aria-label="Agreement history" className="mt-4 space-y-3"><div className="rounded-lg border border-slate-200 p-3"><h3 className="text-sm font-semibold text-slate-900">{leaseDraft.originalTerm ? "Original agreement" : "Agreement on file"}</h3><p className="mt-1 text-xs text-slate-500">{leaseDraft.originalTerm?.startDate || leaseDraft.startDate} to {leaseDraft.originalTerm?.endDate || (leaseIsOpenEnded(leaseDraft) ? "Ongoing" : leaseDraft.endDate || "End date missing")}</p></div><h3 className="text-sm font-semibold text-slate-900">Recorded extensions</h3>{!(leaseDraft.extensions || []).length ? <p className="text-xs text-slate-500">No extensions recorded.</p> : (leaseDraft.extensions || []).map((extension) => <div key={extension.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 p-3"><div><div className="text-sm font-medium text-slate-900">{extension.startDate} to {extension.endDate}</div><div className="mt-1 text-xs text-slate-500">{currency(extension.rentAmount)} additional rent{extension.signedDate ? ` / Signed ${extension.signedDate}` : ""}</div></div><span className="text-xs text-slate-500">{extension.canceledAt ? "Canceled" : "Recorded"}</span></div>)}<p className="text-xs text-slate-500">Occupancy records for this unit appear below. Earlier tenant agreements remain in the Past filter on Leases.</p></section>}
               </>}
               {leaseEditorMode === "full" && (
@@ -594,10 +618,12 @@ export function LeaseEditorDialog({
               )}
             </div>
             <div className="border-t border-slate-200 bg-slate-50/70 px-4 py-3">
+              {leaseEditorMode === "full" && detailTab === "turnover" && turnoverSaveMessage && (!turnoverDirty || turnoverSaveFailed) && <p role="status" className="mb-2 text-sm text-slate-700">{turnoverSaveMessage}</p>}
               <div className="flex flex-wrap justify-end gap-2">
-                {leaseEditorMode === "full" && editingAgreement && <Button onClick={saveLease} disabled={!canCreateEditRecords}>Save lease</Button>}
-                {leaseEditorMode === "full" && editingAgreement && isExistingLease && <Button variant="destructive" onClick={confirmAndDeleteLease} disabled={!canDeleteRecords}>Delete lease</Button>}
-                <DialogClose variant="secondary">Close</DialogClose>
+                {leaseEditorMode === "full" && detailTab === "turnover" && leaseDraft?.turnover && <Button disabled={!canCreateEditRecords || turnoverBusy} onClick={() => void handleSaveTurnover()}>{turnoverBusy ? "Saving…" : "Save turnover"}</Button>}
+                {leaseEditorMode === "full" && editingAgreement && <Button onClick={saveLease} disabled={!canCreateEditRecords || turnoverBusy}>Save lease</Button>}
+                {leaseEditorMode === "full" && editingAgreement && isExistingLease && <Button variant="destructive" onClick={confirmAndDeleteLease} disabled={!canDeleteRecords || turnoverBusy}>Delete lease</Button>}
+                <DialogClose disabled={turnoverBusy} variant="secondary">Close</DialogClose>
               </div>
             </div>
           </>

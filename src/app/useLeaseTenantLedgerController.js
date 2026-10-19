@@ -929,6 +929,28 @@ export function useLeaseTenantLedgerController({
     leasePdfInputRef.current?.click();
   };
 
+  const saveLeaseTurnover = async () => {
+    if (!requirePermission("create_edit_records", "This access profile cannot save turnover checklists.")) throw new Error("Editing is not permitted.");
+    let saved = false;
+    flushSync(() => { saved = actions.updateLeaseTurnover(leaseDraft?.id, leaseDraft?.turnover); });
+    if (!saved) throw new Error("Save the lease before creating its turnover checklist.");
+    await persistExtension?.();
+    setNotice("Turnover checklist saved.");
+  };
+
+  const attachTurnoverPhoto = async (file) => {
+    if (!requirePermission("create_edit_records", "This access profile cannot attach turnover photos.")) throw new Error("Editing is not permitted.");
+    if (!leases.some((lease) => lease.id === leaseDraft?.id)) throw new Error("Save the lease before attaching photos.");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file?.type)) throw new Error("Choose a JPEG, PNG or WebP photo.");
+    if (file.size > 20 * 1024 * 1024) throw new Error("Choose a photo smaller than 20 MB.");
+    const dataUrl = await readFileAsDataUrl(file);
+    const id = crypto.randomUUID();
+    flushSync(() => actions.addDocument({ id, propertyId: leaseDraft.propertyId, unit: leaseDraft.unit,
+      leaseId: leaseDraft.id, name: file.name, type: "Turnover photo", mimeType: file.type,
+      uploadedAt: new Date().toISOString(), dataUrl, tags: ["turnover"] }));
+    return id;
+  };
+
   return {
     clearTenantLedgerEntryDraft,
     closeLeaseEditor,
@@ -963,6 +985,8 @@ export function useLeaseTenantLedgerController({
     cancelLeaseExtension,
     saveTenantLedgerEntry,
     saveLease,
+    saveLeaseTurnover,
+    attachTurnoverPhoto,
     saveLeaseExtension,
     setLeaseExtensionDraft,
     saveUnitOccupancyPeriod,

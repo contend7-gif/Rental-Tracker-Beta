@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DocumentItem, Lease, TenantLedgerEntry, Unit, UsePeriod } from "../models.ts";
 import { createLeaseActions, leaseIsEndedByDate, normalizeLease } from "./leaseStore.ts";
+import { createLeaseTurnover } from "../domain/leaseTurnover.ts";
 
 const baseLease: Lease = {
   id: "lease-1",
@@ -19,6 +20,28 @@ const baseLease: Lease = {
   status: "Active",
   notes: "",
 };
+
+test("turnover save changes only the selected lease checklist, preserving financial and occupancy records", () => {
+  const currentLease = { ...baseLease, rentAmount: 1400, notes: "Latest agreement notes" };
+  let leases = [currentLease, { ...baseLease, id: "lease-2" }];
+  const logs: unknown[] = [];
+  const forbidden = () => { throw new Error("Turnover must not change documents, occupancy, units or ledger entries"); };
+  const actions = createLeaseActions({ getLeases: () => leases, getUsePeriods: () => [],
+    setLeases: (updater) => { leases = update(leases, updater); },
+    setDocuments: forbidden, setUnits: forbidden, setTenantLedgerEntries: forbidden,
+    appendActivityLog: (entry) => { logs.push(entry); },
+  });
+  const turnover = createLeaseTurnover();
+  turnover.tasks[0].completedAt = "2026-10-18T12:00:00Z";
+  assert.equal(actions.updateLeaseTurnover("missing", turnover), false);
+  assert.equal(actions.updateLeaseTurnover("lease-1", turnover), true);
+  const { turnover: saved, ...agreement } = leases[0];
+  assert.deepEqual(agreement, currentLease);
+  assert.equal(saved?.tasks[0].completedAt, "2026-10-18T12:00:00Z");
+  assert.equal(leases[1].turnover, undefined);
+  assert.deepEqual(normalizeLease(leases[0]).turnover, saved);
+  assert.equal(logs.length, 1);
+});
 
 function update<T>(current: T[], updater: T[] | ((previous: T[]) => T[])) {
   return typeof updater === "function" ? updater(current) : updater;
