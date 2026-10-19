@@ -9,6 +9,8 @@ export const COMPANION_CHANNELS = {
   syncPropertyCatalog: "companion:sync-property-catalog",
   syncSnapshot: "companion:sync-snapshot",
   clearSnapshot: "companion:clear-snapshot",
+  downloadTurnoverPhoto: "companion:turnover-photo-download",
+  uploadTurnoverPhoto: "companion:turnover-photo-upload",
   listMileage: "companion:mileage-list",
   claimMileage: "companion:mileage-claim",
   completeMileage: "companion:mileage-complete",
@@ -38,6 +40,8 @@ export function registerCompanionSyncIpc({ secretStore, recordDesktopHealthEvent
   handle(COMPANION_CHANNELS.list, () => service.list());
   handle(COMPANION_CHANNELS.syncSnapshot, (payload) => service.syncSnapshot(payload));
   handle(COMPANION_CHANNELS.clearSnapshot, () => service.clearSnapshot());
+  handle(COMPANION_CHANNELS.downloadTurnoverPhoto, (payload) => service.downloadTurnoverPhoto(payload?.id));
+  handle(COMPANION_CHANNELS.uploadTurnoverPhoto, (payload) => service.uploadTurnoverPhoto(payload));
   handle(COMPANION_CHANNELS.syncPropertyCatalog, (payload) => service.syncPropertyCatalog(payload));
   handle(COMPANION_CHANNELS.listMileage, () => service.listMileage());
   handle(COMPANION_CHANNELS.claimMileage, (payload) => service.claimMileage(payload?.id));

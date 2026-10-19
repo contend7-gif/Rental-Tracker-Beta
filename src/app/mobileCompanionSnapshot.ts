@@ -9,10 +9,10 @@ export function buildMobileCompanionSnapshot({ properties, units, leases, transa
   const propertyIds = new Set(activeProperties.map(p => p.id));
   const recordedTransactions = transactions.filter(t => t.status !== 'voided' && propertyIds.has(t.propertyId));
   return normalizeDesktopSnapshot({
-    version: 1, generatedAt, asOfDate,
+    version: 1, generatedAt, asOfDate, turnoverSync: true,
     properties: activeProperties.map(p => ({ id: p.id, name: p.name, address: p.address })),
     units: units.map(u => ({ id: u.id, propertyId: u.propertyId, name: u.name, status: u.status })),
-    leases: leases.filter(l => l.status !== 'Ended').map(l => ({ id: l.id, propertyId: l.propertyId, unit: l.unit, tenantName: l.tenantName, startDate: l.startDate, endDate: l.actualEndDate || l.endDate, monthlyRent: l.monthlyRent, status: l.status, billingCadence: l.billingCadence || 'monthly' })),
+    leases: leases.filter(l => l.status !== 'Ended' || Boolean(l.turnover) || Boolean(l.actualEndDate || l.endDate) && (l.actualEndDate || l.endDate) >= new Date(new Date(`${asOfDate}T00:00:00Z`).getTime() - 90 * 86400000).toISOString().slice(0,10)).map(l => ({ id: l.id, propertyId: l.propertyId, unit: l.unit, tenantName: l.tenantName, startDate: l.startDate, endDate: l.actualEndDate || l.endDate, monthlyRent: l.monthlyRent, status: l.status, billingCadence: l.billingCadence || 'monthly', turnover: l.turnover || null })),
     transactions: [...recordedTransactions].sort((a,b) => b.date.localeCompare(a.date) || String(b.id).localeCompare(String(a.id))).slice(0,200).map(t => ({ id: t.id, propertyId: t.propertyId, unit: t.unit, date: t.date, type: t.type, category: t.category, description: t.description, vendor: t.vendor, amount: t.amount, reconciled: t.reconciled === true })),
     transactionCount: recordedTransactions.length,
     loans: loans.map(l => {

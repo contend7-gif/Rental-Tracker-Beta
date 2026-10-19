@@ -14,6 +14,7 @@
   },
   "files": [
     "src/models.ts",
+    "src/app/mobileTurnoverSync.ts",
     "src/domain/recordConnections.ts",
     "src/types/desktop.d.ts",
     "src/app/useDesktopBridgeController.ts",

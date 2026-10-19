@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createCompanionSyncService } from "../electron/companionSyncService.mjs";
+import { createHash } from 'node:crypto';
+
+test('turnover photos use both authorization layers and return integrity metadata', async () => {
+  const bytes = Buffer.from('example photo'); const requests = [];
+  const service = createCompanionSyncService({ secretStore: createMemorySecretStore({ 'companion.siteUrl':'https://companion.example.test', 'companion.syncSecret':'fictional-sync', 'companion.sitesBypassToken':'fictional-private' }), fetchImpl: async (url, options) => {
+    requests.push({ url: String(url), options });
+    return options.method === 'PUT' ? Response.json({ photo: { id: 'photo-1' } }) : new Response(bytes, { headers: { 'content-type': 'image/png' } });
+  } });
+  const photo = await service.downloadTurnoverPhoto('photo-1');
+  assert.equal(photo.sha256, createHash('sha256').update(bytes).digest('hex')); assert.equal(photo.byteSize, bytes.length);
+  await service.uploadTurnoverPhoto({ id: 'photo-1', leaseId: 'lease-1', name: 'Example.png', dataUrl: `data:image/png;base64,${bytes.toString('base64')}` });
+  assert.ok(requests.every(r => r.options.headers.get('authorization') === 'Bearer fictional-sync' && r.options.headers.get('OAI-Sites-Authorization') === 'Bearer fictional-private'));
+  assert.equal(requests[1].options.body.get('leaseId'), 'lease-1'); assert.equal(requests[1].options.body.get('file').type, 'image/png');
+  await assert.rejects(service.downloadTurnoverPhoto('../private'), /Invalid turnover/);
+});
 test("desktop snapshot uploads and clearing preserve both private authorization layers", async () => {
   const requests = [];
   const service = createCompanionSyncService({ secretStore: createMemorySecretStore({ 'companion.siteUrl':'https://companion.example.test', 'companion.syncSecret':'fictional-sync', 'companion.sitesBypassToken':'fictional-private' }), fetchImpl: async(url,options)=>{ requests.push({url:String(url),options}); return Response.json({generatedAt:'2026-10-12T12:00:00Z'}); } });

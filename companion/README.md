@@ -18,16 +18,36 @@ immediately by default, or after an optional 7- or 30-day recovery window. The
 companion keeps only a minimal audit receipt after cloud file cleanup and never
 creates a permanent offline document cache on the phone.
 
-## Read-only desktop snapshots
+## Mobile turnover checklists
+
+With desktop v1.11.5 or later and Phone overview & turnover sync enabled, the
+Turnover section shows shared leases and their checklists. Check off tasks, add
+custom tasks, notes and due dates, change readiness, and use the camera or gallery
+to attach task photos. Save turnover keeps progress on the private companion even
+while the desktop is closed. Unsaved text drafts stay on this phone; photos that
+have not uploaded must be reselected after a reload.
+
+The paired desktop checks in about every 30 seconds while open. Turnover edits
+merge by field, and conflicting edits remain visible for an explicit phone or
+desktop version choice. Photos are verified before becoming linked desktop
+Documents. Receipts, ordinary maintenance reports and mileage still use their
+existing review/import flows. Other overview records remain read only.
+
+Linked turnover photos remain in private cloud storage for phone viewing, separate
+from capture-inbox retention. Unlinking a task photo keeps the file. Stop sharing &
+clear cloud snapshot removes shared turnover checklists and photos as well as the
+overview; it does not delete desktop records.
+
+## Desktop overview snapshots
 
 Desktop snapshot sharing is off by default, including on existing installations.
 An Admin enables it under Settings → Admin & Tools → Mobile companion. The
 desktop pushes an allowlisted snapshot after changes and refreshes its timestamp
-at least every five minutes while open and paired. No source files, private notes,
-credentials, or attachment bytes are sent. Overview reads the last cloud copy,
+about every 30 seconds while open and paired. Only explicit turnover notes and linked turnover photos are added to sharing;
+agreement notes, unrelated files and credentials are excluded. Overview reads the last cloud copy,
 clearly timestamps it, and warns when it is over 24 hours old.
 
-The snapshot contains active properties and units, ongoing lease records, open
+The snapshot contains active properties and units, ongoing leases plus recently ended leases and leases with turnover checklists, open
 work orders, the latest 200 non-voided transactions, and recorded loan details.
 Transaction filters operate on those 200 records, not full desktop history.
 Optional payoff dates reuse the desktop planning calculation and show their

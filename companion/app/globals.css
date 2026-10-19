@@ -269,3 +269,45 @@ button:focus-visible, a:focus-visible { outline: 3px solid #5477b4; outline-offs
 .maintenance-fields label, .edit-fields label { display: grid; gap: 6px; }
 .edit-fields label span { font-size: 12px; color: #58677c; }
 .edit-fields input, .edit-fields select, .edit-fields textarea { width: 100%; min-width: 0; border: 1px solid #cdd8e8; border-radius: 10px; padding: 12px; background: #fff; color: #20314b; font: inherit; }
+
+.workspace-nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.turnover-panel { margin-top: 18px; min-width: 0; }
+.turnover-panel[hidden] { display: none; }
+.turnover-panel h2 { font-size: 22px; margin: 4px 0; }
+.turnover-panel h3 { font-size: 15px; }
+.turnover-lease-picker, .turnover-task-fields label, .turnover-add-task label { display: grid; gap: 7px; font-size: 13px; color: #58677c; min-width: 0; }
+.turnover-panel select, .turnover-panel input:not([type=checkbox]):not([type=file]), .turnover-panel textarea { min-width: 0; width: 100%; border: 1px solid #c3d1e5; border-radius: 10px; padding: 12px; background: #fff; color: #20314b; font: inherit; font-size: 16px; }
+.turnover-identity { display: grid; gap: 5px; padding: 16px 0; color: #20314b; }
+.turnover-identity span { font-size: 13px; color: #58677c; }
+.turnover-progress { display: grid; gap: 12px; padding: 16px; background: #e8f5f0; border: 1px solid #b9dcd0; border-radius: 14px; }
+.turnover-progress progress { width: 100%; height: 9px; accent-color: #14735c; }
+.turnover-progress label { display: grid; grid-template-columns: 85px minmax(0,1fr); gap: 10px; align-items: center; font-size: 13px; }
+.turnover-progress > span { font-size: 12px; line-height: 1.5; color: #42665a; }
+.turnover-tasks { padding: 0; margin: 14px 0; border: 0; min-width: 0; display: grid; gap: 12px; }
+.turnover-task { padding: 15px; border: 1px solid #cdd8e8; border-radius: 14px; background: #fff; min-width: 0; }
+.turnover-task.completed { border-left: 4px solid #5c9d83; }
+.turnover-check { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; font-weight: 650; line-height: 1.5; min-height: 44px; cursor: pointer; }
+.turnover-check input { flex: 0 0 24px; height: 24px; width: 24px; margin: 0; accent-color: #14735c; }
+.turnover-task.completed .turnover-check span { color: #5b746b; text-decoration: line-through; }
+.turnover-task details summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 13px; color: #294f8d; }
+.turnover-task details summary::before { content: '+'; font-size: 19px; padding-right: 8px; }
+.turnover-task details[open] summary::before { content: '−'; }
+.turnover-task-fields { display: grid; gap: 13px; }
+.turnover-overdue { font-size: 12px; color: #a14a17; font-weight: 650; margin: 0 0 5px; }
+.turnover-camera-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.turnover-camera-actions label { display: grid; align-content: center; position: relative; min-height: 44px; cursor: pointer; margin: 0; padding: 10px 14px; font-size: 14px; }
+.turnover-camera-actions input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.turnover-photos { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.turnover-photos > div { padding: 8px; border: 1px solid #dae3ef; border-radius: 10px; min-width: 0; }
+.turnover-photos img { width: 100%; height: 135px; object-fit: contain; background: #f2f5fa; border-radius: 6px; }
+.turnover-photos a, .turnover-photos span, .turnover-photos p { font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.turnover-photos a { color: #294f8d; }
+.turnover-photos span { display: block; }
+.turnover-photos button { min-height: 44px; font-size: 12px; }
+.turnover-add-task { display: grid; gap: 8px; }
+.turnover-save { position: sticky; z-index: 5; bottom: 0; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 10px; padding: 14px 0 max(14px,env(safe-area-inset-bottom)); background: #fbfcff; border-top: 1px solid #c5d3e7; }
+.turnover-save span, .turnover-save p { font-size: 12px; line-height: 1.5; color: #52657c; margin: 0; }
+.turnover-save button { width: auto; min-height: 48px; padding: 12px 14px; margin: 0; font-size: 14px; }
+.turnover-conflict { background: #fff5e6; border: 1px solid #e9c28a; border-radius: 12px; padding: 14px; margin: 12px 0; }
+.turnover-conflict p, .turnover-conflict summary { font-size: 13px; line-height: 1.6; }
+.turnover-conflict button { min-height: 44px; margin: 5px; }

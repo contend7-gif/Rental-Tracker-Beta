@@ -4,6 +4,14 @@ Use this checklist before publishing alpha builds or validating a real-world ren
 
 Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, then run `docs/real-duplex-dry-run.md` and `docs/loan-tax-reconciliation-qa.md` manually with fictional data. The automated scenarios protect tax/accounting and loan/tax reconciliation invariants, while the manual dry runs still cover UI behavior, backup restore, and desktop file handling.
 
+## v1.11.5 mobile turnover checks
+
+- Enable Phone overview & turnover sync on an isolated paired profile. Confirm a phone checklist save reaches the matching lease without changing agreement, occupancy or financial records.
+- Attach a task photo on the phone; verify its hash, linked desktop Document, preview and full-app restart persistence. Link a desktop photo and confirm it becomes viewable on the phone.
+- Change different fields on both devices and confirm both survive. Change the same notes on both and explicitly choose a version on the phone; confirm stale saves do not overwrite newer work.
+- Confirm failed phone saves keep drafts and uploaded-photo links, retries do not duplicate files, and camera/gallery controls work at 320 and 390 pixel widths.
+- Disable sharing during a download and confirm no photo is imported. Clear the shared snapshot and confirm shared turnover data is removed without deleting desktop records.
+
 ## v1.11.4 turnover checks
 
 - Open a saved lease, choose Turnover and start the furnished-rental checklist. Add a custom task, notes and a due date; check overdue and completed states.

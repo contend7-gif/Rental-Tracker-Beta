@@ -43,7 +43,7 @@ The desktop app can be used and released without building or deploying this fold
 
 Companion-powered improvements must follow these boundaries:
 
-1. **Desktop remains authoritative.** Cloud captures do not become Rental Tracker records until the user reviews and imports them.
+1. **Desktop remains authoritative.** Receipts, maintenance reports and mileage require desktop review/import. With overview sharing enabled, turnover checklist edits and explicitly linked photos may sync automatically into the matching lease without altering agreement terms, occupancy or financial records. Overlapping edits require an explicit choice.
 2. **The integration stays opt-in.** New installs default to off, and ordinary Documents workflows cannot depend on a companion connection.
 3. **No maintainer-specific endpoint is a product default.** URLs and credentials belong to each user's local encrypted pairing.
 4. **Failures degrade safely.** An unavailable companion may show a connection error, but it must not block manual uploads or local document work.
@@ -51,5 +51,7 @@ Companion-powered improvements must follow these boundaries:
 6. **Every deployment is isolated.** Do not place multiple unrelated Rental Tracker users into one shared inbox or storage namespace.
 7. **Imported records retain provenance.** Preserve the companion submission ID, capture time, and file hash for duplicate prevention and auditability.
 8. **Cloud retention is explicit.** Imported file bytes are deleted immediately by default. A user may select a 7- or 30-day recovery window or manually clear imported cloud files; pending and in-review captures are never removed by retention cleanup.
+
+Turnover photos have a separate lifecycle: they remain private for phone viewing until Stop sharing & clear cloud snapshot removes them. Unlinking a task photo preserves its file. Desktop v1.11.5 or later supplies this opt-in workflow.
 
 These rules allow the desktop app and companion to improve independently without turning the companion into a requirement.

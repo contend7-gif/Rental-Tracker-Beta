@@ -8,6 +8,20 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.5",
+    releaseDate: "2026-10-18",
+    title: "Turnover work from your phone",
+    summary: "Use your private Mobile Companion to check off turnover work, add notes and due dates, and take task photos that sync back to the matching desktop lease.",
+    changes: [
+      "Add a mobile Turnover section with task completion, custom tasks, due dates, notes, readiness, camera and gallery uploads, and saved text drafts.",
+      "Sync turnover changes and explicitly linked photos about every 30 seconds while the paired desktop is open and Phone overview & turnover sync is enabled.",
+      "Merge independent edits and require an explicit phone or desktop version choice when the same fields change on both devices.",
+      "Verify photo hashes before importing linked lease Documents, preserve files when unlinked, and keep receipt, maintenance and mileage review workflows unchanged.",
+      "Include recent departures and leases with turnover checklists on the phone while keeping the overview's ongoing-lease counts focused.",
+      "Keep ordinary agreement notes and unrelated attachments out of sharing; Stop sharing & clear cloud snapshot also clears shared turnover checklists and photos.",
+    ],
+  },
+  {
     version: "1.11.4",
     releaseDate: "2026-10-18",
     title: "Lease turnover checklists and photos",

@@ -96,13 +96,13 @@ export function MobileCompanionSettings({ appSettings, desktopCompanionApi, setS
   return (
     <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <div className={`${SETTINGS_CARD_CLASS} md:col-span-2`}>
-        <Label htmlFor="companion-snapshot-sharing">Read-only phone overview</Label>
+        <Label htmlFor="companion-snapshot-sharing">Phone overview &amp; turnover sync</Label>
         <select id="companion-snapshot-sharing" className="mt-1 w-full rounded-md border border-slate-300 bg-white p-2 text-sm" value={appSettings.mobileCompanionSnapshotEnabled ? "on" : "off"} disabled={!canManageDataAdmin || !desktopCompanionApi?.syncSnapshot} onChange={event => setSetting("mobileCompanionSnapshotEnabled", event.target.value === "on")}>
-          <option value="off">Off — keep records on this computer</option><option value="on">On — share a snapshot with my private companion</option>
+          <option value="off">Off — keep records on this computer</option><option value="on">On — share overview and sync turnover checklists</option>
         </select>
         <p className="mt-2 text-xs text-slate-600">Shares property addresses, unit status, tenant names and lease terms, the latest 200 transactions (date, amount, category, description, vendor), open maintenance, and recorded mortgage balances and payments. Updates while this app is open. File attachments, account numbers, and private notes are excluded.</p>
         {!desktopCompanionApi?.syncSnapshot && <p className="mt-2 text-xs text-amber-800">Install the desktop update to enable snapshots.</p>}
-        <p className="mt-2 text-xs text-slate-600">{companionSnapshotSync?.status.updatedAt ? `Last snapshot: ${new Date(companionSnapshotSync.status.updatedAt).toLocaleString()}` : "No snapshot sent in this session."} Turning sharing off stops updates; the last cloud snapshot remains until cleared.</p>
+        <p className="mt-2 text-xs text-slate-600">{companionSnapshotSync?.status.updatedAt ? `Last snapshot: ${new Date(companionSnapshotSync.status.updatedAt).toLocaleString()}` : "No snapshot sent in this session."} Turnover tasks, notes and linked photos sync both ways while this app is open. Other overview records remain read only. Turning sharing off retains the last cloud copy; clearing removes shared checklists and photos too.</p>
         {companionSnapshotSync?.status.error && <p role="alert" className="mt-2 text-xs text-amber-800">{companionSnapshotSync.status.error}</p>}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" disabled={!enabled || !configured || !appSettings.mobileCompanionSnapshotEnabled || companionSnapshotSync?.status.busy || !canManageDataAdmin} onClick={() => void companionSnapshotSync?.syncNow()}>Sync snapshot now</Button>

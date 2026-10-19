@@ -10,6 +10,7 @@ import { emptyMemory, hasDraftContent, parseCaptureMemory, rememberPurpose, type
 
 import { formatMaintenanceReport, parseMaintenanceReport, type MaintenanceReport } from "@/lib/maintenance-report";
 import { DesktopOverview } from './DesktopOverview';
+import { MobileTurnover } from './MobileTurnover';
 
 type PendingEdit = { id: string; type: "capture" | "mileage"; kind: CaptureKind; expectedUpdatedAt: string; propertyLabel: string; unitLabel: string; note: string; tripDate: string; businessMiles: string; purpose: string; startLocation: string; endLocation: string; maintenanceTitle: string; maintenanceLocation: string; maintenanceUrgency: MaintenanceReport["urgency"] };
 
@@ -43,7 +44,7 @@ export function MobileCaptureApp({ displayName, signOutPath, draftOwner, compani
   const [reviewing, setReviewing] = useState(false);
   const [reviewImages, setReviewImages] = useState<string[]>([]);
   const reviewDialogRef = useRef<HTMLDialogElement>(null);
-  const [screen, setScreen] = useState<"overview" | "capture" | "inbox" | "settings">("overview");
+  const [screen, setScreen] = useState<"overview" | "turnover" | "capture" | "inbox" | "settings">("overview");
   const [memoryReady, setMemoryReady] = useState(false);
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -629,17 +630,18 @@ export function MobileCaptureApp({ displayName, signOutPath, draftOwner, compani
       </header>
 
       <section className="hero">
-        <p className="eyebrow">{screen === "overview" ? "YOUR RENTALS, WITH YOU" : screen === "capture" ? "FIELD CAPTURE" : screen === "inbox" ? "PHONE → DESKTOP" : "YOUR COMPANION"}</p>
-        <h1>{screen === "overview" ? "Check in from anywhere." : screen === "capture" ? "Capture it now. Finish it at your desk." : screen === "inbox" ? "Your capture inbox" : "Settings"}</h1>
-        <p>{screen === "overview" ? "Check your properties, recent transactions, and mortgages from the latest desktop snapshot." : screen === "capture" ? "Send receipts, maintenance photos, and business mileage while the details are fresh." : screen === "inbox" ? "Track what is waiting for review and what your desktop has imported." : "Manage your connection, saved drafts, and private cloud storage."}</p>
+        <p className="eyebrow">{screen === "overview" ? "YOUR RENTALS, WITH YOU" : screen === "turnover" ? "BETWEEN STAYS" : screen === "capture" ? "FIELD CAPTURE" : screen === "inbox" ? "PHONE → DESKTOP" : "YOUR COMPANION"}</p>
+        <h1>{screen === "overview" ? "Check in from anywhere." : screen === "turnover" ? "Get the next stay ready." : screen === "capture" ? "Capture it now. Finish it at your desk." : screen === "inbox" ? "Your capture inbox" : "Settings"}</h1>
+        <p>{screen === "overview" ? "Check your properties, recent transactions, and mortgages from the latest desktop snapshot." : screen === "turnover" ? "Check off work, record the details, and take photos right where you are." : screen === "capture" ? "Send receipts, maintenance photos, and business mileage while the details are fresh." : screen === "inbox" ? "Track what is waiting for review and what your desktop has imported." : "Manage your connection, saved drafts, and private cloud storage."}</p>
       </section>
 
       <nav className="workspace-nav" aria-label="Companion sections">
-        {(["overview", "capture", "inbox", "settings"] as const).map((tab) => <button type="button" key={tab} aria-current={screen === tab ? "page" : undefined} onClick={() => setScreen(tab)}>{tab === "overview" ? "Overview" : tab === "capture" ? "Capture" : tab === "inbox" ? `Inbox${pendingCount ? ` · ${pendingCount}` : ""}` : "Settings"}</button>)}
+        {(["overview", "turnover", "capture", "inbox", "settings"] as const).map((tab) => <button type="button" key={tab} aria-current={screen === tab ? "page" : undefined} onClick={() => setScreen(tab)}>{tab === "overview" ? "Overview" : tab === "turnover" ? "Turnover" : tab === "capture" ? "Capture" : tab === "inbox" ? `Inbox${pendingCount ? ` · ${pendingCount}` : ""}` : "Settings"}</button>)}
       </nav>
       {screen !== "overview" && <div className="connection-strip" role="status"><span>{!online ? "Offline · keep selected files open" : syncError ? "Sync needs attention" : lastSync ? `Updated ${new Date(lastSync).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Connecting to your inbox…"}</span><button type="button" onClick={() => void loadData()}>Refresh</button></div>}
       {screen !== "overview" && syncError && <p className="alert error" role="alert">{syncError} Your unfinished capture is still here.</p>}
       <DesktopOverview active={screen === "overview"} />
+      <MobileTurnover active={screen === "turnover"} draftOwner={draftOwner} />
 
       <section hidden={screen !== "capture"} className="capture-card" aria-labelledby="capture-title">
         <div className="section-heading">

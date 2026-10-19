@@ -3,11 +3,76 @@ import { makeTextPdf } from "../scripts/fixtures/pdfFixture.mjs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { _electron as electron, expect, test } from "@playwright/test";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE
   || path.join(rootDir, "release", "win-unpacked", "Rental Tracker.exe");
+
+test('mobile turnover sync imports checked work and photos into the packaged desktop without changing finances', async () => {
+  test.setTimeout(180_000);
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-phone-turnover-'));
+  let run = await launchDesktopApp(profilePath);
+  const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1kAAAAASUVORK5CYII=', 'base64');
+  let server;
+  const photo = { id: 'turnover-photo-from-phone', leaseId: 'phone-turnover-lease', name: 'Example phone photo.png', mimeType: 'image/png', byteSize: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  try {
+    await expect(run.page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
+    const requests = []; let uploaded = false;
+    server = createServer(async (request, response) => {
+      const parts = []; for await (const chunk of request) parts.push(chunk);
+      const body = Buffer.concat(parts);
+      requests.push({ path: request.url, authorization: request.headers.authorization, body: body.toString() });
+      if (request.headers.authorization !== 'Bearer example-turnover-sync') { response.writeHead(401); response.end('{}'); return; }
+      if (request.url === '/api/desktop/snapshot' && request.method === 'PUT') {
+        const snapshot = JSON.parse(body.toString()), lease = snapshot.leases.find(l => l.id === 'phone-turnover-lease');
+        const checklist = structuredClone(lease.turnover);
+        checklist.tasks[0].notes = 'Inspected on phone'; checklist.tasks[0].completedAt = '2026-10-18T12:00:00.000Z';
+        checklist.tasks[0].photoIds = [...new Set([...checklist.tasks[0].photoIds, photo.id])];
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ ok: true, generatedAt: snapshot.generatedAt, turnovers: [{ leaseId: lease.id, revision: 2, checklist, conflict: null, syncedAt: null, updatedAt: snapshot.generatedAt, photos: [photo] }] }));
+      } else if (request.url === '/api/desktop/turnover-photos/' + photo.id && request.method === 'GET') {
+        response.writeHead(200, { 'content-type': 'image/png' }); response.end(bytes);
+      } else if (request.url === '/api/desktop/turnover-photos/desktop-turnover-photo' && request.method === 'PUT') {
+        uploaded = true; response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ ok: true }));
+      } else { response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify({ ok: true, submissions: [], mileageEntries: [] })); }
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const origin = 'http://127.0.0.1:' + server.address().port;
+    const before = await run.page.evaluate(async ({ origin, dataUrl }) => {
+      await window.desktopCompanion.configure({ siteUrl: origin, syncSecret: 'example-turnover-sync' });
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const base = backup.data.leases[0];
+      const turnover = { status: 'preparing', tasks: [{ id: 'inspection', title: 'Inspect unit', dueDate: '2026-10-20', completedAt: '', notes: '', photoIds: ['desktop-turnover-photo'] }] };
+      backup.data.leases = [{ ...base, id: 'phone-turnover-lease', tenantName: 'Example Phone Turnover Tenant', notes: 'Example private agreement note', turnover }];
+      backup.data.documents.push({ id: 'desktop-turnover-photo', leaseId: 'phone-turnover-lease', propertyId: base.propertyId, unit: base.unit, name: 'Example desktop photo.png', type: 'Turnover photo', mimeType: 'image/png', dataUrl });
+      backup.settings.leaseAutomationEnabled = false;
+      backup.settings.mobileCompanionEnabled = true; backup.settings.mobileCompanionSnapshotEnabled = true;
+      const result = await window.desktopPersistence.saveAppData(backup); if (result.ok === false) throw new Error(result.message);
+      return backup.data;
+    }, { origin, dataUrl: `data:image/png;base64,${bytes.toString('base64')}` });
+    await run.page.reload();
+    await expect.poll(async () => run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.leases.find(l => l.id === 'phone-turnover-lease')?.turnover?.tasks[0]?.notes), { timeout: 30_000 }).toBe('Inspected on phone');
+    const after = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data);
+    expect(after.transactions).toEqual(before.transactions); expect(after.tenantLedgerEntries).toEqual(before.tenantLedgerEntries); expect(after.usePeriods).toEqual(before.usePeriods);
+    expect(after.leases[0].rentAmount).toBe(before.leases[0].rentAmount); expect(after.leases[0].notes).toBe('Example private agreement note');
+    expect(after.leases[0].turnover.tasks[0].photoIds).toContain(photo.id);
+    const savedPhoto = after.documents.find(d => d.id === photo.id); expect(savedPhoto.leaseId).toBe('phone-turnover-lease');
+    expect(uploaded).toBe(true);
+    const sent = requests.find(r => r.path === '/api/desktop/snapshot').body;
+    expect(sent).not.toContain('Example private agreement note');
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    const restored = await run.page.evaluate(async (id) => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const document = backup.data.documents.find(d => d.id === id);
+      return { notes: backup.data.leases[0].turnover.tasks[0].notes, file: await window.desktopPersistence.readDocumentDataUrl(document) };
+    }, photo.id);
+    expect(restored.notes).toBe('Inspected on phone'); expect(restored.file.dataUrl).toBe(`data:image/png;base64,${bytes.toString('base64')}`);
+  } finally { await run.electronApp.close(); if (server) await new Promise(resolve => server.close(resolve)); fs.rmSync(profilePath, { recursive: true, force: true }); }
+});
 
 test("lease turnover saves photos and progress across restart without changing agreement or payments", async () => {
   test.setTimeout(180_000);

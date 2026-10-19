@@ -1,5 +1,21 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const leaseTurnovers = sqliteTable('lease_turnovers', {
+  leaseId: text('lease_id').primaryKey(),
+  revision: integer('revision').notNull(),
+  payload: text('payload').notNull(),
+  desktopBase: text('desktop_base').notNull(),
+  desktopGeneratedAt: text('desktop_generated_at').notNull(),
+  conflict: text('conflict'),
+  updatedAt: text('updated_at').notNull(),
+  syncedAt: text('synced_at'),
+});
+export const turnoverPhotos = sqliteTable('turnover_photos', {
+  id: text('id').primaryKey(), leaseId: text('lease_id').notNull(), name: text('name').notNull(),
+  mimeType: text('mime_type').notNull(), byteSize: integer('byte_size').notNull(),
+  sha256: text('sha256').notNull(), storageKey: text('storage_key').notNull(),
+}, table => [index('turnover_photos_lease_idx').on(table.leaseId)]);
+
 export const mobileSubmissions = sqliteTable("mobile_submissions", {
   id: text("id").primaryKey(),
   ownerFingerprint: text("owner_fingerprint").notNull(),

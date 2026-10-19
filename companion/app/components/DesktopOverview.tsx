@@ -29,7 +29,7 @@ export function DesktopOverview({ active }: { active: boolean }) {
   const propertyName = (id: string) => snapshot?.properties.find(p => p.id === id)?.name || 'Property';
   const stale = snapshot && Date.now() - Date.parse(snapshot.generatedAt) > 24*60*60*1000;
   const properties = snapshot?.properties.filter(p => propertyId === 'all' || p.id === propertyId) || [];
-  const leases = scoped(snapshot?.leases || []), work = scoped(snapshot?.workOrders || []), loans = scoped(snapshot?.loans || []);
+  const leases = scoped(snapshot?.leases || []).filter(lease => lease.status !== 'Ended'), work = scoped(snapshot?.workOrders || []), loans = scoped(snapshot?.loans || []);
   const tx = scoped(snapshot?.transactions || []).filter(t => (type === 'all' || t.type === type) && `${t.description} ${t.vendor} ${t.category}`.toLowerCase().includes(search.toLowerCase()));
   const events = [...leases.filter(l => l.endDate).map(l => ({ id:`lease-${l.id}`, propertyId:l.propertyId, date:l.endDate, title:`Lease ending · ${l.tenantName || l.unit}` })), ...work.filter(w => w.dueDate).map(w => ({ id:`work-${w.id}`, propertyId:w.propertyId, date:w.dueDate, title:w.title })), ...loans.filter(l => l.nextPayment).map(l => ({ id:`loan-${l.id}`, propertyId:l.propertyId, date:l.nextPayment, title:`Mortgage payment · ${l.lender}` }))].filter(e => e.date >= (snapshot?.asOfDate || '')).sort((a,b) => a.date.localeCompare(b.date)).slice(0,8);
   return <section hidden={!active} className="overview-panel" aria-labelledby="desktop-overview-title">

@@ -113,6 +113,8 @@ contextBridge.exposeInMainWorld("desktopSecrets", {
 
 contextBridge.exposeInMainWorld("desktopCompanion", {
   syncSnapshot: (snapshot) => ipcRenderer.invoke("companion:sync-snapshot", snapshot),
+    downloadTurnoverPhoto: (id) => ipcRenderer.invoke("companion:turnover-photo-download", { id }),
+    uploadTurnoverPhoto: (photo) => ipcRenderer.invoke("companion:turnover-photo-upload", photo),
   clearSnapshot: () => ipcRenderer.invoke("companion:clear-snapshot"),
   getStatus: () => ipcRenderer.invoke(COMPANION_STATUS_CHANNEL),
   configure: (payload) => ipcRenderer.invoke(COMPANION_CONFIGURE_CHANNEL, payload),

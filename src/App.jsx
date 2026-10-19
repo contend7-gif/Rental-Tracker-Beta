@@ -1,5 +1,5 @@
 import { usePlanningWorkspace } from "./app/usePlanningWorkspace.js";
-import React, { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { currency, getRentalUsePctForDate, getRentalUsePctForRange } from "./domain/accounting.ts";
 import { adjustedAssetDepreciationForYear } from "./domain/assetDepreciation.ts";
 import {
@@ -97,6 +97,10 @@ import { useDocumentDerivedCollections } from "./app/useDocumentDerivedCollectio
 import { useDesktopBridgeController } from "./app/useDesktopBridgeController.ts";
 import { useMobileCompanionInboxPolling } from "./app/useMobileCompanionInboxPolling.ts";
 import { buildMobileCompanionSnapshot } from "./app/mobileCompanionSnapshot.ts";
+import { flushSync } from "react-dom";
+import { syncDesktopTurnovers } from "./app/mobileTurnoverSync.ts";
+import { loadDocumentDataUrlFromDesktop } from "./app/documentFileAccess.ts";
+import { prepareTurnoverPhoto } from "../companion/lib/turnover-photo.ts";
 import { useMobileCompanionSnapshot } from "./app/useMobileCompanionSnapshot.ts";
 import { useDesktopRuntimeStatus } from "./app/useDesktopRuntimeStatus.ts";
 import { useDocumentWorkspaceUiState } from "./app/useDocumentWorkspaceUiState.ts";
@@ -991,7 +995,28 @@ function AppContent() {
   });
 
   const companionSnapshot = useMemo(() => buildMobileCompanionSnapshot(appSettings.mobileCompanionSnapshotEnabled ? { properties, units, leases, transactions, loans, loanPayments, workOrders, asOfDate: todayIso } : { properties: [], units: [], leases: [], transactions: [], loans: [], loanPayments: [], workOrders: [], asOfDate: todayIso }), [appSettings.mobileCompanionSnapshotEnabled, properties, units, leases, transactions, loans, loanPayments, workOrders, todayIso]);
-  const companionSnapshotSync = useMobileCompanionSnapshot({ enabled: appSettings.mobileCompanionEnabled && appSettings.mobileCompanionSnapshotEnabled && canManageDataAdmin, hydrated: isDataHydrated, api: desktopCompanionApi, snapshot: companionSnapshot });
+  const companionTurnoverLatest = useRef({ leases, documents, leaseDraft });
+  companionTurnoverLatest.current = { leases, documents, leaseDraft };
+  const companionSnapshotSync = useMobileCompanionSnapshot({
+    enabled: appSettings.mobileCompanionEnabled && appSettings.mobileCompanionSnapshotEnabled && canManageDataAdmin,
+    hydrated: isDataHydrated, api: desktopCompanionApi, snapshot: companionSnapshot,
+    beforeSync: () => flushCurrentDesktopSave(),
+    onTurnovers: (records, sentSnapshot, canContinue) => syncDesktopTurnovers({
+      records, sentSnapshot, api: desktopCompanionApi, canContinue,
+      getLeases: () => companionTurnoverLatest.current.leases,
+      getDocuments: () => companionTurnoverLatest.current.documents,
+      isLeaseOpen: (id) => companionTurnoverLatest.current.leaseDraft?.id === id,
+      loadPhoto: async (document) => {
+        const loaded = await loadDocumentDataUrlFromDesktop({ document, desktopPersistenceApi, setNotice });
+        if (!loaded?.dataUrl) throw new Error("A turnover photo could not be read from Documents.");
+        const blob = await (await fetch(loaded.dataUrl)).blob();
+        return readFileAsDataUrl(await prepareTurnoverPhoto(new File([blob], document.name, { type: document.mimeType })));
+      },
+      saveTurnover: (id, turnover) => flushSync(() => actions.updateLeaseTurnover(id, turnover)),
+      addDocument: (document) => flushSync(() => actions.addDocument(document)),
+      persist: () => flushCurrentDesktopSave(),
+    }),
+  });
 
   useAppLifecycleEffects({
     actions,

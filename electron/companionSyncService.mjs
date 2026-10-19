@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 const SECRET_KEYS = {
   siteUrl: "companion.siteUrl",
   syncSecret: "companion.syncSecret",
@@ -84,6 +85,28 @@ export function createCompanionSyncService({ secretStore, fetchImpl = fetch } = 
 
     async syncSnapshot(snapshot) {
       const response = await request("api/desktop/snapshot", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(snapshot) });
+      return { ok: true, ...(await response.json()) };
+    },
+
+    async downloadTurnoverPhoto(id) {
+      if (typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(id)) throw new Error('Invalid turnover photo ID.');
+      const response = await request(`api/desktop/turnover-photos/${encodeURIComponent(id)}`);
+      if (Number(response.headers.get('content-length') || 0) > MAX_DOWNLOAD_BYTES) throw new Error('Turnover photo exceeds the 15 MB limit.');
+      const bytes = Buffer.from(await response.arrayBuffer());
+      if (bytes.length > MAX_DOWNLOAD_BYTES) throw new Error('Turnover photo exceeds the 15 MB limit.');
+      const mimeType = String(response.headers.get('content-type') || '').split(';')[0];
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) throw new Error('Unsupported turnover photo type.');
+      return { ok: true, dataUrl: `data:${mimeType};base64,${bytes.toString('base64')}`, mimeType, byteSize: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    },
+
+    async uploadTurnoverPhoto(payload) {
+      for (const id of [payload?.id, payload?.leaseId]) if (typeof id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$/.test(id)) throw new Error('Invalid turnover photo or lease ID.');
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(payload?.dataUrl || ''));
+      if (!match) throw new Error('Choose a supported turnover photo.');
+      const bytes = Buffer.from(match[2], 'base64');
+      if (!bytes.length || bytes.length > MAX_DOWNLOAD_BYTES) throw new Error('Turnover photo exceeds the 15 MB limit.');
+      const form = new FormData(); form.set('leaseId', payload.leaseId); form.set('file', new File([bytes], String(payload.name || 'Turnover photo').slice(0, 200), { type: match[1] }));
+      const response = await request(`api/desktop/turnover-photos/${encodeURIComponent(payload.id)}`, { method: 'PUT', body: form });
       return { ok: true, ...(await response.json()) };
     },
 
