@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { readDesktopSnapshot } from './snapshot-storage';
 import type { DesktopSnapshot } from './desktop-snapshot';
 import { cleanTurnover, mergeTurnover, validTurnoverId, type TurnoverChecklist, type TurnoverPhoto, type TurnoverRecord } from './turnover-contract';
+import { validTurnoverPhotoLinks } from './turnover-photo-links';
 
 type Row = { lease_id: string; revision: number; payload: string; desktop_base: string; desktop_generated_at: string; conflict: string | null; updated_at: string; synced_at: string | null };
 type PhotoRow = { id: string; lease_id: string; name: string; mime_type: string; byte_size: number; sha256: string; storage_key: string };
@@ -75,10 +76,8 @@ export async function savePhoneTurnover(leaseId: string, input: { revision?: num
   if (conflict && !['phone', 'desktop'].includes(input.resolve || '')) throw new TurnoverError('Resolve the phone and desktop differences before saving.', 409);
   const checklist = input.resolve === 'desktop' && conflict ? conflict.desktop : cleanTurnover(input.checklist);
   if (!checklist || !checklist.tasks.length) throw new TurnoverError('Keep at least one checklist task.');
-  const known = new Set((await readTurnover(leaseId))?.photos.map(p => p.id));
   const existing = cleanTurnover(JSON.parse(saved.payload));
-  const previousIds = new Set(existing?.tasks.flatMap(t => t.photoIds));
-  if (checklist.tasks.some(t => t.photoIds.some(id => !known.has(id) && !previousIds.has(id)))) throw new TurnoverError('A linked photo has not finished uploading. Retry the photo upload first.');
+  if (!validTurnoverPhotoLinks(checklist, existing, (await readTurnover(leaseId))?.photos || [], conflict?.desktop || null)) throw new TurnoverError('A linked photo has not finished uploading. Retry the photo upload first.');
   const changed = await bindings().DB.prepare('UPDATE lease_turnovers SET revision = revision + 1, payload = ?, desktop_base = CASE WHEN ? THEN ? ELSE desktop_base END, conflict = NULL, updated_at = ?, synced_at = NULL WHERE lease_id = ? AND revision = ?').bind(JSON.stringify(checklist), conflict ? 1 : 0, conflict ? JSON.stringify(conflict.desktop) : saved.desktop_base, new Date().toISOString(), leaseId, saved.revision).run();
   if (!changed.meta.changes) throw new TurnoverError('This checklist changed while saving. Refresh and try again.', 409);
   return readTurnover(leaseId);

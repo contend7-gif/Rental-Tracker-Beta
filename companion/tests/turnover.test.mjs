@@ -2,6 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { blankTurnover, cleanTurnover, mergeTurnover } from '../lib/turnover-contract.ts';
 import { normalizeDesktopSnapshot } from '../lib/desktop-snapshot.ts';
+import { validTurnoverPhotoLinks } from '../lib/turnover-photo-links.ts';
+test('choosing a desktop conflict version permits its pending photos but rejects unrelated unuploaded IDs', () => {
+  const previous = blankTurnover(), desktop = blankTurnover(); desktop.tasks[0].photoIds = ['pending-desktop-photo'];
+  assert.equal(validTurnoverPhotoLinks(desktop, previous, []), false);
+  assert.equal(validTurnoverPhotoLinks(desktop, previous, [], desktop), true);
+  const unrelated = structuredClone(desktop); unrelated.tasks[0].photoIds.push('unknown-photo');
+  assert.equal(validTurnoverPhotoLinks(unrelated, previous, [], desktop), false);
+});
 test('turnover merge preserves phone work when an unchanged desktop checks in', () => {
   const base = blankTurnover(), phone = structuredClone(base);
   phone.tasks[0].notes = 'Before inspection'; phone.tasks[0].completedAt = '2026-10-18T12:00:00.000Z';
