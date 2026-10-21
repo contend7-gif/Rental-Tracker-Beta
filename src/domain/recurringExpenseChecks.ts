@@ -23,6 +23,10 @@ export type RecurringExpenseCheck = {
   category: string;
   occurrenceCount: number;
   supportingRecords?: { id: string; date: string; amount: number }[];
+  phase?: "upcoming" | "review";
+  estimatedAmount?: number;
+  estimatedLow?: number;
+  estimatedHigh?: number;
 };
 
 function normalize(value: unknown) {
@@ -76,7 +80,7 @@ function likelyCoveredByTemplate(transactions: Transaction[], templates: Recurri
     if (template.propertyId !== sample.propertyId || template.unit !== sample.unit || template.category !== sample.category) return false;
     const templateDescription = normalize(template.description);
     if (vendor.length >= 4 && templateDescription.includes(vendor)) return true;
-    return description.length >= 6
+    return description.length >= 6 && templateDescription.length >= 6
       && (templateDescription.includes(description) || description.includes(templateDescription));
   });
 }
@@ -87,6 +91,7 @@ export function buildRecurringExpenseChecks(args: {
   acknowledgements?: Record<string, string>;
   todayIso: string;
   graceDays?: number;
+  lookAheadDays?: number;
 }): RecurringExpenseCheck[] {
   if (!isValidIsoDate(args.todayIso)) return [];
   const graceDays = Math.max(0, Math.min(30, Math.round(Number(args.graceDays ?? DEFAULT_GRACE_DAYS))));
@@ -100,6 +105,9 @@ export function buildRecurringExpenseChecks(args: {
       || !WATCHED_CATEGORIES.has(transaction.category)
       || !vendor
       || !isValidIsoDate(transaction.date)
+      || transaction.date > args.todayIso
+      || transaction.capitalImprovement
+      || !Number.isFinite(transaction.amount) || transaction.amount <= 0
     ) return;
     const signature = [transaction.propertyId, transaction.unit, transaction.category, vendor].join("|");
     const group = groups.get(signature) || [];
@@ -132,8 +140,11 @@ export function buildRecurringExpenseChecks(args: {
         expectedDate = addMonths(lastRecordedDate, monthOffset);
       }
     }
-    const reviewDate = addDays(expectedDate, graceDays);
-    if (reviewDate > args.todayIso) return;
+    const overdueReviewDate = addDays(expectedDate, graceDays);
+    const upcoming = overdueReviewDate > args.todayIso;
+    const lookAheadDays = Math.max(0, Math.min(365, Number(args.lookAheadDays || 0)));
+    if (upcoming && (!lookAheadDays || expectedDate > addDays(args.todayIso, lookAheadDays))) return;
+    const reviewDate = upcoming ? expectedDate : overdueReviewDate;
 
     // A shared bill can be reassigned to a specific unit without becoming unpaid.
     // Require matching value and contiguous service coverage; never merge separate
@@ -154,6 +165,9 @@ export function buildRecurringExpenseChecks(args: {
         && candidate.servicePeriodEnd >= expectedDate
       ))) return;
 
+    const amounts = recentDates.map(date => transactions.filter(transaction => transaction.date === date)
+      .reduce((sum, transaction) => sum + transaction.amount, 0));
+    const estimatedAmount = amounts.reduce((sum, value) => sum + value, 0) / amounts.length;
     checks.push({
       patternKey,
       reviewDate,
@@ -164,6 +178,10 @@ export function buildRecurringExpenseChecks(args: {
       vendor: sample.vendor.trim(),
       category: sample.category,
       occurrenceCount: dates.length,
+      phase: upcoming ? "upcoming" : "review",
+      estimatedAmount: Math.round(estimatedAmount * 100) / 100,
+      estimatedLow: Math.round(Math.min(...amounts) * 100) / 100,
+      estimatedHigh: Math.round(Math.max(...amounts) * 100) / 100,
       supportingRecords: sortedTransactions.filter((transaction) => recentDates.includes(transaction.date))
         .slice(-5).map(({ id, date, amount }) => ({ id, date, amount })),
     });

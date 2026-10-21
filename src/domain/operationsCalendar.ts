@@ -300,21 +300,25 @@ export function buildOperationsCalendarItems(args: {
 
   (args.recurringExpenseChecks || []).forEach((check) => {
     if (!check?.patternKey || !isValidIsoDate(check.reviewDate) || !isValidIsoDate(check.expectedDate)) return;
+    const upcoming = check.phase === "upcoming";
+    const amountDetail = Number.isFinite(check.estimatedAmount)
+      ? ` Recent bills average $${check.estimatedAmount!.toFixed(2)} (recorded range $${check.estimatedLow!.toFixed(2)}–$${check.estimatedHigh!.toFixed(2)}).` : "";
     items.push({
       id: `smart-check:${check.patternKey}:${check.expectedDate}`,
       source: "smart_check",
       sourceRecordId: check.patternKey,
       date: check.reviewDate,
       expectedDate: check.expectedDate,
-      title: `Review monthly expense: ${check.vendor}`,
-      detail: `No matching entry found around ${check.expectedDate}. Review the records before deciding whether anything is missing.`,
+      title: `${upcoming ? "Expected monthly expense" : "Review monthly expense"}: ${check.vendor}`,
+      detail: (upcoming ? `Next bill estimated around ${check.expectedDate}; confirm the actual bill and due date.`
+        : `No matching entry found around ${check.expectedDate}. Review the records before deciding whether anything is missing.`) + amountDetail,
       evidence: {
         reason: `${check.occurrenceCount} recorded dates show a monthly pattern in ${check.category}. Last recorded ${check.lastRecordedDate}; estimated next date ${check.expectedDate}. Review starts ${check.reviewDate}. This estimate does not establish an unpaid bill.`,
         records: check.supportingRecords || [],
       },
       propertyId: check.propertyId,
       unit: check.unit,
-      priority: "high",
+      priority: upcoming ? "normal" : "high",
       searchText: check.vendor,
     });
   });

@@ -58,6 +58,11 @@ export function planningProjectionCsv(args: {
       "Projected equity",
       "Driver",
       "Driver detail",
+      "Utility estimate (included in OpEx)",
+      "Utility planning low",
+      "Utility planning high",
+      "Utility estimate basis",
+      "Utility estimate detail",
     ].map(csvCell).join(","),
     ...args.rows.map((row) =>
       [
@@ -76,6 +81,11 @@ export function planningProjectionCsv(args: {
         row.projectedEquity,
         row.driverLabel || "",
         row.driverDetail || "",
+        row.utilityForecastAmount ?? "",
+        row.utilityForecastLow ?? "",
+        row.utilityForecastHigh ?? "",
+        row.utilityForecastMethod || "",
+        row.utilityForecastDetail || "",
       ].map(csvCell).join(","),
     ),
   ];

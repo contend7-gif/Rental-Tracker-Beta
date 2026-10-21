@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { Transaction } from "../models.ts";
 import { buildRecurringExpenseChecks } from "./recurringExpenseChecks.ts";
+import { buildOperationsCalendarItems } from "./operationsCalendar.ts";
 
 function expense(id: string, date: string, overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -30,6 +31,29 @@ function expense(id: string, date: string, overrides: Partial<Transaction> = {})
     ...overrides,
   };
 }
+
+test("calendar can show upcoming variable bills with evidence without posting a payment or declaring it unpaid", () => {
+  const transactions = [expense("a", "2026-05-05", { amount: 60 }), expense("b", "2026-06-05", { amount: 90 }), expense("c", "2026-07-05", { amount: 150 })];
+  const original = structuredClone(transactions);
+  const checks = buildRecurringExpenseChecks({ transactions, todayIso: "2026-07-20", lookAheadDays: 30 });
+  assert.equal(checks.length, 1);
+  assert.equal(checks[0].phase, "upcoming");
+  assert.equal(checks[0].reviewDate, "2026-08-05");
+  assert.equal(checks[0].estimatedAmount, 100);
+  const item = buildOperationsCalendarItems({ recurringExpenseChecks: checks })[0];
+  assert.match(item.title, /Expected monthly expense/);
+  assert.match(item.detail, /confirm the actual bill/);
+  assert.match(item.detail, /60.00.*150.00/);
+  assert.equal(item.priority, "normal");
+  assert.deepEqual(transactions, original);
+  assert.equal(buildRecurringExpenseChecks({ transactions, todayIso: "2026-07-20", lookAheadDays: 7 }).length, 0);
+  assert.equal(buildRecurringExpenseChecks({ transactions: [...transactions, expense("future", "2026-08-05")], todayIso: "2026-07-20", lookAheadDays: 30 })[0].expectedDate, "2026-08-05");
+  const reviewed = buildRecurringExpenseChecks({ transactions, todayIso: "2026-08-12", lookAheadDays: 30 });
+  assert.equal(reviewed[0].phase, "review");
+  assert.equal(reviewed[0].patternKey, checks[0].patternKey);
+  const split = transactions.flatMap(tx => [{ ...tx, amount: tx.amount / 2 }, { ...tx, id: `${tx.id}-split`, amount: tx.amount / 2 }]);
+  assert.equal(buildRecurringExpenseChecks({ transactions: split, todayIso: "2026-07-20", lookAheadDays: 30 })[0].estimatedAmount, 100);
+});
 
 test("stable monthly utilities become a review check only after the grace period", () => {
   const transactions = [

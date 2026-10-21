@@ -11,6 +11,56 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE
   || path.join(rootDir, "release", "win-unpacked", "Rental Tracker.exe");
 
+test('calendar expected utility notices and seasonal planning explain history without posting bills', async () => {
+  test.setTimeout(180_000);
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-seasonal-'));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await expect(run.page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
+    const seeded = await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const now = new Date(), propertyId = backup.data.properties[0].id;
+      const base = backup.data.transactions[0];
+      backup.data.transactions = Array.from({ length: 25 }, (_, index) => {
+        const date = new Date(Date.UTC(now.getFullYear(), now.getMonth() - 24 + index, Math.min(now.getDate(), 28))).toISOString().slice(0, 10);
+        return { ...base, id: `example-gas-${index}`, propertyId, unit: 'Shared', date, type: 'Expense', category: 'Utilities',
+          vendor: 'Example Seasonal Gas', description: 'Example gas bill', status: 'active', capitalImprovement: false,
+          amount: ['12', '01', '02'].includes(date.slice(5, 7)) ? 300 : 60, recurringTemplateId: undefined };
+      });
+      backup.data.leases = []; backup.data.recurringTemplates = [];
+      backup.settings.autoGenerateRecurringEntries = false; backup.settings.leaseAutomationEnabled = false;
+      backup.settings.mobileCompanionSnapshotEnabled = false;
+      const saved = await window.desktopPersistence.saveAppData(backup);
+      if (saved.ok === false) throw Error(saved.message);
+      return backup.data.transactions;
+    });
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    await run.page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    const notice = run.page.locator('.rt-calendar-item').filter({ hasText: 'Expected monthly expense: Example Seasonal Gas' });
+    await expect(notice).toHaveCount(1);
+    await expect(notice.getByText(/confirm the actual bill and due date/)).toBeVisible();
+    await notice.getByText('Why this appears', { exact: true }).click();
+    await expect(notice.getByText('Recent supporting transactions', { exact: true })).toBeVisible();
+    await notice.getByRole('button', { name: 'Review transactions', exact: true }).click();
+    await expect(run.page.getByRole('heading', { name: 'Transactions', exact: true })).toBeVisible();
+    await run.page.getByRole('button', { name: 'Planning', exact: true }).click();
+    await run.page.getByRole('button', { name: 'Forecast', exact: true }).click();
+    const basis = run.page.locator('table details').filter({ hasText: 'Seasonal utility estimate' }).first();
+    await expect(basis).toBeVisible();
+    await basis.locator('summary').click();
+    await expect(basis.getByText(/Planning range:/)).toBeVisible();
+    await expect(basis.getByText(/Missing months are not treated as zero/)).toBeVisible();
+    await run.page.screenshot({ path: path.join(rootDir, 'output', 'playwright', 'seasonal-utility-forecast.png') });
+    const after = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions);
+    expect(after).toEqual(seeded);
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), 'rental-tracker-e2e-seasonal-'))) throw Error('Unexpected test profile path');
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test('mobile turnover sync imports checked work and photos into the packaged desktop without changing finances', async () => {
   test.setTimeout(180_000);
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-phone-turnover-'));

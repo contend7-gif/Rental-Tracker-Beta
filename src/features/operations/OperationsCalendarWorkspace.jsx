@@ -187,7 +187,8 @@ export function OperationsCalendarWorkspace({
     recurringTemplates,
     todayIso,
     transactions,
-  }), [appSettings.recurringExpenseCheckAcknowledgements, recurringTemplates, todayIso, transactions]);
+    lookAheadDays: horizonDays,
+  }), [appSettings.recurringExpenseCheckAcknowledgements, recurringTemplates, todayIso, transactions, horizonDays]);
   const rawItems = useMemo(() => buildOperationsCalendarItems({
     documents,
     leaseAutomationReminders,
@@ -299,9 +300,9 @@ export function OperationsCalendarWorkspace({
   const acknowledgeSmartCheck = (item) => {
     setSetting("recurringExpenseCheckAcknowledgements", {
       ...appSettings.recurringExpenseCheckAcknowledgements,
-      [item.sourceRecordId]: todayIso,
+      [item.sourceRecordId]: item.expectedDate > todayIso ? item.expectedDate : todayIso,
     });
-    setNotice(`${item.searchText || item.title} marked intentional through today. The check will resume for the next expected cycle.`);
+    setNotice(`${item.searchText || item.title} marked intentional through ${item.expectedDate > todayIso ? item.expectedDate : todayIso}. The check will resume for the next expected cycle.`);
   };
 
   const updateFollowUp = (item, status) => {

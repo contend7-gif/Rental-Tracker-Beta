@@ -22,7 +22,7 @@ export function PlanningNotesPanel({ horizonMonths, horizonCashFlow }) {
           Future rent is driven by signed leases first. Growth and vacancy assumptions then adjust that baseline rather than replacing it.
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-2">
-          Utilities-included leases can add a forecast utility burden from recent utility history, instead of waiting for a full trailing year to catch up.
+          Utility forecasts learn each provider&apos;s monthly costs. A complete seasonal history uses the matching calendar month; shorter histories use a recent average. Manual utility assumptions take priority.
         </div>
         <div className={`rounded-lg border p-2 ${cashFlowPositive ? "border-emerald-200 bg-emerald-50/70 text-emerald-900" : "border-rose-200 bg-rose-50/70 text-rose-900"}`}>
           {cashFlowPositive
@@ -45,7 +45,7 @@ export function PlanningForecastMonthlyOutlook({ rows, TableFrame, mutedPanelCla
   return (
     <div className="self-start rounded-xl border border-slate-200 bg-white p-3 shadow-none">
       <div className="font-medium text-slate-900">Projected monthly outlook</div>
-      <div className="mt-1 text-xs text-slate-500">Monthly rent, occupancy, debt, and reserve drivers.</div>
+      <div className="mt-1 text-xs text-slate-500">Monthly rent, seasonal utility estimates, occupancy, debt, and reserves. Utility estimates are included in OpEx.</div>
       {safeRows.length === 0 ? (
         <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-sm text-slate-500">
           No forecast rows yet. Set a planning horizon and confirm the property scope to generate the month-by-month forecast.
@@ -72,6 +72,7 @@ export function PlanningForecastMonthlyOutlook({ rows, TableFrame, mutedPanelCla
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
               <div>Eff. rent: <span className="font-medium text-slate-900">{currency(row.effectiveRent)}</span></div>
               <div>OpEx: <span className="font-medium text-slate-900">{currency(row.operatingExpenses)}</span></div>
+              {row.utilityForecastAmount != null && <div>Utilities estimate: <span className="font-medium text-slate-900">{currency(row.utilityForecastAmount)}</span></div>}
               {Math.abs(Number(row.utilityIncludedAdjustment || 0)) >= 0.01 && (
                 <div>Utilities adj.: <span className="font-medium text-slate-900">{currency(row.utilityIncludedAdjustment)}</span></div>
               )}
@@ -83,6 +84,7 @@ export function PlanningForecastMonthlyOutlook({ rows, TableFrame, mutedPanelCla
             <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-600">
               <div className="font-medium text-slate-900">{row.driverLabel || "Signed leases + assumptions"}</div>
               <div className="mt-1">{row.driverDetail || "Monthly forecast follows the current planning inputs."}</div>
+              {row.utilityForecastMethod && <UtilityForecastBasis row={row} currency={currency} />}
             </div>
           </div>
         ))}
@@ -112,6 +114,7 @@ export function PlanningForecastMonthlyOutlook({ rows, TableFrame, mutedPanelCla
                 <td className="px-2 py-1 text-right text-emerald-700">{currency(row.effectiveRent)}</td>
                 <td className="px-2 py-1 text-right text-rose-700">
                   <div>{currency(row.operatingExpenses)}</div>
+                  {row.utilityForecastAmount != null && <UtilityForecastBasis row={row} currency={currency} />}
                   {Math.abs(Number(row.utilityIncludedAdjustment || 0)) >= 0.01 && (
                     <div className="text-[11px] font-normal text-slate-500">
                       {row.utilityIncludedAdjustment > 0 ? "+" : ""}{currency(row.utilityIncludedAdjustment)} utilities
@@ -134,6 +137,14 @@ export function PlanningForecastMonthlyOutlook({ rows, TableFrame, mutedPanelCla
       </TableFrame>
     </div>
   );
+}
+
+function UtilityForecastBasis({ row, currency }) {
+  return <details className="mt-1 text-[11px] font-normal text-slate-600">
+    <summary className="cursor-pointer">{row.utilityForecastMethod}: {currency(row.utilityForecastAmount)}</summary>
+    {row.utilityForecastLow !== row.utilityForecastHigh && <div className="mt-1">Planning range: {currency(row.utilityForecastLow)}–{currency(row.utilityForecastHigh)}</div>}
+    <div className="mt-1 max-w-sm">{row.utilityForecastDetail}</div>
+  </details>;
 }
 
 function ForecastSummaryCard({ label, tone, value }) {

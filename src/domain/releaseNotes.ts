@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.6",
+    releaseDate: "2026-10-20",
+    title: "Expected bills and seasonal utility forecasts",
+    summary: "See upcoming monthly expense notices in Calendar and plan for seasonal utility costs using your recorded bill history.",
+    changes: [
+      "Show the next expected recurring expense within the Calendar horizon, including recent amounts and supporting transactions, without posting a bill or declaring it unpaid.",
+      "Learn utility spending separately by property, unit and provider; use matching calendar-month costs when a complete seasonal history exists and recent averages for shorter histories.",
+      "Show each forecast month's utility estimate, planning range and calculation basis in Planning and CSV exports, with estimates counted once in operating expenses and cash flow.",
+      "Preserve manual utilities-included assumptions, lease scaling and expense growth; exclude incomplete current months from learned seasonal patterns.",
+      "Keep recorded payments, leases and recurring rules unchanged, and retain overdue-only checks for Monthly Close and desktop notification summaries.",
+    ],
+  },
+  {
     version: "1.11.5",
     releaseDate: "2026-10-18",
     title: "Turnover work from your phone",

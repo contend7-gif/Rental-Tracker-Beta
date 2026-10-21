@@ -6,6 +6,7 @@ import { normalizeLeaseAgreementType } from "../leaseTerms.js";
 import { buildPlanningScenarioStateAtDate, applyPlanningScenarioOverrides, overrideKey } from "./scenarios.ts";
 import { getRentalUsePctForDate, loanBreakdown } from "../accounting.ts";
 import { formatUnitLabel } from "../unitLabels.js";
+import { buildUtilityForecast } from "../utilityForecast.ts";
 
 export function buildPlanningForecastRerentAssumptions(args: {
   today: string;
@@ -133,6 +134,7 @@ export function buildPlanningProjection(args: {
   const currentIncludedUtilityBaseline = currentUtilitiesIncludedLeaseCount > 0
     ? operatingExpenseProfile.utilityBaselineMonthly
     : 0;
+  const utilityForecasts = new Map<string, ReturnType<typeof buildUtilityForecast>>();
   const debtServiceSnapshot = currentAdjustedDebtService({
     today: args.today,
     loans: args.loans,
@@ -241,7 +243,18 @@ export function buildPlanningProjection(args: {
     });
     const modeledIncludedUtilities = monthUtilitiesIncludedLeaseCount * utilityEstimatePerIncludedLease;
     const utilityIncludedAdjustment = modeledIncludedUtilities - currentIncludedUtilityBaseline;
-    const operatingExpenses = Math.max(0, (trailingMonthlyOpEx + utilityIncludedAdjustment) * expenseGrowthFactor);
+    const calendarMonth = month.slice(5);
+    if (!utilityForecasts.has(calendarMonth)) utilityForecasts.set(calendarMonth,
+      buildUtilityForecast({ today: args.today, targetMonth: month, transactions: args.transactions, propertyId: scopePropertyId }));
+    const learnedUtilities = utilityForecasts.get(calendarMonth)!;
+    const includedMode = currentUtilitiesIncludedLeaseCount > 0 || monthUtilitiesIncludedLeaseCount > 0;
+    const utilityScale = includedMode ? monthUtilitiesIncludedLeaseCount / Math.max(1, currentUtilitiesIncludedLeaseCount) : 1;
+    const learnedBaseline = includedMode ? learnedUtilities.coveredObservedMonthly : learnedUtilities.coveredTrailingMonthly;
+    const utilityHistoryAdjustment = includedUtilitiesOverride ? 0 : (learnedUtilities.amount - learnedBaseline) * utilityScale;
+    const operatingExpenses = Math.max(0, (trailingMonthlyOpEx + utilityIncludedAdjustment + utilityHistoryAdjustment) * expenseGrowthFactor);
+    const utilityForecastAmount = Math.max(0, ((includedMode ? modeledIncludedUtilities : operatingExpenseProfile.utilityBaselineMonthly)
+      + utilityHistoryAdjustment) * expenseGrowthFactor);
+    const utilityForecastAllowance = includedUtilitiesOverride ? 0 : utilityScale * expenseGrowthFactor;
     const netOperatingIncome = effectiveRent - operatingExpenses;
 
     let debtService = 0;
@@ -302,8 +315,11 @@ export function buildPlanningProjection(args: {
     } else if (Math.abs(utilityIncludedAdjustment) >= 0.01) {
       driverLabel = "Utilities included";
       driverDetail = utilityIncludedAdjustment > 0
-        ? `OpEx includes an estimated ${Math.round(modeledIncludedUtilities)} / mo utility burden for active utilities-included leases${includedUtilitiesOverride ? " from the manual planning override" : ""}.`
+        ? `OpEx includes an estimated ${Math.round(utilityForecastAmount)} / mo utility burden for active utilities-included leases${includedUtilitiesOverride ? " from the manual planning override" : learnedUtilities.providers ? " using recorded monthly utility patterns" : ""}.`
         : "OpEx removes the recent utilities-included burden after those leases are no longer active.";
+    } else if (Math.abs(utilityHistoryAdjustment) >= 0.01) {
+      driverLabel = learnedUtilities.seasonalProviders ? "Seasonal utilities" : "Recent utility costs";
+      driverDetail = `Utility history changes this month's OpEx by ${Math.round(utilityHistoryAdjustment * expenseGrowthFactor)} compared with the flat baseline. The utility estimate is ${Math.round(utilityForecastAmount)} for this month.`;
     }
 
     rows.push({
@@ -313,6 +329,13 @@ export function buildPlanningProjection(args: {
       effectiveRent: Math.round(effectiveRent * 100) / 100,
       operatingExpenses: Math.round(operatingExpenses * 100) / 100,
       utilityIncludedAdjustment: Math.round(utilityIncludedAdjustment * 100) / 100,
+      utilityForecastAmount: Math.round(utilityForecastAmount * 100) / 100,
+      utilityForecastLow: Math.round(Math.max(0, utilityForecastAmount - (learnedUtilities.amount - learnedUtilities.low) * utilityForecastAllowance) * 100) / 100,
+      utilityForecastHigh: Math.round((utilityForecastAmount + (learnedUtilities.high - learnedUtilities.amount) * utilityForecastAllowance) * 100) / 100,
+      utilityForecastMethod: includedUtilitiesOverride ? "Manual utilities override"
+        : learnedUtilities.providers ? (learnedUtilities.seasonalProviders ? "Seasonal utility estimate" : "Recent utility average") : "Historical utility baseline",
+      utilityForecastDetail: includedUtilitiesOverride ? "The manual utilities-included monthly assumption takes priority over learned costs."
+        : learnedUtilities.detail,
       netOperatingIncome: Math.round(netOperatingIncome * 100) / 100,
       debtService: Math.round(debtService * 100) / 100,
       capexReserve: Math.round(monthlyCapexReserve * 100) / 100,

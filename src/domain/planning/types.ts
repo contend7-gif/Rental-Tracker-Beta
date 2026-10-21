@@ -42,6 +42,11 @@ export type PlanningProjectionRow = {
   effectiveRent: number;
   operatingExpenses: number;
   utilityIncludedAdjustment: number;
+  utilityForecastAmount?: number;
+  utilityForecastLow?: number;
+  utilityForecastHigh?: number;
+  utilityForecastMethod?: string;
+  utilityForecastDetail?: string;
   netOperatingIncome: number;
   debtService: number;
   capexReserve: number;
