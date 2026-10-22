@@ -9,6 +9,21 @@ import {
   selectOperationsCalendarItems,
 } from "./operationsCalendar.ts";
 
+test("showing reviewed history never counts completed reminders as attention or upcoming work", () => {
+  const source = [
+    { id: "subscription", source: "recurring" as const, sourceRecordId: "subscription", date: "2026-10-05", title: "Example subscription", detail: "", propertyId: "p1" },
+    { id: "future", source: "recurring" as const, sourceRecordId: "future", date: "2026-11-05", title: "Next cycle", detail: "", propertyId: "p1" },
+  ];
+  const shown = applyOperationsFollowUps(source, { subscription: { status: "done", originalDate: "2026-10-05", updatedAt: "2026-10-20T00:00:00Z" } }, { showHandled: true, todayIso: "2026-10-20" });
+  assert.equal(shown.length, 2);
+  const buckets = bucketOperationsCalendarItems(shown, "2026-10-20");
+  assert.equal(buckets.attention.length, 0);
+  assert.deepEqual(buckets.next30.map(item => item.id), ["future"]);
+  assert.equal(shown[0].date, "2026-10-05");
+  assert.equal(bucketOperationsCalendarItems([{ ...shown[0], followUpStatus: "intentional" }], "2026-10-20").attention.length, 0);
+  assert.equal(bucketOperationsCalendarItems([{ ...shown[0], followUpStatus: "open" }], "2026-10-20").attention.length, 1);
+});
+
 test("operations calendar derives dated work without creating duplicate task records", () => {
   const items = buildOperationsCalendarItems({
     leaseAutomationReminders: [{

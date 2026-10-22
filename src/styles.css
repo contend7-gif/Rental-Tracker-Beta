@@ -395,6 +395,8 @@ button:focus-visible, summary:focus-visible, select:focus-visible { outline: 2px
 .rt-document-review [hidden] { display: none !important; }
 .rt-calendar-suggestion { border-style: dashed; border-color: #fcd34d; background: #fffbeb; }
 .rt-calendar-buckets > :only-child { grid-column: 1 / -1; }
+.rt-calendar-bucket-list { max-height: min(32rem, 60vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 2px; }
+.rt-calendar-bucket-list:focus-visible { outline: 2px solid #0d9488; outline-offset: 3px; border-radius: .5rem; }
 .rt-maintenance-row { display: grid; gap: 1rem; align-items: center; }
 @media (min-width: 1280px) {
   .rt-maintenance-row { grid-template-columns: minmax(240px, 1.1fr) minmax(260px, 1fr) auto; }

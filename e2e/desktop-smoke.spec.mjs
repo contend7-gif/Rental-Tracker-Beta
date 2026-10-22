@@ -11,6 +11,50 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE
   || path.join(rootDir, "release", "win-unpacked", "Rental Tracker.exe");
 
+test('calendar keeps reviewed reminders out of attention and bounds busy sections', async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-calendar-bounds-'));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await expect(run.page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
+    await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const now = new Date(), upcoming = new Date(now); upcoming.setDate(upcoming.getDate() + 15);
+      const iso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const past = new Date(now); past.setDate(past.getDate() - 15);
+      const base = { propertyId: backup.data.properties[0].id, unit: 'Shared', type: 'Expense', category: 'Other expenses', amount: 20, frequency: 'Monthly', nextDueDate: iso(upcoming), reviewRequired: true, ownerUsePct: 0, active: true };
+      backup.data.recurringTemplates = Array.from({ length: 12 }, (_, index) => ({ ...base, id: `expected-${index}`, description: `Example expected bill ${String(index + 1).padStart(2, '0')}` }));
+      backup.data.recurringTemplates.push({ ...base, id: 'reviewed-subscription', description: 'Example reviewed subscription', nextDueDate: iso(past) });
+      backup.data.transactions = []; backup.data.leases = []; backup.data.workOrders = []; backup.data.documents = []; backup.data.loans = [];
+      backup.settings.autoGenerateRecurringEntries = false; backup.settings.leaseAutomationEnabled = false;
+      backup.settings.operationsFollowUps = { [`recurring:reviewed-subscription:${iso(past)}`]: { status: 'done', originalDate: iso(past), updatedAt: now.toISOString() } };
+      await window.desktopPersistence.saveAppData(backup);
+    });
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    const { page } = run;
+    await page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    await expect(page.getByText('Example reviewed subscription', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: /^Show handled/ }).click();
+    const reviewed = page.getByRole('region', { name: 'Reviewed items items', exact: true });
+    await expect(reviewed.getByText('Example reviewed subscription', { exact: true })).toBeVisible();
+    await expect(reviewed.getByText(/overdue/)).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Needs attention items', exact: true })).toHaveCount(0);
+    const list = page.getByRole('region', { name: 'Next 30 days items', exact: true });
+    await expect(list.locator('.rt-calendar-item')).toHaveCount(12);
+    const bounds = await list.evaluate(element => ({ height: element.clientHeight, total: element.scrollHeight, viewport: innerHeight }));
+    expect(bounds.total).toBeGreaterThan(bounds.height); expect(bounds.height).toBeLessThanOrEqual(bounds.viewport * 0.6 + 4);
+    await list.locator('.rt-calendar-item').last().scrollIntoViewIfNeeded();
+    expect(await list.evaluate(element => element.scrollTop)).toBeGreaterThan(0);
+    await page.screenshot({ path: path.join(rootDir, 'output', 'playwright', 'calendar-bounded-reviewed.png') });
+    await reviewed.getByRole('combobox', { name: /^Follow-up status/ }).selectOption('open');
+    await expect(page.getByRole('region', { name: 'Needs attention items', exact: true }).getByText('Example reviewed subscription', { exact: true })).toBeVisible();
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), 'rental-tracker-e2e-calendar-bounds-'))) throw Error('Unexpected test profile path');
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test('calendar expected utility notices and seasonal planning explain history without posting bills', async () => {
   test.setTimeout(180_000);
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-seasonal-'));

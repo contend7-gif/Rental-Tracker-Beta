@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.7",
+    releaseDate: "2026-10-21",
+    title: "Clearer Calendar reminders and shorter lists",
+    summary: "Keep reviewed reminders out of Needs attention and scroll within busy Calendar sections instead of stretching the page.",
+    changes: [
+      "Show completed and intentional reminders in a separate Reviewed items section when Show handled is enabled, without counting them as attention or upcoming work.",
+      "Remove overdue badges from reviewed reminders while keeping source dates and the option to reopen a follow-up unchanged.",
+      "Limit Calendar section heights with keyboard-accessible internal scrolling, so long Next 30 days lists remain manageable.",
+      "Keep short sections at their natural height instead of stretching them alongside longer neighboring cards.",
+    ],
+  },
+  {
     version: "1.11.6",
     releaseDate: "2026-10-20",
     title: "Expected bills and seasonal utility forecasts",

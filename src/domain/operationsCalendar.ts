@@ -404,6 +404,8 @@ export function bucketOperationsCalendarItems(items: OperationsCalendarItem[], t
     later: [],
   };
   items.forEach((item) => {
+    // Showing review history must not turn completed follow-ups back into alerts.
+    if (item.followUpStatus === "done" || item.followUpStatus === "intentional") return;
     const days = diffDays(todayIso, item.date);
     if (days <= 0) buckets.attention.push(item);
     else if (days <= 7) buckets.next7.push(item);

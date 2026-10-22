@@ -50,6 +50,7 @@ const BUCKET_META = {
   next7: { title: "Next 7 days", helper: "Coming up this week", tone: "border-amber-200 bg-amber-50/40", icon: CalendarClock },
   next30: { title: "Next 30 days", helper: "Prepare before it becomes urgent", tone: "border-blue-200 bg-blue-50/40", icon: CalendarDays },
   later: { title: "Later", helper: "Inside the selected horizon", tone: "border-slate-200 bg-slate-50/70", icon: CalendarDays },
+  reviewed: { title: "Reviewed items", helper: "Shown because Show handled is on. Source dates are unchanged.", tone: "border-slate-200 bg-slate-50/70", icon: ClipboardCheck },
 };
 
 function formatDate(date) {
@@ -74,6 +75,7 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
   const Icon = meta.icon;
   const propertyLabel = propertyNameById[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide");
   const days = daysUntil(item.date, todayIso);
+  const handled = item.followUpStatus === "done" || item.followUpStatus === "intentional";
   const urgencyTone = item.source === "smart_check"
     ? "!bg-amber-100 !text-amber-800"
     : days < 0
@@ -92,7 +94,7 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-semibold text-slate-900">{item.title}</div>
-              <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{item.source === "smart_check" ? "Suggested check" : formatDaysLeft(days)}</Badge>
+              {!handled && <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{item.source === "smart_check" ? "Suggested check" : formatDaysLeft(days)}</Badge>}
               <Badge variant="outline" className="bg-white text-[11px]">{meta.label}</Badge>
               {item.followUpStatus ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus === "done" ? "Review complete" : item.followUpStatus}</Badge> : null}
             </div>
@@ -133,7 +135,7 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
           </div>
           <Badge variant="secondary">{items.length}</Badge>
         </div>
-        <div className="mt-3 space-y-2">
+        <div className="rt-calendar-bucket-list mt-3 space-y-2" role="region" aria-label={`${meta.title} items`} tabIndex={0}>
           {items.length > 0 ? items.map((item) => (
             <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} onFollowUp={onFollowUp} />
           )) : (
@@ -231,6 +233,7 @@ export function OperationsCalendarWorkspace({
     [propertyUnitItems, sourceFilter],
   );
   const buckets = useMemo(() => bucketOperationsCalendarItems(scopedItems, todayIso), [scopedItems, todayIso]);
+  const reviewedItems = useMemo(() => scopedItems.filter(item => item.followUpStatus === "done" || item.followUpStatus === "intentional"), [scopedItems]);
   const sourceCountItems = useMemo(
     () => workspaceMode === "month"
       ? propertyUnitItems.filter((item) => item.date.startsWith(selectedMonth))
@@ -463,10 +466,11 @@ export function OperationsCalendarWorkspace({
           </CardContent>
         </Card>
       ) : (
-        <div className="rt-calendar-buckets grid gap-4 xl:grid-cols-2">
-          {Object.keys(BUCKET_META).filter((bucketKey) => buckets[bucketKey].length > 0).map((bucketKey) => (
+        <div className="rt-calendar-buckets grid items-start gap-4 xl:grid-cols-2">
+          {Object.keys(buckets).filter((bucketKey) => buckets[bucketKey].length > 0).map((bucketKey) => (
             <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} />
           ))}
+          {reviewedItems.length > 0 && <OperationsBucket bucketKey="reviewed" items={reviewedItems} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} />}
         </div>
       )}
     </div>
