@@ -89,7 +89,9 @@ export function useRentalStore(auditContext: { actorName?: string; actorRole?: s
     recurringDrafts,
     setRecurringDrafts,
     actions: recurringActions,
-  } = useRecurringSlice({ transactions, usePeriods, setTransactions });
+  } = useRecurringSlice({ transactions, usePeriods, setTransactions,
+    onRecurringMatch: (transactionId, cycleDate) => appendActivityLog({ action: "update", entityType: "transaction", entityId: transactionId, summary: `Existing entry linked to recurring bill cycle ${cycleDate}; amount and date preserved.` }),
+  });
 
   const applyStoreData = (data: RentalStoreData) => {
     setTransactions(data.transactions);

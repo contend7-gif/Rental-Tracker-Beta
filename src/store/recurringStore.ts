@@ -1,5 +1,6 @@
 import { createRecurringTemplateFromTxn, generateRecurringDrafts, generateRecurringTransactions } from "../domain/accounting.ts";
 import type { RecurringDraft, RecurringTemplate, Transaction, UsePeriod } from "../models.ts";
+import { recurringBillCycles } from "../domain/recurringBillMatches.ts";
 
 type StateSetter<T> = (updater: T[] | ((previous: T[]) => T[])) => void;
 
@@ -11,6 +12,7 @@ export function createRecurringActions({
   setTemplates,
   setDrafts,
   setTransactions,
+  onRecurringMatch,
 }: {
   getTemplates: () => RecurringTemplate[];
   getDrafts: () => RecurringDraft[];
@@ -19,8 +21,19 @@ export function createRecurringActions({
   setTemplates: StateSetter<RecurringTemplate>;
   setDrafts: StateSetter<RecurringDraft>;
   setTransactions: StateSetter<Transaction>;
+  onRecurringMatch?: (transactionId: string, cycleDate: string) => void;
 }) {
   return {
+    confirmRecurringBillMatch(templateId: string, cycleDate: string, transactionId: string, todayIso: string) {
+      const template = getTemplates().find(item => item.id === templateId);
+      if (!template) return false;
+      const cycle = recurringBillCycles(template, getTransactions(), todayIso).find(item => item.date === cycleDate);
+      if (cycle?.status !== "needs_review" || !cycle.records.some(tx => tx.id === transactionId && !tx.recurringTemplateId)) return false;
+      setTransactions(previous => previous.map(tx => tx.id === transactionId && !tx.recurringTemplateId && tx.status === "active"
+        ? { ...tx, recurringTemplateId: templateId } : tx));
+      onRecurringMatch?.(transactionId, cycleDate);
+      return true;
+    },
     createRecurringTemplate(transaction: Transaction, options?: { frequency?: RecurringTemplate["frequency"]; nextDueDate?: string; reviewRequired?: boolean }) {
       const template = createRecurringTemplateFromTxn(transaction);
       const configured = {
@@ -49,6 +62,10 @@ export function createRecurringActions({
         .map((transaction) => `${transaction.recurringTemplateId}:${transaction.date}`));
       const generatedTransactions: Transaction[] = [];
       const updatedTemplates = templates.map((template) => {
+        const cycles = recurringBillCycles(template, transactions, throughDate, { continueAfterReview: true });
+        // A possible existing bill blocks generation until reviewed, rather than posting a duplicate.
+        if (cycles.some(cycle => cycle.status === "needs_review" && cycle.records.length > 0)) return template;
+        cycles.filter(cycle => cycle.status === "recorded").forEach(cycle => existingTransactionKeys.add(`${template.id}:${cycle.date}`));
         const result = generateRecurringTransactions({ template, throughDate, usePeriods: getUsePeriods(), existingTransactionKeys });
         generatedTransactions.push(...result.transactions);
         return { ...template, nextDueDate: result.nextDueDate };
@@ -64,9 +81,11 @@ export function createRecurringActions({
       return generatedTransactions.length;
     },
     generateDrafts(template: RecurringTemplate, throughDate: string) {
+      const covered = new Set(recurringBillCycles(template, getTransactions(), throughDate, { continueAfterReview: true })
+        .filter(cycle => cycle.status === "recorded" || cycle.records.length > 0).map(cycle => cycle.date));
       const drafts = generateRecurringDrafts({ template, throughDate, usePeriods: getUsePeriods() });
       const existingIds = new Set(getDrafts().map((draft) => draft.id));
-      const unique = drafts.filter((draft) => !existingIds.has(draft.id));
+      const unique = drafts.filter((draft) => !existingIds.has(draft.id) && !covered.has(draft.dueDate));
       if (unique.length > 0) setDrafts((previous) => [...unique, ...previous]);
       return unique.length;
     },

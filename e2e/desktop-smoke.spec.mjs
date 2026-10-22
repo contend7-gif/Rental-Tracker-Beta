@@ -11,6 +11,49 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE
   || path.join(rootDir, "release", "win-unpacked", "Rental Tracker.exe");
 
+test('recurring bill matching links an existing entry, advances Calendar and survives restart without posting duplicates', async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-bill-match-'));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await expect(run.page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
+    const original = await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const now = new Date(), due = new Date(now); due.setDate(due.getDate() - 5);
+      const iso = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+      const tx = { ...backup.data.transactions[0], id: 'existing-subscription', propertyId: backup.data.properties[0].id, unit: 'Shared', date: iso(due), type: 'Expense', category: 'Other expenses', amount: 20, description: 'Example matching subscription', vendor: 'Example', capitalImprovement: false, recurringTemplateId: undefined, status: 'active' };
+      backup.data.transactions = [tx];
+      backup.data.recurringTemplates = [{ id: 'match-rule', propertyId: tx.propertyId, unit: tx.unit, type: tx.type, category: tx.category, description: tx.description, amount: 20, frequency: 'Monthly', nextDueDate: iso(due), active: true, reviewRequired: true, ownerUsePct: 0 }];
+      backup.settings.autoGenerateRecurringEntries = false; backup.settings.leaseAutomationEnabled = false;
+      await window.desktopPersistence.saveAppData(backup);
+      return tx;
+    });
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    const { page } = run;
+    await page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    const row = page.locator('.rt-calendar-item').filter({ hasText: 'Example matching subscription' });
+    await expect(row.getByText('Needs review', { exact: true })).toBeVisible();
+    await row.getByText('Why this appears', { exact: true }).click();
+    await row.getByRole('button', { name: 'Link this existing entry', exact: true }).click();
+    await expect(row.getByText('Expected', { exact: true })).toBeVisible();
+    await expect.poll(async () => page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions[0].recurringTemplateId)).toBe('match-rule');
+    await page.getByRole('button', { name: /^Show handled/ }).click();
+    await expect(row.getByText('Recorded', { exact: true })).toBeVisible();
+    const after = await page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions);
+    expect(after).toEqual([{ ...original, recurringTemplateId: 'match-rule' }]);
+    await page.screenshot({ path: path.join(rootDir, 'output', 'playwright', 'recurring-bill-matching.png') });
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    await run.page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    await expect(run.page.locator('.rt-calendar-item').filter({ hasText: 'Example matching subscription' }).getByText('Expected', { exact: true })).toBeVisible();
+    expect(await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.length)).toBe(1);
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), 'rental-tracker-e2e-bill-match-'))) throw Error('Unexpected test profile path');
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test('calendar keeps reviewed reminders out of attention and bounds busy sections', async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-calendar-bounds-'));
   let run = await launchDesktopApp(profilePath);

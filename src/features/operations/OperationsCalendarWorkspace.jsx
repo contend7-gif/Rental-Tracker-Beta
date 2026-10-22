@@ -70,7 +70,7 @@ function actionLabelForSource(source) {
   return "Open loans";
 }
 
-function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp }) {
+function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp, onConfirmRecurringMatch }) {
   const meta = SOURCE_META[item.source] || SOURCE_META.planning;
   const Icon = meta.icon;
   const propertyLabel = propertyNameById[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide");
@@ -96,10 +96,11 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
               <div className="font-semibold text-slate-900">{item.title}</div>
               {!handled && <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{item.source === "smart_check" ? "Suggested check" : formatDaysLeft(days)}</Badge>}
               <Badge variant="outline" className="bg-white text-[11px]">{meta.label}</Badge>
-              {item.followUpStatus ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus === "done" ? "Review complete" : item.followUpStatus}</Badge> : null}
+              {item.recurringStatus ? <Badge variant="secondary" className="text-[11px]">{item.recurringStatus === "recorded" ? "Recorded" : item.recurringStatus === "expected" ? "Expected" : "Needs review"}</Badge> : null}
+              {item.followUpStatus && item.recurringStatus !== "recorded" ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus === "done" ? "Review complete" : item.followUpStatus}</Badge> : null}
             </div>
             <div className="mt-1 text-xs leading-5 text-slate-600">{item.detail}</div>
-            <OperationsReminderDetails item={item} />
+            <OperationsReminderDetails item={item} onConfirmRecurringMatch={onConfirmRecurringMatch} />
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
               <span>{formatDate(item.date)}</span>
               {item.originalDate && item.originalDate !== item.date ? <span>Originally {formatDate(item.originalDate)}</span> : null}
@@ -119,7 +120,7 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp })
   );
 }
 
-function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen, onFollowUp }) {
+function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen, onFollowUp, onConfirmRecurringMatch }) {
   const meta = BUCKET_META[bucketKey];
   const Icon = meta.icon;
   return (
@@ -137,7 +138,7 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
         </div>
         <div className="rt-calendar-bucket-list mt-3 space-y-2" role="region" aria-label={`${meta.title} items`} tabIndex={0}>
           {items.length > 0 ? items.map((item) => (
-            <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} onFollowUp={onFollowUp} />
+            <OperationsRow key={item.id} item={item} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={onOpen} onFollowUp={onFollowUp} onConfirmRecurringMatch={onConfirmRecurringMatch} />
           )) : (
             <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">Nothing due in this window.</div>
           )}
@@ -148,6 +149,8 @@ function OperationsBucket({ bucketKey, items, propertyNameById, todayIso, onOpen
 }
 
 export function OperationsCalendarWorkspace({
+  actions,
+  requirePermission,
   appSettings,
   backupValidationResult,
   bankImportUnmatchedRows,
@@ -200,13 +203,15 @@ export function OperationsCalendarWorkspace({
     planningActionItems,
     recurringTemplates,
     recurringExpenseChecks,
+    transactions,
+    todayIso,
     workOrders,
     backup: {
       lastRecoverableBackupAt: persistenceHealth?.lastRecoverableBackupAt,
       intervalDays: appSettings.backupIntervalDays,
       todayIso,
     },
-  }), [appSettings.backupIntervalDays, appSettings.operationsLeaseReviewDaysBefore, documents, leaseAutomationReminders, leases, loans, persistenceHealth?.lastRecoverableBackupAt, planningActionItems, recurringExpenseChecks, recurringTemplates, todayIso, workOrders]);
+  }), [appSettings.backupIntervalDays, appSettings.operationsLeaseReviewDaysBefore, documents, leaseAutomationReminders, leases, loans, persistenceHealth?.lastRecoverableBackupAt, planningActionItems, recurringExpenseChecks, recurringTemplates, todayIso, transactions, workOrders]);
   const allItems = useMemo(() => applyOperationsFollowUps(
     rawItems,
     appSettings.operationsFollowUps,
@@ -365,9 +370,14 @@ export function OperationsCalendarWorkspace({
   };
 
   const acknowledgedCheckCount = Object.keys(appSettings.recurringExpenseCheckAcknowledgements || {}).length;
+  const confirmRecurringMatch = (item, transactionId) => {
+    if (!requirePermission?.("create_edit_records", "This access profile cannot link recurring bills.")) return;
+    const linked = actions.confirmRecurringBillMatch(item.sourceRecordId, item.date, transactionId, todayIso);
+    setNotice(linked ? "Existing entry linked. No transaction was created and no amount or date changed." : "This match changed. Refresh the records and review it again.");
+  };
   const handledCount = rawItems.filter((item) => {
     const status = appSettings.operationsFollowUps?.[item.id]?.status;
-    return status === "done" || status === "intentional";
+    return item.recurringStatus === "recorded" || status === "done" || status === "intentional";
   }).length;
 
   return (
@@ -454,7 +464,7 @@ export function OperationsCalendarWorkspace({
           workOrders={workOrders}
         />
       ) : workspaceMode === "month" ? (
-        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} onFollowUp={updateFollowUp} propertyNameById={propertyNameById} todayIso={todayIso} />
+        <OperationsMonthView items={calendarItems} month={selectedMonth} onMonthChange={setSelectedMonth} onOpen={openSourceRecord} onFollowUp={updateFollowUp} onConfirmRecurringMatch={confirmRecurringMatch} propertyNameById={propertyNameById} todayIso={todayIso} />
       ) : scopedItems.length === 0 ? (
         <Card className="border-emerald-200 bg-emerald-50 shadow-none">
           <CardContent className="flex items-start gap-3 p-5">
@@ -468,9 +478,9 @@ export function OperationsCalendarWorkspace({
       ) : (
         <div className="rt-calendar-buckets grid items-start gap-4 xl:grid-cols-2">
           {Object.keys(buckets).filter((bucketKey) => buckets[bucketKey].length > 0).map((bucketKey) => (
-            <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} />
+            <OperationsBucket key={bucketKey} bucketKey={bucketKey} items={buckets[bucketKey]} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} onConfirmRecurringMatch={confirmRecurringMatch} />
           ))}
-          {reviewedItems.length > 0 && <OperationsBucket bucketKey="reviewed" items={reviewedItems} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} />}
+          {reviewedItems.length > 0 && <OperationsBucket bucketKey="reviewed" items={reviewedItems} propertyNameById={propertyNameById} todayIso={todayIso} onOpen={openSourceRecord} onFollowUp={updateFollowUp} onConfirmRecurringMatch={confirmRecurringMatch} />}
         </div>
       )}
     </div>

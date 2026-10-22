@@ -1,4 +1,5 @@
-import type { Frequency, Lease, Loan, LoanPayment, RecurringDraft, RecurringTemplate, Transaction, Unit, UsePeriod } from "../models.ts";
+import type { Lease, Loan, LoanPayment, RecurringDraft, RecurringTemplate, Transaction, Unit, UsePeriod } from "../models.ts";
+import { recurringCycleDate } from "./recurringBillMatches.ts";
 
 const usdFormatter = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 export function currency(n: number) {
@@ -288,21 +289,12 @@ export function createRecurringTemplateFromTxn(txn: Transaction): RecurringTempl
   };
 }
 
-function addByFrequency(dateStr: string, frequency: Frequency) {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (frequency === "Weekly") dt.setUTCDate(dt.getUTCDate() + 7);
-  if (frequency === "Monthly") dt.setUTCMonth(dt.getUTCMonth() + 1);
-  if (frequency === "Quarterly") dt.setUTCMonth(dt.getUTCMonth() + 3);
-  if (frequency === "Yearly") dt.setUTCFullYear(dt.getUTCFullYear() + 1);
-  return dt.toISOString().slice(0, 10);
-}
-
 export function generateRecurringDrafts(args: { template: RecurringTemplate; throughDate: string; usePeriods: UsePeriod[] }): RecurringDraft[] {
   const drafts: RecurringDraft[] = [];
-  if (!args.template.active) return drafts;
+  if (!args.template.active || !recurringCycleDate(args.template.nextDueDate, args.template.frequency, 0)) return drafts;
 
   let cursor = args.template.nextDueDate;
+  let cycleOffset = 0;
   while (cursor <= args.throughDate) {
     const dueDate = cursor;
     const rentalUsePct = getRentalUsePctForDate({
@@ -345,7 +337,7 @@ export function generateRecurringDrafts(args: { template: RecurringTemplate; thr
       },
     });
 
-    cursor = addByFrequency(cursor, args.template.frequency);
+    cursor = recurringCycleDate(args.template.nextDueDate, args.template.frequency, ++cycleOffset);
   }
 
   return drafts;
@@ -358,9 +350,10 @@ export function generateRecurringTransactions(args: {
   existingTransactionKeys: Set<string>;
 }): { transactions: Transaction[]; nextDueDate: string } {
   const transactions: Transaction[] = [];
-  if (!args.template.active) return { transactions, nextDueDate: args.template.nextDueDate };
+  if (!args.template.active || !recurringCycleDate(args.template.nextDueDate, args.template.frequency, 0)) return { transactions, nextDueDate: args.template.nextDueDate };
 
   let cursor = args.template.nextDueDate;
+  let cycleOffset = 0;
   while (cursor <= args.throughDate) {
     const uniqueKey = `${args.template.id}:${cursor}`;
     if (!args.existingTransactionKeys.has(uniqueKey)) {
@@ -402,7 +395,7 @@ export function generateRecurringTransactions(args: {
       args.existingTransactionKeys.add(uniqueKey);
     }
 
-    cursor = addByFrequency(cursor, args.template.frequency);
+    cursor = recurringCycleDate(args.template.nextDueDate, args.template.frequency, ++cycleOffset);
   }
 
   return { transactions, nextDueDate: cursor };

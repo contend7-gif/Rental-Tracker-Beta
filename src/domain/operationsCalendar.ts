@@ -4,9 +4,11 @@ import type {
   Loan,
   RecurringTemplate,
   WorkOrder,
+  Transaction,
 } from "../models.ts";
 import type { LeaseAutomationReminder } from "./leaseAutomation.ts";
 import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
+import { recurringBillCycles } from "./recurringBillMatches.ts";
 import { normalizeLeaseAgreementType } from "./leaseTerms.js";
 import { isValidIsoDate } from "./isoDate.ts";
 import type { OperationsFollowUpRecord } from "../store/appSettings.ts";
@@ -40,6 +42,8 @@ export type OperationsCalendarItem = {
   eventKind?: "lease_start" | "lease_review" | "lease_end" | "lease_move_out";
   originalDate?: string;
   followUpStatus?: OperationsFollowUpRecord["status"];
+  recurringStatus?: "recorded" | "expected" | "needs_review";
+  matchCandidateIds?: string[];
   snoozeReturned?: boolean;
   evidence?: { reason: string; records: { id: string; date: string; amount: number }[] };
 };
@@ -90,6 +94,7 @@ export function applyOperationsFollowUps(
   options: { showHandled?: boolean; todayIso?: string } = {},
 ) {
   return sortItems(items.flatMap((item) => {
+    if (item.recurringStatus === "recorded") return options.showHandled ? [{ ...item, followUpStatus: "done" as const }] : [];
     const record = records[item.id];
     if (!record) return [item];
     if ((record.status === "done" || record.status === "intentional") && !options.showHandled) return [];
@@ -136,6 +141,8 @@ export function buildOperationsCalendarItems(args: {
   workOrders?: WorkOrder[];
   documents?: DocumentItem[];
   recurringTemplates?: RecurringTemplate[];
+  transactions?: Transaction[];
+  todayIso?: string;
   recurringExpenseChecks?: RecurringExpenseCheck[];
   planningActionItems?: PlanningCalendarAction[];
   loans?: Loan[];
@@ -285,16 +292,24 @@ export function buildOperationsCalendarItems(args: {
 
   (args.recurringTemplates || []).forEach((template) => {
     if (!template?.id || !template.active || !isValidIsoDate(template.nextDueDate)) return;
+    const cycles = args.todayIso ? recurringBillCycles(template, args.transactions || [], args.todayIso) : [];
+    const visibleCycles = cycles.length ? [...cycles.filter(cycle => cycle.status === "recorded").slice(-1), ...cycles.filter(cycle => cycle.status !== "recorded")] : [{ date: template.nextDueDate }];
+    visibleCycles.forEach(cycle => {
+    const matched = "status" in cycle ? cycle : null;
     items.push({
-      id: `recurring:${template.id}:${template.nextDueDate}`,
+      id: `recurring:${template.id}:${cycle.date}`,
       source: "recurring",
       sourceRecordId: template.id,
-      date: template.nextDueDate,
+      date: cycle.date,
       title: template.description,
-      detail: `${template.frequency} recurring ${template.type.toLowerCase()} | ${template.category}`,
+      detail: `${template.frequency} recurring ${template.type.toLowerCase()} | ${template.category}${matched ? matched.status === "recorded" ? " | Existing entry recorded" : matched.status === "expected" ? " | Next expected cycle" : " | Check existing entries before posting" : ""}`,
+      recurringStatus: matched?.status,
+      matchCandidateIds: matched?.records.filter(tx => !tx.recurringTemplateId).map(tx => tx.id),
+      evidence: matched ? { reason: matched.reason, records: matched.records.map(tx => ({ id: tx.id, date: tx.date, amount: tx.amount })) } : undefined,
       propertyId: template.propertyId,
       unit: template.unit,
-      priority: template.reviewRequired ? "high" : "normal",
+      priority: matched?.status === "expected" || matched?.status === "recorded" ? "normal" : template.reviewRequired ? "high" : "normal",
+    });
     });
   });
 
@@ -405,7 +420,7 @@ export function bucketOperationsCalendarItems(items: OperationsCalendarItem[], t
   };
   items.forEach((item) => {
     // Showing review history must not turn completed follow-ups back into alerts.
-    if (item.followUpStatus === "done" || item.followUpStatus === "intentional") return;
+    if (item.recurringStatus === "recorded" || item.followUpStatus === "done" || item.followUpStatus === "intentional") return;
     const days = diffDays(todayIso, item.date);
     if (days <= 0) buckets.attention.push(item);
     else if (days <= 7) buckets.next7.push(item);

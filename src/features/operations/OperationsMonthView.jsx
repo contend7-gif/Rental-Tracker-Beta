@@ -41,7 +41,7 @@ function dayLabel(date) {
   return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(parsed);
 }
 
-export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFollowUp, propertyNameById, todayIso }) {
+export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFollowUp, onConfirmRecurringMatch, propertyNameById, todayIso }) {
   const days = useMemo(() => buildCalendarMonthDays(month), [month]);
   const [selectedDate, setSelectedDate] = useState(month === todayIso.slice(0, 7) ? todayIso : `${month}-01`);
   useEffect(() => {
@@ -117,7 +117,8 @@ export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFol
                   <div className="min-w-0">
                     <div className="font-medium text-slate-900">{item.title}</div>
                     <div className="mt-1 text-xs text-slate-600">{item.detail}</div>
-                    <OperationsReminderDetails item={item} />
+                    {item.recurringStatus ? <div className="mt-1 text-xs font-medium">{item.recurringStatus === "recorded" ? "Recorded" : item.recurringStatus === "expected" ? "Expected" : "Needs review"}</div> : null}
+                    <OperationsReminderDetails item={item} onConfirmRecurringMatch={onConfirmRecurringMatch} />
                     <div className="mt-1.5 text-[11px] font-medium text-slate-500">{SOURCE_LABEL[item.source] || "Calendar"} · {propertyNameById?.[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide")}{item.unit ? ` · ${item.unit}` : ""}{item.role === "milestone" ? " · Milestone" : ""}</div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Button size="sm" variant="secondary" onClick={() => onOpen(item)}>Open source</Button>

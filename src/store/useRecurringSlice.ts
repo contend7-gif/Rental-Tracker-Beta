@@ -8,10 +8,12 @@ export function useRecurringSlice({
   transactions,
   usePeriods,
   setTransactions,
+  onRecurringMatch,
 }: {
   transactions: Transaction[];
   usePeriods: UsePeriod[];
   setTransactions: (updater: StateUpdater<Transaction>) => void;
+  onRecurringMatch?: (transactionId: string, cycleDate: string) => void;
 }) {
   const [recurringTemplates, setTemplateState] = useState<RecurringTemplate[]>([]);
   const [recurringDrafts, setDraftState] = useState<RecurringDraft[]>([]);
@@ -33,6 +35,7 @@ export function useRecurringSlice({
     setTemplates: setRecurringTemplates,
     setDrafts: setRecurringDrafts,
     setTransactions,
-  }), [setRecurringDrafts, setRecurringTemplates, setTransactions]);
+    onRecurringMatch,
+  }), [setRecurringDrafts, setRecurringTemplates, setTransactions, onRecurringMatch]);
   return { recurringTemplates, setRecurringTemplates, recurringDrafts, setRecurringDrafts, actions };
 }

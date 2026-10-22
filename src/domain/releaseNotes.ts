@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.8",
+    releaseDate: "2026-10-21",
+    title: "Match recorded bills to recurring reminders",
+    summary: "Recognize linked bill entries, review possible matches, and show the next expected recurring cycle without creating a duplicate transaction.",
+    changes: [
+      "Check active transaction links before showing a recurring reminder, with Recorded, Expected, and Needs review labels in Calendar.",
+      "Offer explicit Link this existing entry confirmation for possible matches, preserving the transaction's amount, date, allocation and bank-match status while recording the link in the audit log.",
+      "Hold recurring posting when a possible existing entry needs review, and skip linked cycles when generating transactions or drafts.",
+      "Keep recorded cycles in reviewed history and prevent unresolved earlier cycles from being silently skipped by later payments.",
+      "Clamp month-end and leap-year recurring dates, exclude voided and future entries from recorded-payment evidence, and keep property and unit scopes separate.",
+    ],
+  },
+  {
     version: "1.11.7",
     releaseDate: "2026-10-21",
     title: "Clearer Calendar reminders and shorter lists",

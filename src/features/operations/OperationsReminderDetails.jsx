@@ -1,8 +1,9 @@
 import React from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { Button } from "../../components/ui/button";
 
 export function FollowUpSelect({ item, onFollowUp }) {
-  if (item.role === "milestone") return null;
+  if (item.role === "milestone" || item.recurringStatus === "recorded") return null;
   return (
     <Select value={item.followUpStatus || "open"} onValueChange={(value) => onFollowUp(item, value)}>
       <SelectTrigger className="h-9 w-40 bg-white text-xs" aria-label={`Follow-up status for ${item.title}`}><SelectValue /></SelectTrigger>
@@ -28,7 +29,7 @@ const BASIS = {
   backup: "Based on your recovery schedule and the last verified restore point.",
 };
 
-export function OperationsReminderDetails({ item }) {
+export function OperationsReminderDetails({ item, onConfirmRecurringMatch }) {
   return (
     <details className="mt-2 rounded-md border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs text-slate-600">
       <summary className="cursor-pointer font-medium text-slate-700">Why this appears</summary>
@@ -37,9 +38,9 @@ export function OperationsReminderDetails({ item }) {
         <div className="mt-2">
           <div className="font-medium text-slate-700">Recent supporting transactions</div>
           <ul className="mt-1 space-y-1">
-            {item.evidence.records.map((record) => <li key={record.id} className="flex justify-between gap-4"><span>{record.date}</span><span>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(record.amount)}</span></li>)}
+            {item.evidence.records.map((record) => <li key={record.id} className="flex flex-wrap items-center justify-between gap-2"><span>{record.date}</span><span>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(record.amount)}</span>{onConfirmRecurringMatch && item.matchCandidateIds?.includes(record.id) ? <Button size="sm" variant="secondary" onClick={() => onConfirmRecurringMatch(item, record.id)}>Link this existing entry</Button> : null}</li>)}
           </ul>
-          <p className="mt-2">Use Review transactions to open the vendor history.</p>
+          <p className="mt-2">{item.source === "recurring" ? "Open transactions to review the recurring rule and ledger. Linking preserves the entry's amount and date; it does not mark it bank reconciled." : "Use Review transactions to open the vendor history."}</p>
         </div>
       ) : null}
       {item.originalDate ? <p className="mt-2">Original source date: {item.originalDate}. {item.snoozeReturned ? "Snooze ended; ready for review again." : "Snoozing changes the review date only."}</p> : null}

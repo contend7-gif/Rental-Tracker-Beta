@@ -64,8 +64,10 @@ export function useOperationsDesktopNotifications(args: Args) {
     planningActionItems: args.planningActionItems,
     recurringTemplates: args.recurringTemplates,
     recurringExpenseChecks,
+    transactions: args.transactions,
+    todayIso: args.todayIso,
     workOrders: args.workOrders,
-  }), args.appSettings.operationsFollowUps, { todayIso: args.todayIso }), [args.todayIso, args.appSettings.operationsFollowUps, args.appSettings.operationsLeaseReviewDaysBefore, args.documents, args.leaseAutomationReminders, args.leases, args.loans, args.planningActionItems, args.recurringTemplates, recurringExpenseChecks, args.workOrders]);
+  }), args.appSettings.operationsFollowUps, { todayIso: args.todayIso }), [args.todayIso, args.transactions, args.appSettings.operationsFollowUps, args.appSettings.operationsLeaseReviewDaysBefore, args.documents, args.leaseAutomationReminders, args.leases, args.loans, args.planningActionItems, args.recurringTemplates, recurringExpenseChecks, args.workOrders]);
 
   useEffect(() => {
     if (!args.appSettings.operationsDesktopNotifications || !args.isDataHydrated || typeof window === "undefined") return;
