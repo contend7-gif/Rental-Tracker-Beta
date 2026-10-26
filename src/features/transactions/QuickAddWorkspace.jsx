@@ -1,4 +1,5 @@
 import { standardMileageRate, mileageRateHint } from "../../domain/mileageRates.ts";
+import { rentalAmountSplit } from "../../domain/rentalAmountSplit.ts";
 import { DraftRecoveryControls, useTransactionDraftGuard } from "../shared/DraftRecovery.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { Badge } from "../../components/ui/badge";
@@ -140,6 +141,8 @@ export function QuickAddWorkspace({
   const guard = useTransactionDraftGuard({ draftKey, draft: form, clearForm: clearTransactionForm });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [rentalAmountInput, setRentalAmountInput] = useState(null);
+  const [ownerPercentInput, setOwnerPercentInput] = useState(null);
   const savingLock = useRef(false);
   const lastSaveMode = useRef(false);
   const keyboardSave = useRef(null);
@@ -271,16 +274,31 @@ export function QuickAddWorkspace({
   const showOwnerUseEditor = ownerUseOpen || form.ownerUsePctOverride;
   const rentalUsePct = Number(preview?.rentalUsePct || 0);
   const ownerUsePct = Math.max(0, 1 - rentalUsePct);
+  const splitTotal = Number(form.amount || mileagePreview?.amount || 0);
+  const splitKey = draft => JSON.stringify([editingTxnId, draft.type, draft.amount, draft.ownerUsePct,
+    draft.ownerUsePctOverride, draft.date, draft.propertyId, draft.unit]);
+  const currentSplitKey = splitKey(form);
+  const rentalAmountText = rentalAmountInput?.key === currentSplitKey ? rentalAmountInput.value
+    : Number.isFinite(splitTotal) && splitTotal > 0 ? (splitTotal * rentalUsePct).toFixed(2) : "";
+  const rentalAmountError = form.type === "Expense" && rentalAmountInput?.key === currentSplitKey
+    ? rentalAmountSplit(splitTotal, rentalAmountText).error : "";
+  const changeRentalAmount = value => {
+    const split = rentalAmountSplit(splitTotal, value);
+    const next = split.error ? form : { ...form, ownerUsePct: split.ownerUsePct, ownerUsePctOverride: true };
+    setRentalAmountInput({ key: splitKey(next), value });
+    if (!split.error) setForm(next);
+  };
   const possibleImprovement =
     form.type === "Expense" &&
     form.capitalImprovement !== "Yes" &&
     /(roof|hvac|furnace|water heater|remodel|renovat|replace|upgrade|floor|window|siding|deck|appliance)/i.test(`${form.category || ""} ${form.description || ""}`);
   const rentUnitMissing = isRentPayment && (!form.unit || form.unit === "Shared");
   const rentLeaseMissing = isRentPayment && rentLeaseOptions.length > 1 && !selectedExplicitRentLease;
-  const saveDisabled = properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing || rentLeaseMissing;
+  const saveDisabled = properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing || rentLeaseMissing || Boolean(rentalAmountError);
   const receiptRecommended = form.type === "Expense" && !showMileageControls && amountEntered && rentAmount >= 75 && !pendingTxnAttachment && !pendingDocumentExpenseSource?.documentId;
   const taxTreatmentExplanation = (() => {
     if (form.type !== "Expense") return "Income is tracked for reporting; deductible expense preview does not apply.";
+    if (form.ownerUsePctOverride) return "Custom allocation entered for this transaction. Use Auto to calculate the split from occupancy.";
     if (servicePeriodRecommended && form.servicePeriodStart && form.servicePeriodEnd) return "Rental-use percentage is calculated from occupancy during the service period.";
     if (ownerUsePct >= 0.999) return "This appears non-deductible because the selected unit is owner-occupied on this date.";
     if (rentalUsePct >= 0.999) return "This appears rental-use based on the selected unit and occupancy history.";
@@ -387,6 +405,7 @@ export function QuickAddWorkspace({
   };
 
   const resetOwnerUseToAuto = () => {
+    setRentalAmountInput(null);
     setOwnerUseOpen(false);
     setForm((prev) => ({
       ...prev,
@@ -642,11 +661,26 @@ export function QuickAddWorkspace({
                       {field(
                         "Owner use %",
                         <Input
-                          value={form.ownerUsePct}
-                          onChange={(e) => setForm((prev) => ({ ...prev, ownerUsePct: e.target.value, ownerUsePctOverride: true }))}
+                          value={ownerPercentInput?.key === currentSplitKey ? ownerPercentInput.value : formatPercentInput(Number(form.ownerUsePct))}
+                          onChange={(event) => {
+                            const next = { ...form, ownerUsePct: event.target.value, ownerUsePctOverride: true };
+                            setOwnerPercentInput({ key: splitKey(next), value: event.target.value });
+                            setForm(next);
+                          }}
                         />,
                         { hint: "Only change this when the bill needs a custom split." },
                       )}
+                      {field(
+                        "Rental amount ($)",
+                        <Input type="number" min="0" max={splitTotal > 0 ? splitTotal : undefined} step="0.01"
+                          disabled={!Number.isFinite(splitTotal) || splitTotal <= 0}
+                          aria-invalid={Boolean(rentalAmountError)} aria-describedby="rental-amount-hint"
+                          value={rentalAmountText} onChange={event => changeRentalAmount(event.target.value)} />,
+                      )}
+                      <div id="rental-amount-hint" className="text-xs text-slate-600 md:col-span-2">
+                        Enter the rental portion of this bill; owner use is the remainder. Saved as a percentage, so changing the bill total keeps that percentage. Re-enter dollars to set a new rental amount, or use Auto.
+                        {rentalAmountError ? <p role="alert" className="mt-1 text-rose-700">{rentalAmountError}</p> : null}
+                      </div>
                     </div>
                   ) : null}
 

@@ -133,6 +133,7 @@ export function PlanningWorkspace({
   planningUnitEconomicsRows,
   planningUnitFilterIgnored,
   planningUpcomingChanges,
+  planningUtilityBillComparisons,
   printPlanningMemo,
   properties,
   propertyFilter,
@@ -461,6 +462,7 @@ export function PlanningWorkspace({
           TableFrame={ResponsiveTableFrame}
           toPctDisplay={toPctDisplay}
           upcomingChanges={planningUpcomingChanges}
+          utilityBillComparisons={planningUtilityBillComparisons}
         />
       )}
     </PlanningView>

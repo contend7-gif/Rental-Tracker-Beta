@@ -11,6 +11,121 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const executablePath = process.env.RENTAL_TRACKER_E2E_EXECUTABLE
   || path.join(rootDir, "release", "win-unpacked", "Rental Tracker.exe");
 
+test('rental dollar entry preserves cents through save restart and edit and rejects invalid splits', async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-rental-dollars-'));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    const { page } = run;
+    await page.getByRole('button', { name: 'New', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^Transaction/ }).click();
+    await page.getByRole('button', { name: /Repair \/ maintenance/ }).click();
+    await page.getByLabel('Description / memo', { exact: true }).fill('Example dollar rental split');
+    await page.getByLabel('Amount', { exact: true }).fill('100');
+    await page.getByRole('button', { name: 'Adjust', exact: true }).click();
+    const rental = page.getByLabel('Rental amount ($)', { exact: true });
+    await rental.fill('60');
+    await expect(page.getByLabel('Owner use %', { exact: true })).toHaveValue('40');
+    await page.getByLabel('Owner use %', { exact: true }).fill('50');
+    await expect(rental).toHaveValue('50.00');
+    await rental.fill('60');
+    await rental.fill('101');
+    await expect(page.getByText('Rental amount must be between $0 and the bill total.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save transaction', exact: true })).toBeDisabled();
+    await rental.fill('0');
+    await expect(page.getByLabel('Owner use %', { exact: true })).toHaveValue('100');
+    await rental.fill('100');
+    await expect(page.getByLabel('Owner use %', { exact: true })).toHaveValue('0');
+    await rental.fill('60');
+    await page.getByLabel('Amount', { exact: true }).fill('200');
+    await expect(rental).toHaveValue('120.00');
+    await page.getByRole('button', { name: 'Use auto', exact: true }).click();
+    await expect(rental).toHaveCount(0);
+    await page.getByRole('button', { name: 'Adjust', exact: true }).click();
+    await page.getByLabel('Amount', { exact: true }).fill('87.13');
+    await rental.fill('29.99');
+    await page.screenshot({ path: path.join(rootDir, 'output', 'playwright', 'rental-dollar-split.png') });
+    await page.getByRole('button', { name: 'Save transaction', exact: true }).click();
+    const saved = () => run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions.find(tx => tx.description === 'Example dollar rental split'));
+    await expect.poll(async () => (await saved())?.deductibleAmount).toBe(29.99);
+    const first = await saved();
+    expect(first.ownerUsePctOverride).toBe(true);
+    expect(first.amount).toBe(87.13);
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    await run.page.getByRole('button', { name: 'Transactions', exact: true }).click();
+    await run.page.getByPlaceholder('Search', { exact: true }).fill('Example dollar rental split');
+    await run.page.getByText('Example dollar rental split', { exact: true }).click();
+    await run.page.getByRole('dialog').getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(run.page.getByLabel('Rental amount ($)', { exact: true })).toHaveValue('29.99');
+    await run.page.getByRole('button', { name: 'Save transaction', exact: true }).click();
+    await expect.poll(async () => (await saved())?.deductibleAmount).toBe(29.99);
+    expect((await saved()).rentalUsePct).toBeCloseTo(first.rentalUsePct, 12);
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), 'rental-tracker-e2e-rental-dollars-'))) throw Error('Unexpected test profile path');
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test('utility amount checks explain spending and persist reviewed history without changing transactions', async () => {
+  test.setTimeout(180_000);
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-utility-amount-'));
+  let run = await launchDesktopApp(profilePath);
+  try {
+    await expect(run.page.getByRole('heading', { name: 'Home', exact: true })).toBeVisible();
+    const seeded = await run.page.evaluate(async () => {
+      const { backup } = await window.desktopPersistence.loadAppData();
+      const now = new Date();
+      const iso = date => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+      const template = backup.data.transactions[0];
+      const make = (offset, amount, vendor) => ({ ...template, id: `${vendor}-${offset}`, date: iso(new Date(now.getFullYear(), now.getMonth() + offset, Math.min(now.getDate(), 5))), propertyId: backup.data.properties[0].id, unit: 'Shared', type: 'Expense', category: 'Utilities', amount, vendor, description: `${vendor} utility bill`, status: 'active', capitalImprovement: false, recurringTemplateId: undefined });
+      backup.data.transactions = [...Array.from({ length: 6 }, (_, i) => make(i - 6, 90, 'Example Stable Utility')), make(0, 135, 'Example Stable Utility'), make(0, 42, 'New Utility Provider')];
+      backup.data.recurringTemplates = [];
+      backup.settings.autoGenerateRecurringEntries = false;
+      backup.settings.leaseAutomationEnabled = false;
+      await window.desktopPersistence.saveAppData(backup);
+      return backup.data.transactions;
+    });
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    await run.page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    const row = run.page.locator('.rt-calendar-item').filter({ hasText: 'Review utility amount: Example Stable Utility' });
+    await expect(row.getByText(/expected \$90.00; recorded \$135.00; \$45.00 above estimate/)).toBeVisible();
+    await row.getByText('Why this appears', { exact: true }).click();
+    await expect(row.getByText(/Only earlier months inform this estimate/)).toBeVisible();
+    await run.page.screenshot({ path: path.join(rootDir, 'output', 'playwright', 'utility-amount-calendar.png') });
+    await row.getByRole('button', { name: 'Mark amount explained', exact: true }).click();
+    await expect(row).toHaveCount(0);
+    await expect.poll(async () => run.page.evaluate(async () => Object.entries((await window.desktopPersistence.loadAppData()).backup.settings.operationsFollowUps || {}).some(([key, value]) => key.startsWith('utility-amount:') && value.status === 'done'))).toBe(true);
+    await run.electronApp.close(); run = await launchDesktopApp(profilePath);
+    await run.page.getByRole('button', { name: 'Calendar', exact: true }).click();
+    await expect(run.page.locator('.rt-calendar-item').filter({ hasText: 'Review utility amount: Example Stable Utility' })).toHaveCount(0);
+    await run.page.getByRole('button', { name: /^Show handled/ }).click();
+    const reviewed = run.page.getByRole('region', { name: 'Reviewed items items', exact: true });
+    await expect(reviewed.locator('span').filter({ hasText: /^Amount explained$/ })).toBeVisible();
+    await run.page.getByRole('button', { name: 'Planning', exact: true }).click();
+    await run.page.getByRole('button', { name: 'Forecast', exact: true }).click();
+    const comparisons = run.page.getByRole('region', { name: 'Utility bill comparisons', exact: true });
+    const actual = comparisons.locator('article').filter({ hasText: 'Recorded $135.00' });
+    await expect(actual.getByText('Amount explained', { exact: true })).toBeVisible();
+    await expect(actual.getByText(/expected \$90.00; \$45.00 above estimate/)).toBeVisible();
+    await expect(comparisons.locator('article').filter({ hasText: 'New Utility Provider' }).getByText('Insufficient history', { exact: true })).toBeVisible();
+    await actual.locator('summary').click();
+    await expect(actual.getByText('Earlier supporting entries', { exact: true })).toBeVisible();
+    await run.page.screenshot({ path: path.join(rootDir, 'output', 'playwright', 'utility-amount-planning.png') });
+    await run.page.setViewportSize({ width: 460, height: 900 });
+    await expect(actual).toBeVisible();
+    expect(await comparisons.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    const after = await run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup.data.transactions);
+    expect(after).toEqual(seeded);
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), 'rental-tracker-e2e-utility-amount-'))) throw Error('Unexpected test profile path');
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
 test('recurring bill matching links an existing entry, advances Calendar and survives restart without posting duplicates', async () => {
   const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), 'rental-tracker-e2e-bill-match-'));
   let run = await launchDesktopApp(profilePath);

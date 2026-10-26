@@ -8,6 +8,20 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.9",
+    releaseDate: "2026-10-25",
+    title: "Utility spending checks and rental dollar splits",
+    summary: "Compare recorded utilities with earlier spending patterns and enter a rental-use allocation in dollars.",
+    changes: [
+      "Show expected versus recorded utility totals in Planning, with seasonal or recent-average evidence, planning ranges, and clear limits for short histories.",
+      "Suggest a Calendar amount review only when seasonal or six-month consistent history supports a material increase; keep properties, units and providers separate and include recorded credits.",
+      "Mark an amount explained without changing transactions, retain reviewed history across restart, and allow a fresh check when the recorded facts change.",
+      "Enter Rental amount ($) alongside the existing percentage split. Dollar entry sets the saved percentage; changing the bill total keeps that percentage, with Auto available to restore occupancy-based allocation.",
+      "Preserve allocation precision when reopening an expense so an exact rental dollar amount does not drift from rounding, and block invalid dollar splits before saving.",
+      "Place Calendar row actions below the explanation to keep supporting history readable inside bounded lists.",
+    ],
+  },
+  {
     version: "1.11.8",
     releaseDate: "2026-10-21",
     title: "Match recorded bills to recurring reminders",

@@ -1,4 +1,6 @@
 import { usePlanningWorkspaceModel } from "./usePlanningWorkspaceModel.js";
+import { useMemo } from "react";
+import { buildUtilityBillComparisons } from "../domain/utilityBillComparisons.ts";
 import { usePlanningWorkspaceActions } from "./usePlanningWorkspaceActions.js";
 import { currency } from "../domain/accounting.ts";
 import { usePlanningWorkspaceAnalytics } from "./usePlanningWorkspaceAnalytics.js";
@@ -51,6 +53,10 @@ export function usePlanningWorkspace({
   view,
   yearFilter,
 }) {
+  const planningUtilityBillComparisons = useMemo(() => buildUtilityBillComparisons({
+    today: todayIso, transactions: activeTx, propertyId: propertyFilter,
+  }).map(item => ({ ...item, explained: appSettings.operationsFollowUps?.[item.id]?.status === "done" })),
+  [todayIso, activeTx, propertyFilter, appSettings.operationsFollowUps]);
   const {
     applyPlanningPreset,
     planningAssumptionAuditRows,
@@ -279,6 +285,7 @@ export function usePlanningWorkspace({
     yearFilter,
   });
   return {
+    planningUtilityBillComparisons,
     planningAssumptionAuditRows,
     planningCapitalMonthlyTarget,
     planningCapitalRunway,

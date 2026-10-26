@@ -9,6 +9,7 @@ import type {
 import type { LeaseAutomationReminder } from "./leaseAutomation.ts";
 import type { RecurringExpenseCheck } from "./recurringExpenseChecks.ts";
 import { recurringBillCycles } from "./recurringBillMatches.ts";
+import { buildUtilityBillComparisons, type UtilityBillComparison } from "./utilityBillComparisons.ts";
 import { normalizeLeaseAgreementType } from "./leaseTerms.js";
 import { isValidIsoDate } from "./isoDate.ts";
 import type { OperationsFollowUpRecord } from "../store/appSettings.ts";
@@ -44,6 +45,7 @@ export type OperationsCalendarItem = {
   followUpStatus?: OperationsFollowUpRecord["status"];
   recurringStatus?: "recorded" | "expected" | "needs_review";
   matchCandidateIds?: string[];
+  utilityComparison?: UtilityBillComparison;
   snoozeReturned?: boolean;
   evidence?: { reason: string; records: { id: string; date: string; amount: number }[] };
 };
@@ -150,6 +152,18 @@ export function buildOperationsCalendarItems(args: {
   backup?: { lastRecoverableBackupAt?: string; intervalDays?: number; todayIso?: string };
 }): OperationsCalendarItem[] {
   const items: OperationsCalendarItem[] = [];
+
+  for (const comparison of buildUtilityBillComparisons({ today: args.todayIso || "", transactions: args.transactions || [] })) {
+    if (!comparison.flagged) continue;
+    items.push({
+      id: comparison.id, source: "smart_check", sourceRecordId: comparison.records[0].id,
+      date: comparison.date, title: `Review utility amount: ${comparison.vendor}`,
+      detail: `${comparison.month}${comparison.currentMonth ? " to date" : ""}: expected $${comparison.expected!.toFixed(2)}; recorded $${comparison.actual.toFixed(2)}; $${comparison.difference!.toFixed(2)} above estimate.`,
+      propertyId: comparison.propertyId, unit: comparison.unit, searchText: comparison.vendor,
+      priority: "normal", utilityComparison: comparison,
+      evidence: { reason: `${comparison.basis} Only earlier months inform this estimate. Review when the total exceeds the planning range, is at least 25% above the estimate and differs by at least $25. This is a spending check, not an unpaid bill.`, records: comparison.supportingRecords },
+    });
+  }
 
   (args.leaseAutomationReminders || []).forEach((reminder) => {
     if (!isValidIsoDate(reminder.dueDate)) return;

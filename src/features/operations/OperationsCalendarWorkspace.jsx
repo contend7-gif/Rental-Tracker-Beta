@@ -86,21 +86,21 @@ function OperationsRow({ item, propertyNameById, todayIso, onOpen, onFollowUp, o
 
   return (
     <div className={`rt-calendar-item rounded-lg border border-slate-200 bg-white p-3 shadow-none ${item.source === "smart_check" ? "rt-calendar-suggestion" : ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="grid gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${meta.tone}`}>
             <Icon className="h-4 w-4" aria-hidden="true" />
           </span>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1 break-words">
             <div className="flex flex-wrap items-center gap-2">
               <div className="font-semibold text-slate-900">{item.title}</div>
               {!handled && <Badge variant="secondary" className={`text-[11px] ${urgencyTone}`}>{item.source === "smart_check" ? "Suggested check" : formatDaysLeft(days)}</Badge>}
               <Badge variant="outline" className="bg-white text-[11px]">{meta.label}</Badge>
               {item.recurringStatus ? <Badge variant="secondary" className="text-[11px]">{item.recurringStatus === "recorded" ? "Recorded" : item.recurringStatus === "expected" ? "Expected" : "Needs review"}</Badge> : null}
-              {item.followUpStatus && item.recurringStatus !== "recorded" ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus === "done" ? "Review complete" : item.followUpStatus}</Badge> : null}
+              {item.followUpStatus && item.recurringStatus !== "recorded" ? <Badge variant="secondary" className="text-[11px] capitalize">{item.followUpStatus === "done" ? item.utilityComparison ? "Amount explained" : "Review complete" : item.followUpStatus}</Badge> : null}
             </div>
             <div className="mt-1 text-xs leading-5 text-slate-600">{item.detail}</div>
-            <OperationsReminderDetails item={item} onConfirmRecurringMatch={onConfirmRecurringMatch} />
+            <OperationsReminderDetails item={item} onConfirmRecurringMatch={onConfirmRecurringMatch} onFollowUp={onFollowUp} />
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
               <span>{formatDate(item.date)}</span>
               {item.originalDate && item.originalDate !== item.date ? <span>Originally {formatDate(item.originalDate)}</span> : null}
@@ -314,7 +314,7 @@ export function OperationsCalendarWorkspace({
   };
 
   const updateFollowUp = (item, status) => {
-    if (status === "intentional" && item.source === "smart_check") {
+    if (status === "intentional" && item.source === "smart_check" && !item.utilityComparison) {
       acknowledgeSmartCheck(item);
       return;
     }
@@ -327,7 +327,7 @@ export function OperationsCalendarWorkspace({
     }
     next[item.id] = operationsFollowUpRecord(item, status, todayIso, 7);
     setSetting("operationsFollowUps", next);
-    const label = status === "snoozed" ? "snoozed for 7 days" : status === "done" ? "review complete" : `marked ${status}`;
+    const label = status === "snoozed" ? "snoozed for 7 days" : status === "done" ? item.utilityComparison ? "amount explained" : "review complete" : `marked ${status}`;
     setNotice(`${item.title} ${label}. The source record was not changed.`);
   };
 

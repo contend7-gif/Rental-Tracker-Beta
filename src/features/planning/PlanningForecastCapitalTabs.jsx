@@ -1,4 +1,5 @@
 import React from "react";
+import { PlanningUtilityBillComparisons } from "./PlanningUtilityBillComparisons.jsx";
 
 import {
   PlanningCapitalReservePanel,
@@ -60,6 +61,7 @@ export function PlanningForecastCapitalTabs({
   TableFrame,
   toPctDisplay,
   upcomingChanges,
+  utilityBillComparisons,
 }) {
   return (
     <div className={`grid gap-3 ${scope === "forecast" ? "xl:grid-cols-[1.25fr,0.75fr]" : "xl:grid-cols-1"}`}>
@@ -73,6 +75,7 @@ export function PlanningForecastCapitalTabs({
       )}
 
       <div className="space-y-3">
+        {scope === "forecast" && <PlanningUtilityBillComparisons comparisons={utilityBillComparisons} currency={currency} formatPropertyLabel={formatPropertyLabel} />}
         {scope === "forecast" && (
           <PlanningForecastSetupPanel
             forecastOptions={forecastOptions}

@@ -118,7 +118,7 @@ export function OperationsMonthView({ items, month, onMonthChange, onOpen, onFol
                     <div className="font-medium text-slate-900">{item.title}</div>
                     <div className="mt-1 text-xs text-slate-600">{item.detail}</div>
                     {item.recurringStatus ? <div className="mt-1 text-xs font-medium">{item.recurringStatus === "recorded" ? "Recorded" : item.recurringStatus === "expected" ? "Expected" : "Needs review"}</div> : null}
-                    <OperationsReminderDetails item={item} onConfirmRecurringMatch={onConfirmRecurringMatch} />
+                    <OperationsReminderDetails item={item} onConfirmRecurringMatch={onConfirmRecurringMatch} onFollowUp={onFollowUp} />
                     <div className="mt-1.5 text-[11px] font-medium text-slate-500">{SOURCE_LABEL[item.source] || "Calendar"} · {propertyNameById?.[item.propertyId] || (item.propertyId ? "Property" : "Portfolio-wide")}{item.unit ? ` · ${item.unit}` : ""}{item.role === "milestone" ? " · Milestone" : ""}</div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Button size="sm" variant="secondary" onClick={() => onOpen(item)}>Open source</Button>

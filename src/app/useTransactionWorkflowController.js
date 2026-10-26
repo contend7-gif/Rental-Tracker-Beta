@@ -67,7 +67,8 @@ export function useTransactionWorkflowController({
     setForm({
       ...createBlankForm(txn.propertyId, txn.unit),
       ...txn,
-      ownerUsePct: formatPercentInput((txn.ownerUsePct || 0) * 100),
+      ownerUsePct: txn.ownerUsePctOverride ? String((txn.ownerUsePct || 0) * 100)
+        : formatPercentInput((txn.ownerUsePct || 0) * 100),
       ownerUsePctOverride: Boolean(txn.ownerUsePctOverride),
       amount: String(txn.amount),
       invoiceAmount: String(txn.invoiceAmount ?? txn.amount ?? ""),
