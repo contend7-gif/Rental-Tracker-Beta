@@ -112,7 +112,7 @@ For a tagged release, keep these aligned:
 - `docs/manual-qa.md`
 - `README.md` when behavior or navigation changes
 
-Tag builds run `npm run smoke:ci` before publishing release assets.
+Tag builds run `npm run smoke:ci` before publishing release assets. A push to main that changes package.json or the installer workflow and starts its commit message with `Release v` can also build and publish the package version after the same gate. Ordinary main commits do not publish releases; manual workflow dispatch remains build-only.
 
 ## Tech Stack
 

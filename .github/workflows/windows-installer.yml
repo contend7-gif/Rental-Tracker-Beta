@@ -3,12 +3,18 @@ name: Build Windows Installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
+    paths:
+      - package.json
+      - .github/workflows/windows-installer.yml
 
 jobs:
   preflight:
     name: Release preflight
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || (github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v'))
     runs-on: windows-latest
 
     steps:
@@ -46,6 +52,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Read release version
+        id: release
+        run: |
+          node -e "const fs = require('node:fs'); const version = require('./package.json').version; if (!/^\d+\.\d+\.\d+$/.test(version)) throw Error('Invalid release version'); const tag = 'v' + version; if (process.env.GITHUB_REF.startsWith('refs/tags/') && process.env.GITHUB_REF_NAME !== tag) throw Error('Release tag does not match package version'); fs.appendFileSync(process.env.GITHUB_OUTPUT, 'tag=' + tag + '\n');"
+
       - name: Build installer
         run: npm run build && npm run desktop:prepare && node scripts/run-electron-builder.mjs --publish never
 
@@ -60,10 +71,13 @@ jobs:
             release/latest*.yml
           if-no-files-found: error
 
-      - name: Publish GitHub release assets (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish GitHub release assets
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'push' && github.ref == 'refs/heads/main' && startsWith(github.event.head_commit.message, 'Release v'))
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
           files: |
             release/*Setup*.exe
             release/*.blockmap
