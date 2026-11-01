@@ -1282,7 +1282,7 @@ test("saved PDF review retains its preview after a complete desktop restart", as
     await firstRun.page.getByRole("button", { name: "Documents", exact: true }).click();
     const chooserPromise = firstRun.page.waitForEvent("filechooser");
     await firstRun.page.getByRole("button", { name: "Upload document", exact: true }).click();
-    await (await chooserPromise).setFiles({ name: "saved-lease.pdf", mimeType: "application/pdf", buffer: makeTextPdf([[{ text: "Example signed lease" }]]) });
+    await (await chooserPromise).setFiles({ name: "saved-lease.pdf", mimeType: "application/pdf", buffer: makeTextPdf([[{ text: "Example signed lease" }], [{ text: "Example second page" }]]) });
     await expect(firstRun.page.getByRole("heading", { name: "Add document", exact: true })).toBeVisible();
     await firstRun.page.getByRole("button", { name: "Save document only", exact: true }).click();
     await expect.poll(async () => firstRun.page.evaluate(async () => {
@@ -1308,17 +1308,34 @@ test("saved PDF review retains its preview after a complete desktop restart", as
     await expect(page.getByText("Preview available", { exact: true })).toBeVisible();
     await expect(page.getByText("Preview not loaded", { exact: true })).toHaveCount(0);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await expect(page.locator('iframe[title="Preview of saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
-    // Native PDF pages paint after the frame's load event; allow the visual capture to show the page.
-    await page.waitForTimeout(1000);
+    await expect(page.locator('section[aria-label="Preview of saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
+    // Verify actual painted pixels, not merely a frame's load event.
+    const painted = await page.locator('canvas[aria-label="Preview of saved-lease.pdf, page 1"]').evaluate((canvas) => {
+      const pixels = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+      let dark = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i + 3] > 0 && pixels[i] < 180 && pixels[i + 1] < 180 && pixels[i + 2] < 180) dark++;
+      return dark;
+    });
+    expect(painted).toBeGreaterThan(100);
+    const pdfPreview = page.locator('section[aria-label="Preview of saved-lease.pdf"]');
+    await expect(pdfPreview.getByText("Page 1 of 2", { exact: true })).toBeVisible();
+    await pdfPreview.getByRole("button", { name: "Next page", exact: true }).click();
+    await expect(pdfPreview.locator('canvas[aria-label="Preview of saved-lease.pdf, page 2"]')).toBeVisible();
+    await expect(pdfPreview).toHaveAttribute("data-preview-ready", "true");
+    await pdfPreview.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await expect(pdfPreview.getByText("125%", { exact: true })).toBeVisible();
+    await expect(pdfPreview).toHaveAttribute("data-preview-ready", "true");
+    await pdfPreview.getByRole("button", { name: "Previous page", exact: true }).click();
+    await expect(pdfPreview.locator('canvas[aria-label="Preview of saved-lease.pdf, page 1"]')).toBeVisible();
+    await expect(pdfPreview).toHaveAttribute("data-preview-ready", "true");
     await page.screenshot({ path: path.join(rootDir, "output", "playwright", "documents-pdf-review-1440.png") });
     await page.getByRole("button", { name: "View file", exact: true }).first().click();
-    await expect(page.locator('iframe[title="saved-lease.pdf"]')).toBeVisible();
-    await expect(page.locator('iframe[title="saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
+    await expect(page.locator('section[aria-label="saved-lease.pdf"]')).toBeVisible();
+    await expect(page.locator('section[aria-label="saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "saved-lease.pdf", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "View file", exact: true }).first()).toBeFocused();
-    await expect(page.locator('iframe[title="Preview of saved-lease.pdf"]')).toBeVisible();
+    await expect(page.locator('section[aria-label="Preview of saved-lease.pdf"]')).toBeVisible();
     const correctionSection = page.locator("details").filter({ has: page.locator("summary", { hasText: "Correct OCR fields" }) });
     if (!await correctionSection.evaluate((element) => element.open)) await correctionSection.locator("summary").click();
     const originalVendor = await page.getByLabel("Vendor", { exact: true }).inputValue();
@@ -1330,8 +1347,8 @@ test("saved PDF review retains its preview after a complete desktop restart", as
     await page.getByRole("button", { name: "Open linked transaction", exact: true }).click();
     await page.getByRole("alertdialog", { name: "Discard unsaved changes?", exact: true }).getByRole("button", { name: "Discard changes", exact: true }).click();
     const transactionPanel = page.getByRole("dialog", { name: "Example linked panel transaction", exact: true });
-    await expect(transactionPanel.locator('iframe[title="Preview of saved-lease.pdf"]')).toBeVisible();
-    await expect(transactionPanel.locator('iframe[title="Preview of saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
+    await expect(transactionPanel.locator('section[aria-label="Preview of saved-lease.pdf"]')).toBeVisible();
+    await expect(transactionPanel.locator('section[aria-label="Preview of saved-lease.pdf"]')).toHaveAttribute("data-preview-ready", "true");
     await page.screenshot({ path: path.join(rootDir, "output", "playwright", "record-panel-preview.png") });
     await page.keyboard.press("Escape");
     await expect(transactionPanel).toHaveCount(0);
@@ -2450,6 +2467,29 @@ test("linked payments connect lease receipts and preserve unfinished payment wor
     expect(rendererErrors).toEqual([]);
   } finally {
     await electronApp.close();
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("PDF preview reports unreadable files and retry remains usable", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-pdf-error-"));
+  let run;
+  try {
+    run = await launchDesktopApp(profilePath);
+    const { page } = run;
+    await page.getByRole("button", { name: "Documents", exact: true }).click();
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Upload document", exact: true }).click();
+    await (await chooser).setFiles({ name: "unreadable.pdf", mimeType: "application/pdf", buffer: Buffer.from("This is not a PDF.") });
+    const preview = page.getByRole("region", { name: "unreadable.pdf", exact: true });
+    await expect(preview.getByRole("alert")).toContainText("The PDF preview could not load.");
+    await expect(preview).toHaveAttribute("data-preview-ready", "false");
+    await preview.getByRole("button", { name: "Retry PDF preview", exact: true }).click();
+    await expect(preview.getByRole("alert")).toContainText("The PDF preview could not load.");
+    await expect(preview.getByRole("button", { name: "Retry PDF preview", exact: true })).toBeEnabled();
+  } finally {
+    await run?.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), "rental-tracker-e2e-pdf-error-"))) throw Error("Unexpected test profile path");
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });

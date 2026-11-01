@@ -4,6 +4,13 @@ Use this checklist before publishing alpha builds or validating a real-world ren
 
 Before release, run `npm run scenario:dry-run` and `npm run scenario:loan-tax`, then run `docs/real-duplex-dry-run.md` and `docs/loan-tax-reconciliation-qa.md` manually with fictional data. The automated scenarios protect tax/accounting and loan/tax reconciliation invariants, while the manual dry runs still cover UI behavior, backup restore, and desktop file handling.
 
+## v1.11.10 PDF preview checks
+
+- Upload a multi-page fictional PDF, save it, restart, and verify visible page content in Documents review, View file, and a linked transaction panel.
+- Navigate between pages and zoom in/out; confirm page content changes. Check a narrow window and close/reopen behavior.
+- Upload an invalid PDF and confirm an error and retry control replace the blank frame. Password-protected files should explain that they need to be opened externally.
+- Confirm JPEG/PNG previews and opening original files externally still work.
+
 ## v1.11.5 mobile turnover checks
 
 - Enable Phone overview & turnover sync on an isolated paired profile. Confirm a phone checklist save reaches the matching lease without changing agreement, occupancy or financial records.

@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.10",
+    releaseDate: "2026-10-31",
+    title: "Reliable PDF previews",
+    summary: "Render PDF pages directly so saved documents and transaction attachments no longer depend on a blank embedded viewer.",
+    changes: [
+      "Use the bundled PDF renderer for document imports, saved document reviews, full previews and linked transaction panels.",
+      "Add page navigation and zoom controls, with loading status tied to a completed page render.",
+      "Show readable errors and retry controls for unreadable PDFs, and explain when a password-protected file needs to be opened externally.",
+      "Verify painted page content, multi-page navigation and zoom in the saved-document restart regression.",
+    ],
+  },
+  {
     version: "1.11.9",
     releaseDate: "2026-10-25",
     title: "Utility spending checks and rental dollar splits",
