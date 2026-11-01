@@ -1965,7 +1965,7 @@ test("packaged desktop gives each Loans mode one clear job", async () => {
       const { backup } = await window.desktopPersistence.loadAppData();
       return { id: backup.data.loanPayments.find((payment) => payment.paymentDate === "2026-10-01").id, count: backup.data.loanPayments.length };
     });
-    await page.getByRole("dialog").getByRole("button", { name: "Edit", exact: true }).first().click();
+    await page.getByRole("dialog").getByRole("row").filter({ has: page.getByRole("cell", { name: "Oct 1, 2026", exact: true }) }).getByRole("button", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByText("Edit loan payment", { exact: true })).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Payment date", exact: true })).toHaveValue("2026-10-01");

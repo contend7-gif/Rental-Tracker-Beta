@@ -9,6 +9,7 @@ on:
       - "v*"
     paths:
       - package.json
+      - e2e/**
       - .github/workflows/windows-installer.yml
 
 jobs:
