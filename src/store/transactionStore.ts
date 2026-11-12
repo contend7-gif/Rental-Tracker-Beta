@@ -10,9 +10,14 @@ export function normalizeTransaction(transaction: Transaction): Transaction {
   const rentPeriod = String(transaction.rentPeriod || "").trim();
   const rentLeaseId = String(transaction.rentLeaseId || "").trim();
   const rentLeaseExtensionId = String(transaction.rentLeaseExtensionId || "").trim();
+  const source = transaction.sourceConfirmation;
+  const sourceConfirmation = source && typeof source.text === "string" && source.text.trim() ? { text: source.text.slice(0, 20000), provider: String(source.provider || "").trim().slice(0, 120), reference: String(source.reference || "").trim().slice(0, 120), status: ["unknown", "initiated", "completed", "failed"].includes(source.status) ? source.status : "unknown" as const } : undefined;
   return {
     ...transaction,
     reconciled: transaction.reconciled === true,
+    fromAccount: String(transaction.fromAccount || "").trim().slice(0, 120) || undefined,
+    toAccount: String(transaction.toAccount || "").trim().slice(0, 120) || undefined,
+    sourceConfirmation,
     servicePeriodStart: String(transaction.servicePeriodStart || "").trim() || undefined,
     servicePeriodEnd: String(transaction.servicePeriodEnd || "").trim() || undefined,
     rentPeriod: /^\d{4}-\d{2}$/.test(rentPeriod) ? rentPeriod : undefined,
@@ -182,6 +187,7 @@ export function createTransactionActions({
         ...transaction,
         id: `t${Date.now()}`,
         description: `${transaction.description} (copy)`,
+        sourceConfirmation: undefined,
         taxChecked: false,
         reconciled: false,
         recurringTemplateId: undefined,

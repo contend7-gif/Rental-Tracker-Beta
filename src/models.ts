@@ -139,6 +139,9 @@ export type Transaction = {
   rentalUsePct: number;
   deductibleAmount: number;
   paidFrom: string;
+  fromAccount?: string;
+  toAccount?: string;
+  sourceConfirmation?: { text: string; provider: string; reference: string; status: "unknown" | "initiated" | "completed" | "failed" };
   paymentMethod: string;
   reimbursable: boolean;
   reimbursed: boolean;

@@ -6,6 +6,8 @@ This app is not a tax filing product. Keep your own backups and confirm tax fili
 
 The v1.11.10 PDF preview fix renders pages directly, with page navigation, zoom, and visible error/retry states across imports, saved documents, and linked transaction attachments.
 
+Version 1.11.11 adds reviewed payment-confirmation drafts with retained evidence and duplicate checks, exact account-route suggestions, clearer partial-rent balances, separate source-account and owner-draw reviews, and save receipts with undo for eligible new cash movements.
+
 ## Main Workflows
 
 The v1.9.9 refresh brings a compact Home overview checked without scrolling at 1920×1200, integrated scope controls, focused record details, and balanced colors with defined card headers. Loans, Tax Center, Planning, and Depreciation share compact controls. Saved PDF previews show loading feedback, loan payment edits preserve the existing payment, and Planning health uses the selected horizon for its monthly warning.

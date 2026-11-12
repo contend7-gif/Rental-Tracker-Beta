@@ -18,6 +18,9 @@ import {
 } from "../../domain/leaseTerms.js";
 import { CircleDollarSign, Droplets, Home, Landmark, MoreHorizontal, Wrench } from "lucide-react";
 
+import { ConfirmationEntryPanel, PaymentEvidenceFields } from "./ConfirmationEntryPanel.jsx";
+import { confirmationSaveIssue, rentPaymentSummary } from "../../domain/confirmationEntry.js";
+
 function TransactionSection({ title, children, action, className = "" }) {
   return (
     <section className={`overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm ${className}`}>
@@ -97,6 +100,10 @@ function rentPeriodRange(period, fallbackDate) {
 export function QuickAddWorkspace({
   actions,
   appSettings,
+  setSetting,
+  requirePermission,
+  openTransaction,
+  todayIso,
   applyVendorMemoryToForm,
   autoOwnerUsePct,
   categories,
@@ -294,7 +301,9 @@ export function QuickAddWorkspace({
     /(roof|hvac|furnace|water heater|remodel|renovat|replace|upgrade|floor|window|siding|deck|appliance)/i.test(`${form.category || ""} ${form.description || ""}`);
   const rentUnitMissing = isRentPayment && (!form.unit || form.unit === "Shared");
   const rentLeaseMissing = isRentPayment && rentLeaseOptions.length > 1 && !selectedExplicitRentLease;
-  const saveDisabled = properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing || rentLeaseMissing || Boolean(rentalAmountError);
+  const confirmationIssue = confirmationSaveIssue(form, transactions, editingTxnId, todayIso);
+  const rentSummary = rentPaymentSummary({ transactions, propertyId: form.propertyId, unit: form.unit, leaseId: rentLeaseForPayment?.id, allowUnlinked: rentLeaseOptions.length === 1, rentPeriod: rentPeriod?.key, editingId: editingTxnId, amount: form.amount, expected: expectedRentAmount, todayIso });
+  const saveDisabled = Boolean(confirmationIssue) || properties.length === 0 || !form.date || !form.propertyId || !amountEntered || rentUnitMissing || rentLeaseMissing || Boolean(rentalAmountError);
   const receiptRecommended = form.type === "Expense" && !showMileageControls && amountEntered && rentAmount >= 75 && !pendingTxnAttachment && !pendingDocumentExpenseSource?.documentId;
   const taxTreatmentExplanation = (() => {
     if (form.type !== "Expense") return "Income is tracked for reporting; deductible expense preview does not apply.";
@@ -417,6 +426,7 @@ export function QuickAddWorkspace({
   return (
     <div onChangeCapture={guard.markEdited} className="space-y-3">
       {guard.prompt}
+      <ConfirmationEntryPanel form={form} setForm={setForm} editingTxnId={editingTxnId} setRentAmountTouched={setRentAmountTouched} leases={leases} transactions={transactions} openTransaction={openTransaction} markEdited={guard.markEdited} />
       {saving && <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm">Saving transaction…</p>}
       {saveError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm"><p>{saveError}</p><Button size="sm" variant="secondary" disabled={saving} onClick={() => submit(lastSaveMode.current)}>Retry save</Button></div>}
       <DraftRecoveryControls draftKey={draftKey} draft={form} onRestore={(saved) => { guard.markEdited(); setForm({ ...form, ...saved }); setRentAmountTouched(true); }} />
@@ -602,9 +612,14 @@ export function QuickAddWorkspace({
                 {field("Description / memo", <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />, getSuggestedFieldOptions("description", "Description"))}
               </div>
             </div>
+            <PaymentEvidenceFields form={form} setForm={setForm} editingTxnId={editingTxnId} transactions={transactions} appSettings={appSettings} setSetting={setSetting} requirePermission={requirePermission} openTransaction={openTransaction} markEdited={guard.markEdited} currency={currency} />
+            {confirmationIssue && <p role="status" className="mt-2 text-xs text-amber-800">{confirmationIssue}</p>}
             {isRentPayment && rentLeaseForPayment ? (
               <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
-                <div className="font-semibold">{leaseTermSummaryLabel(rentLeaseForPayment)}</div>
+                <div className="font-semibold">{rentLeaseForPayment.tenantName} | Rent month {rentPeriod?.key || "Choose month"} | Received {form.date || "Choose date"}</div>
+                {!isFullTermBillingLease(rentLeaseForPayment) && <div className="mt-2 grid gap-2 sm:grid-cols-4"><div>Expected charge<br /><strong>{expectedRentAmount == null ? "Unknown" : currency(expectedRentAmount)}</strong></div><div>Recorded for month<br /><strong>{currency(rentSummary.recorded)}</strong></div><div>This payment<br /><strong>{currency(Number(form.amount || 0))}</strong></div><div>Estimated rent remainder<br /><strong>{rentSummary.remaining == null ? "Review lease allocations" : currency(rentSummary.remaining)}</strong>{rentSummary.credit > 0 ? ` | Excess: ${currency(rentSummary.credit)}` : ""}</div></div>}
+                {rentSummary.ambiguous && <p className="mt-1">An unlinked rent payment needs tenant allocation before the remaining amount can be estimated.</p>}
+                <div className="mt-2">{leaseTermSummaryLabel(rentLeaseForPayment)}</div>
                 <div className="mt-1">{leaseBillingCadenceLabel(rentLeaseForPayment)} | {leaseRentSummaryLabel(rentLeaseForPayment, currency)}</div>
                 <div className="mt-1">
                   {isFullTermBillingLease(rentLeaseForPayment)

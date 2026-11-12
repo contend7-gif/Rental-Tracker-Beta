@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { sanitizeCashMovementRules } from "../domain/confirmationEntry.js";
+import { sanitizeBookkeepingReviews } from "../domain/bookkeepingCoverage.js";
 
 export const APP_SETTINGS_STORAGE_KEY = "rental-tracker:settings:v1";
 export const AUTO_RECURRING_HELPER_TEXT = "Automatically create recurring transactions when dates or filters change.";
@@ -142,6 +144,9 @@ export type AppSettings = {
   operationsFollowUps: Record<string, OperationsFollowUpRecord>;
   monthlyCloseRecords: Record<string, MonthlyCloseRecord>;
   bankReconciliationRecords: Record<string, BankReconciliationRecord>;
+  cashMovementRules: Array<{ id: string; fromAccount: string; toAccount: string; propertyId: string; unit: string; type: "Owner Draw" | "Owner Contribution" | "Transfer"; reverseType?: "Owner Draw" | "Owner Contribution" | "Transfer" }>;
+  accountActivityReviews: Record<string, { throughDate: string; reviewedAt: string; signature: string }>;
+  ownerDrawMonthlyReviews: Record<string, { throughDate: string; reviewedAt: string; signature: string }>;
   backupIntervalDays: number;
   backupRetentionCount: number;
   realDataModeEnabled: boolean;
@@ -202,6 +207,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   operationsFollowUps: {},
   monthlyCloseRecords: {},
   bankReconciliationRecords: {},
+  cashMovementRules: [],
+  accountActivityReviews: {},
+  ownerDrawMonthlyReviews: {},
   backupIntervalDays: 3,
   backupRetentionCount: 12,
   realDataModeEnabled: false,
@@ -419,6 +427,9 @@ export function sanitizeAppSettings(raw: unknown): AppSettings {
     operationsFollowUps: sanitizeOperationsFollowUps(raw.operationsFollowUps),
     monthlyCloseRecords: sanitizeMonthlyCloseRecords(raw.monthlyCloseRecords),
     bankReconciliationRecords: sanitizeBankReconciliationRecords(raw.bankReconciliationRecords),
+    cashMovementRules: sanitizeCashMovementRules(raw.cashMovementRules) as AppSettings["cashMovementRules"],
+    accountActivityReviews: sanitizeBookkeepingReviews(raw.accountActivityReviews),
+    ownerDrawMonthlyReviews: sanitizeBookkeepingReviews(raw.ownerDrawMonthlyReviews),
     backupIntervalDays: clampInt(raw.backupIntervalDays, 1, 30, DEFAULT_APP_SETTINGS.backupIntervalDays),
     backupRetentionCount: clampInt(raw.backupRetentionCount, 3, 30, DEFAULT_APP_SETTINGS.backupRetentionCount),
     realDataModeEnabled: raw.realDataModeEnabled === true,

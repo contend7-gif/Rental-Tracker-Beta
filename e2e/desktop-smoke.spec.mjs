@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { makeTextPdf } from "../scripts/fixtures/pdfFixture.mjs";
+import { exerciseConfirmationEntry } from "./confirmation-entry-workflow.mjs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2490,6 +2491,28 @@ test("PDF preview reports unreadable files and retry remains usable", async () =
   } finally {
     await run?.electronApp.close();
     if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), "rental-tracker-e2e-pdf-error-"))) throw Error("Unexpected test profile path");
+    fs.rmSync(profilePath, { recursive: true, force: true });
+  }
+});
+
+test("confirmation drafts preserve source evidence, routes, duplicate checks and bookkeeping review across restart", async () => {
+  const profilePath = fs.mkdtempSync(path.join(os.tmpdir(), "rental-tracker-e2e-confirmations-"));
+  let run = await launchDesktopApp(profilePath);
+  const readState = () => run.page.evaluate(async () => (await window.desktopPersistence.loadAppData()).backup);
+  try {
+    await exerciseConfirmationEntry(run.page, readState);
+    expect(run.rendererErrors).toEqual([]);
+    await run.electronApp.close();
+    run = await launchDesktopApp(profilePath);
+    const saved = await readState();
+    expect(saved.settings.cashMovementRules[0].reverseType).toBe("Owner Contribution");
+    expect(saved.data.transactions.find(tx => tx.sourceConfirmation?.reference === "DEMO-RENT-1234").sourceConfirmation.text).toContain("$123.45");
+    expect(Object.keys(saved.settings.accountActivityReviews)).toHaveLength(1);
+    expect(Object.keys(saved.settings.ownerDrawMonthlyReviews)).toHaveLength(1);
+    expect(run.rendererErrors).toEqual([]);
+  } finally {
+    await run?.electronApp.close();
+    if (!path.resolve(profilePath).startsWith(path.resolve(os.tmpdir(), "rental-tracker-e2e-confirmations-"))) throw Error("Unexpected test profile path");
     fs.rmSync(profilePath, { recursive: true, force: true });
   }
 });

@@ -53,6 +53,7 @@ import {
   prefetchDialog,
 } from "./lazyRegistry.js";
 import { WorkspaceScroll } from "./WorkspaceMemory.jsx";
+import { TransactionSaveReceipt } from "../features/transactions/TransactionSaveReceipt.jsx";
 import { WorkspaceLoadingState } from "./WorkspaceLoadingState.jsx";
 
 const MemoizedDocumentsWorkspace = React.memo(DocumentsWorkspace);
@@ -398,6 +399,8 @@ function buildLedgerWorkspaceContract(props, { bankImportMatchRuleOptions }) {
       "expectedRecurringTransactions",
       "documents",
       "ledgerCategories",
+      "appSettings",
+      "setSetting",
       "ledgerTransactions",
       "transactions",
       "mileageEntries",
@@ -689,6 +692,7 @@ export function AppWorkspaces(props) {
   return (
     <Suspense fallback={<WorkspaceLoadingState />}>
       <WorkspaceScroll key={view} view={view}>
+      <TransactionSaveReceipt receipt={props.transactionSaveReceipt} onDismiss={props.dismissTransactionSaveReceipt} transactions={props.transactions} openTransaction={props.openTransaction} actions={props.actions} requirePermission={props.requirePermission} currency={currency} propertyNameById={props.propertyNameById} setNotice={props.setNotice} view={view} />
       {view === "dashboard" && (
         <DashboardWorkspace
           {...commonProps}

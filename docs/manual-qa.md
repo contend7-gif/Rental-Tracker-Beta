@@ -168,3 +168,12 @@ This app is local-first and intended to organize rental records. Keep your own b
 - At 1920 × 1200 and in a narrow window, long filenames should wrap and View file / Review document controls should remain visible without horizontal scrolling.
 - Empty lease and transaction file sections should explain how to attach documents and how linked payment receipts appear.
 - Turn on the system's reduced-motion preference; transitions and smooth scrolling should stop while focus and discard protections keep working.
+
+### Confirmation entry and bookkeeping coverage
+
+- Paste a completed fictional Venmo rent confirmation. Review the suggested draft; check payment date separately from rent month, partial amount and estimated remainder. Applying the draft must not post it. Save, reopen and verify source text/reference remain attached.
+- Paste pending/failed transfer evidence: Save stays disabled until completion is explicitly confirmed. Try an existing reference: posting stays blocked and Open existing entry opens that payment. Similar payments require a separate-payment acknowledgement that resets when the facts change.
+- Save an exact account route for a property/unit, optionally enabling the reverse route. Reload and apply its suggestion; other accounts/scopes must not match. Bank-import suggestions require the matching statement account and cash direction. Owner draws/contributions stay out of operating income/expense totals.
+- Save a new cash movement, inspect its receipt, then Undo new entry. Confirm the entry is voided with audit history; reconciled, linked, edited or rent entries must not offer this shortcut.
+- In Transactions expand Bookkeeping coverage. Mark source-account activity reviewed and separately check a month with zero owner draws. Reload to confirm both reviews persist without creating statement reconciliation. New/changed activity should reopen the relevant review; review dates cannot be in the future.
+- Check the confirmation form and coverage controls at 720px width for wrapping and keyboard usability.

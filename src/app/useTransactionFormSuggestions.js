@@ -74,9 +74,9 @@ export function useTransactionFormSuggestions({
   }, [categoriesForFormType, form.category, setForm]);
 
   useEffect(() => {
-    if (form.type !== "Income" || form.category !== "Rents received" || form.rentPeriod || !form.date) return;
+    if (form.type !== "Income" || form.category !== "Rents received" || form.rentPeriod || !form.date || form.sourceConfirmation?.text) return;
     setForm((prev) => ({ ...prev, rentPeriod: prev.rentPeriod || prev.date.slice(0, 7) }));
-  }, [form.category, form.date, form.rentPeriod, form.type, setForm]);
+  }, [form.category, form.date, form.rentPeriod, form.type, form.sourceConfirmation?.text, setForm]);
 
   const suggestedAmount = useMemo(() => {
     if (form.type !== "Income" || !form.date) return null;
@@ -95,12 +95,12 @@ export function useTransactionFormSuggestions({
   }, [form.type, form.category, form.propertyId, form.unit, form.date, form.rentLeaseId, form.rentPeriod, setRentAmountTouched]);
 
   useEffect(() => {
-    if (rentAmountTouched || suggestedAmount == null) return;
+    if (rentAmountTouched || suggestedAmount == null || form.sourceConfirmation?.text) return;
     const suggested = String(suggestedAmount);
     if (form.amount !== suggested) {
       setForm((prev) => ({ ...prev, amount: suggested }));
     }
-  }, [suggestedAmount, rentAmountTouched, form.amount, setForm]);
+  }, [suggestedAmount, rentAmountTouched, form.amount, form.sourceConfirmation?.text, setForm]);
 
   return {
     categoriesForFormType,

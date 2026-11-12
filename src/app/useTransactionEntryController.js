@@ -1,5 +1,7 @@
 import { resolveMileageRate } from "../domain/mileageRates.ts";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { confirmationSaveIssue } from "../domain/confirmationEntry.js";
+import { toLocalIsoDate } from "../lib/localDate.ts";
 import {
   clampPercentInput,
   formatPercentInput,
@@ -54,6 +56,7 @@ export function useTransactionEntryController({
   units,
   usePeriods,
 }) {
+  const [transactionSaveReceipt, setTransactionSaveReceipt] = useState(null);
   const autoOwnerUsePct = useMemo(() => {
     if (!form.propertyId) return 0;
     const hasServiceRange =
@@ -158,6 +161,8 @@ export function useTransactionEntryController({
 
   const saveTransaction = async (keepOpen = false) => {
     if (!requirePermission("create_edit_records", "This access profile cannot save transactions.")) return false;
+    const confirmationIssue = confirmationSaveIssue(form, transactions, editingTxnId, toLocalIsoDate());
+    if (confirmationIssue) { setNotice(confirmationIssue); return false; }
     const amount = transactionAmount;
     const ownerUsePct = effectiveOwnerUsePct;
     const ownerUsePctOverride = Boolean(form.ownerUsePctOverride);
@@ -237,7 +242,10 @@ export function useTransactionEntryController({
       ownerUsePctOverride,
       rentalUsePct: preview.rentalUsePct,
       deductibleAmount: preview.deductibleAmount,
-      paidFrom: form.paidFrom,
+      paidFrom: form.type === "Owner Contribution" && form.toAccount?.trim() ? form.toAccount.trim() : ["Owner Draw", "Transfer"].includes(form.type) && form.fromAccount?.trim() ? form.fromAccount.trim() : form.paidFrom,
+      fromAccount: String(form.fromAccount || "").trim() || undefined,
+      toAccount: String(form.toAccount || "").trim() || undefined,
+      sourceConfirmation: form.sourceConfirmation?.text?.trim() ? { text: form.sourceConfirmation.text.slice(0, 20000), provider: String(form.sourceConfirmation.provider || "").slice(0, 120), reference: String(form.sourceConfirmation.reference || "").trim().slice(0, 120), status: form.sourceConfirmation.status } : undefined,
       paymentMethod: form.paymentMethod,
       reimbursable: false,
       reimbursed: false,
@@ -349,6 +357,7 @@ export function useTransactionEntryController({
         mobileMileageMessage +
         (nextQueueName ? ` Next up: ${nextQueueName}.` : ""),
     );
+    setTransactionSaveReceipt({ transaction: txn, isNew: !editingTxnId });
     setEditingTxnId("");
     if (!keepOpen) setView(editReturnView);
     setForm(createBlankForm(form.propertyId, form.unit || "Shared"));
@@ -486,6 +495,8 @@ export function useTransactionEntryController({
     openTransactionAttachmentPicker,
     preview,
     saveTransaction,
+    transactionSaveReceipt,
+    dismissTransactionSaveReceipt: () => setTransactionSaveReceipt(null),
     showDeMinimisControls,
     vendorMemorySuggestion,
   };

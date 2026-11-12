@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.11",
+    releaseDate: "2026-11-11",
+    title: "Reviewed payment entry and bookkeeping coverage",
+    summary: "Review pasted payment confirmations, remember account routes and see which bookkeeping checks still need attention.",
+    changes: [
+      "Paste a payment confirmation into a reviewed draft, retain its source text and reference, and prevent pending payments or repeated references from posting.",
+      "Save exact account routes for owner draws, contributions and transfers, with optional reverse suggestions and explicit review before posting.",
+      "Keep the payment date separate from the rent reporting month and show the expected charge, recorded payments and estimated rent remainder.",
+      "Track source-account activity reviews separately from closed statement reconciliation, including explicit monthly owner-draw checks when no draws are recorded.",
+      "Show a clear save receipt, open the saved transaction, and undo eligible new cash movements through the existing audited void action.",
+    ],
+  },
+  {
     version: "1.11.10",
     releaseDate: "2026-10-31",
     title: "Reliable PDF previews",

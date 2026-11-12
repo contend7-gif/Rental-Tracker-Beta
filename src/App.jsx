@@ -1165,6 +1165,8 @@ function AppContent() {
     openTransactionAttachmentPicker,
     preview,
     saveTransaction,
+    transactionSaveReceipt,
+    dismissTransactionSaveReceipt,
     showDeMinimisControls,
     vendorMemorySuggestion,
   } = useTransactionEntryController({
@@ -1916,6 +1918,8 @@ function AppContent() {
   });
 
   const appWorkspaceProps = {
+    transactionSaveReceipt,
+    dismissTransactionSaveReceipt,
     companionSnapshotSync,
     acceptVisibleSafeSuggestions,
     actions,

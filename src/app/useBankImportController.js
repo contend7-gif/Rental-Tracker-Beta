@@ -7,6 +7,7 @@ import {
   suggestBankTransactionTypeAndCategory,
 } from "../domain/bankImport.ts";
 import { BANK_IMPORT_MATCH_RULE_OPTIONS } from "./bankImportShared.js";
+import { cashMovementBankSuggestion } from "../domain/confirmationEntry.js";
 import { buildTransactionVendorMemory, findTransactionVendorMemoryForDescription } from "../features/transactions/transactionVendorMemory.js";
 import { buildBankReconciliationSummary, createBankReconciliationRecord, inferBankStatementPeriod } from "../domain/bankReconciliation.ts";
 
@@ -211,6 +212,7 @@ export function useBankImportController({
       paymentMethod: memory?.paymentMethod || bankImportDefaults.paymentMethod,
       vendor: memory?.vendor || "",
       vendorMemoryKey: memory?.key || "",
+      ...(cashMovementBankSuggestion(row, bankImportDefaults, appSettings.cashMovementRules || []) || {}),
     };
   };
 
@@ -437,6 +439,8 @@ export function useBankImportController({
         rentalUsePct: preview.rentalUsePct,
         deductibleAmount: preview.deductibleAmount,
         paidFrom: draftPaidFrom,
+        fromAccount: draft.fromAccount || undefined,
+        toAccount: draft.toAccount || undefined,
         paymentMethod: draftPaymentMethod,
         reimbursable: false,
         reimbursed: false,

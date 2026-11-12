@@ -114,6 +114,7 @@ export function BankImportReviewDialog({
                       <Input className="mt-1" value={draft.description} onChange={(event) => updateBankImportReviewDraft(row.id, { description: event.target.value })} />
                     </div>
                   </div>
+                  {draft.cashMovementRuleLabel && <p className="mt-2 text-xs text-indigo-800">Saved account route: {draft.cashMovementRuleLabel}. Review the type, account scope and amount before importing.</p>}
                   {rowVendorMemory ? (
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded border border-blue-100 bg-blue-50 px-2 py-1 text-xs text-blue-800">
                       <span>
@@ -293,6 +294,8 @@ export function TransactionDetailsDialog({
               <dl className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 text-sm">
                 {[["Vendor / payee", selectedTxn.vendor || selectedTxn.paidFrom || "Not recorded"], ["Service period", selectedTxn.servicePeriodStart && selectedTxn.servicePeriodEnd ? `${selectedTxn.servicePeriodStart} to ${selectedTxn.servicePeriodEnd}` : "Not recorded"], ["Rent reporting month", formatRentReportingMonth(selectedTxn)], ["Notes", selectedTxn.notes]].filter(([, value]) => value).map(([label, value]) => <div key={label} className="min-w-0"><dt className="text-xs text-slate-500">{label}</dt><dd className="mt-1 break-words text-slate-800">{value}</dd></div>)}
               </dl>
+            {(selectedTxn.fromAccount || selectedTxn.toAccount) && <p className="mt-3 text-xs text-slate-600">Account route: {selectedTxn.fromAccount || "Unknown source"} to {selectedTxn.toAccount || "Unknown destination"}</p>}
+            {selectedTxn.sourceConfirmation?.text && <details className="mt-3 rounded border border-slate-200 p-3 text-xs"><summary className="cursor-pointer font-semibold">Source confirmation | {selectedTxn.sourceConfirmation.status} | {selectedTxn.sourceConfirmation.provider || "Provider not identified"}</summary><p className="mt-2">Reference: {selectedTxn.sourceConfirmation.reference || "Not recorded"}. Bank matching is separate.</p><pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words font-sans">{selectedTxn.sourceConfirmation.text}</pre></details>}
             {relatedLeases.length > 0 ? <section aria-label="Linked lease payments" className="rt-linked-lease mt-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3">
               <div className="text-sm font-semibold text-slate-900">Lease payment records</div>
               <p className="mt-1 text-xs text-slate-600">Linked through recorded tenant ledger entries.</p>

@@ -13,7 +13,8 @@ export function buildGlobalSearchIndex(collections: Record<string, SearchSource[
       const title = String(record.tenantName || record.name || record.title || record.description || record.id);
       const detail = [propertyNames[String(record.propertyId || "")], record.unit, record.date || record.startDate, record.vendor, record.amount].filter((item) => item !== undefined && item !== "").join(" · ");
       // Index only searchable record fields; never include document bytes or settings/secrets.
-      const fields = [title, detail, record.description, record.address, record.id, record.invoiceRef, record.tags, record.extractedText];
+      const confirmation = record.sourceConfirmation && typeof record.sourceConfirmation === "object" ? record.sourceConfirmation as Record<string, unknown> : {};
+      const fields = [record.fromAccount, record.toAccount, confirmation.provider, confirmation.reference, title, detail, record.description, record.address, record.id, record.invoiceRef, record.tags, record.extractedText];
       results.push({ key: `${kind}:${record.id}`, kind, id: record.id, title, detail, searchText: normalize(fields.join(" ")) });
     }
   }

@@ -31,6 +31,8 @@ import { workspaceFocusDomId } from "../../app/workspaceFocus.ts";
 import { MileageLogWorkspace } from "./MileageLogWorkspace.jsx";
 import { RecordPager, useRecordPage } from "../shared/RecordPager.jsx";
 
+import { BookkeepingCoveragePanel } from "./BookkeepingCoveragePanel.jsx";
+
 const LEDGER_PANEL_CLASS = "rounded-xl border border-slate-200 bg-white shadow-none";
 const LEDGER_MUTED_PANEL_CLASS = "rounded-lg border border-slate-200 bg-slate-50/80";
 const TRANSACTION_MODE_ICONS = {
@@ -43,6 +45,8 @@ const TRANSACTION_MODE_ICONS = {
 
 export function LedgerWorkspace({
   actions,
+  appSettings,
+  setSetting,
   activeProperties,
   BANK_IMPORT_MATCH_RULE_OPTIONS,
   WORKSPACE_MUTED_PANEL_CLASS,
@@ -320,6 +324,7 @@ export function LedgerWorkspace({
   return (
     <Card className="overflow-hidden shadow-none">
       <CardContent className="rt-transactions-workspace space-y-3 !p-4">
+        <BookkeepingCoveragePanel transactions={transactions} appSettings={appSettings} setSetting={setSetting} requirePermission={requirePermission} propertyFilter={propertyFilter} propertyNameById={propertyNameById} todayIso={todayIso} yearFilter={yearFilter} currency={currency} />
         <div role="tablist" aria-label="Transaction workspace modes" className="flex flex-wrap gap-1 border-b border-slate-200 pb-3">
           {workspaceModes.map((mode) => {
             const ModeIcon = TRANSACTION_MODE_ICONS[mode.key];
