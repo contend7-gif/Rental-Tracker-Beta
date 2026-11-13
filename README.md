@@ -10,6 +10,8 @@ Version 1.11.11 adds reviewed payment-confirmation drafts with retained evidence
 
 ## Main Workflows
 
+Version 1.11.12 adds a year-end Tax Center checklist separating current cleanup from annual-document reviews, distinguishes payment matching from receipt support, and keeps readiness independent of Transactions searches.
+
 The v1.9.9 refresh brings a compact Home overview checked without scrolling at 1920×1200, integrated scope controls, focused record details, and balanced colors with defined card headers. Loans, Tax Center, Planning, and Depreciation share compact controls. Saved PDF previews show loading feedback, loan payment edits preserve the existing payment, and Planning health uses the selected horizon for its monthly warning.
 
 - `Search` / `Ctrl+K`: find transactions, documents, leases, maintenance, properties, screens, and create actions across all properties and years. Use arrow keys and Enter to open a result, or Escape to close.

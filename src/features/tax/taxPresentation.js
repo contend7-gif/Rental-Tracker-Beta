@@ -88,7 +88,7 @@ export function readinessCounts({ taxPacketSummary = {}, taxReadinessSummary = {
     Number(taxPacketSummary.documentChecklist?.rentIncomeSupportWarnings?.length || 0);
   const packageStatus = blockingIssues > 0
     ? "Needs review"
-    : supportWarnings > 0
+    : sourceWarnings > 0 || supportWarnings > 0 || taxReportingSummary.status === "preliminary"
       ? "Preliminary"
       : "Ready";
   return { blockingIssues, sourceWarnings, supportWarnings, packageStatus };

@@ -8,6 +8,19 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.12",
+    releaseDate: "2026-11-12",
+    title: "Year-end tax checklist and reliable readiness",
+    summary: "Separate current bookkeeping cleanup from annual documents still to come, with clearer payment and receipt checks.",
+    changes: [
+      "Add Resolve now and Awaiting annual documents groups to the Tax Center, with links to the relevant review workspace.",
+      "Track bank matching separately from receipt support and tax sign-off; mileage uses trip records instead of cash-payment matching.",
+      "Keep missing payments and escrow cleanup actionable while annual loan reviews wait for year-end; move waiting reviews into current work after year-end or receipt of annual documents.",
+      "Calculate tax readiness from the selected year, property and unit, independently of the last Transactions search.",
+      "Keep package and print readiness preliminary while source warnings or preliminary calculations remain unresolved.",
+    ],
+  },
+  {
     version: "1.11.11",
     releaseDate: "2026-11-11",
     title: "Reviewed payment entry and bookkeeping coverage",

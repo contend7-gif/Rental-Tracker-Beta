@@ -15,6 +15,7 @@ import {
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { readinessCounts, supportBuckets as buildSupportBuckets } from "../taxPresentation.js";
+import { YearEndChecklistPanel } from "./YearEndChecklistPanel.jsx";
 
 const SUMMARY_TILE_CLASS = "rt-summary-stat rounded-lg border border-slate-200 bg-white px-3 py-3";
 const SECTION_CLASS = "rounded-xl border border-slate-200 bg-white";
@@ -169,6 +170,9 @@ export function TaxCenterOverviewTab({
   taxReadinessSummary,
   taxReportingSummary,
   taxSnapshot,
+  loanReviewInbox,
+  yearFilter,
+  todayIso,
 }) {
   const totals = taxReportingSummary?.totals || {};
   const details = taxReportingSummary?.details || {};
@@ -254,6 +258,8 @@ export function TaxCenterOverviewTab({
             </div>
           </div>
         </div>
+
+        <YearEndChecklistPanel taxReportingSummary={taxReportingSummary} taxReadinessSummary={taxReadinessSummary} loanReviewInbox={loanReviewInbox} yearFilter={yearFilter} todayIso={todayIso} onAction={runAction} />
 
         <div className={`${SECTION_CLASS} p-4`}>
           <div className="text-base font-semibold text-slate-900">Schedule E summary (computed)</div>

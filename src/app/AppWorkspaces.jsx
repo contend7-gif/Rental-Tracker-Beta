@@ -491,6 +491,8 @@ function buildTaxWorkspaceContract(props, { taxWorkspaceUiProps }) {
     ]),
     data: pickProps(props, [
       "defaultEscrowLoanOptions",
+      "loanReviewInbox",
+      "todayIso",
       "escrowDisbursementRows",
       "effectiveLoanPaymentDeductibleInterest",
       "effectiveLoanPaymentRentalUsePct",

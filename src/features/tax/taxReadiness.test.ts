@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTaxReadinessSummary } from "./taxReadiness.js";
+import { buildTaxReadinessSummary, buildTaxTransactionReviewInbox } from "./taxReadiness.js";
+
+test("tax review includes all scoped transactions regardless of ledger search", () => {
+  const expense = { date: "2026-09-01", propertyId: "p1", unit: "616", type: "Expense", category: "Supplies", amount: 10, taxChecked: false, receiptName: "receipt.pdf" };
+  const transactions = [
+    { ...expense, id: "cleaning", description: "Cleaning supplies" },
+    { ...expense, id: "hardware", description: "Hardware" },
+    { ...expense, id: "other-year", date: "2025-09-01" },
+    { ...expense, id: "other-property", propertyId: "p2" },
+    { ...expense, id: "other-unit", unit: "614" },
+    { ...expense, id: "checked", taxChecked: true },
+  ];
+  const inbox = buildTaxTransactionReviewInbox({ transactions, yearFilter: "2026", propertyFilter: "p1", unitFilter: "616" });
+  assert.deepEqual(inbox.map((row) => row.transaction.id).sort(), ["cleaning", "hardware"]);
+  assert.equal(buildTaxReadinessSummary({ transactionReviewInbox: inbox }).sections[0].reviewCount, 2);
+});
 
 test("all sections empty or ready returns overall ready", () => {
   const summary = buildTaxReadinessSummary();

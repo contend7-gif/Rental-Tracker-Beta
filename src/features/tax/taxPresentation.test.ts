@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildTaxWorkspaceModes } from "./taxPresentation.js";
+import { buildTaxWorkspaceModes, readinessCounts } from "./taxPresentation.js";
 
 describe("tax workspace presentation", () => {
+  it("keeps a packet preliminary while source review is outstanding", () => {
+    assert.equal(readinessCounts({ taxReadinessSummary: { reviewCount: 1 } }).packageStatus, "Preliminary");
+    assert.equal(readinessCounts({ taxReportingSummary: { status: "preliminary" } }).packageStatus, "Preliminary");
+    assert.equal(readinessCounts({ taxPacketSummary: { documentChecklist: { missingSupportCount: 1 } } }).packageStatus, "Preliminary");
+    assert.equal(readinessCounts({}).packageStatus, "Ready");
+    assert.equal(readinessCounts({ taxPacketSummary: { openItems: [{}] }, taxReadinessSummary: { reviewCount: 1 } }).packageStatus, "Needs review");
+  });
   it("groups tax work into four landlord-facing jobs", () => {
     const modes = buildTaxWorkspaceModes({ packageStatus: "Preliminary", reviewCount: 5, sourceRowCount: 18 });
 

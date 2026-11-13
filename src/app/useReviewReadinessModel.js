@@ -3,7 +3,7 @@ import { buildAssetReviewInbox } from "../features/assets/assetReview.js";
 import { buildLoanReviewInbox, summarizeLoanReadiness } from "../features/loans/loanReview.js";
 import { buildOccupancyReviewInbox, summarizeOccupancyReadiness } from "../features/properties/occupancyReview.js";
 import { buildSetupChecklist, shouldShowFullSetupChecklist } from "../features/setup/setupChecklist.js";
-import { buildTaxReadinessSummary } from "../features/tax/taxReadiness.js";
+import { buildTaxReadinessSummary, buildTaxTransactionReviewInbox } from "../features/tax/taxReadiness.js";
 import { buildTenantLedgerReviewInbox, summarizeTenantLedgerReadiness } from "../features/leases/tenantLedgerReview.js";
 
 export function useReviewReadinessModel({
@@ -24,7 +24,7 @@ export function useReviewReadinessModel({
   propertyFilter,
   tenantLedgerEntries,
   todayIso,
-  transactionReviewInbox,
+  unitFilter,
   units,
   usePeriods,
   workOrders,
@@ -120,9 +120,15 @@ export function useReviewReadinessModel({
     [activeTx, assetListForView, documents, properties, units, leases, usePeriods, yearFilter, propertyFilter, isTaxReviewRelevantTransaction],
   );
 
+  // Tax readiness follows the workspace scope, never the ledger's text search.
+  const taxTransactionReviewInbox = useMemo(
+    () => buildTaxTransactionReviewInbox({ transactions: activeTx, yearFilter, propertyFilter, unitFilter, documents, assets, isTaxReviewRelevantTransaction }),
+    [activeTx, yearFilter, propertyFilter, unitFilter, documents, assets, isTaxReviewRelevantTransaction],
+  );
+
   const taxReadinessSummary = useMemo(
     () => buildTaxReadinessSummary({
-      transactionReviewInbox,
+      transactionReviewInbox: taxTransactionReviewInbox,
       assetReviewInbox,
       maintenanceReviewInbox,
       occupancyReviewInbox,
@@ -132,7 +138,7 @@ export function useReviewReadinessModel({
       yearFilter,
       propertyFilter,
     }),
-    [transactionReviewInbox, assetReviewInbox, maintenanceReviewInbox, occupancyReviewInbox, tenantLedgerReviewInbox, loanReviewInbox, filteredDocuments, yearFilter, propertyFilter],
+    [taxTransactionReviewInbox, assetReviewInbox, maintenanceReviewInbox, occupancyReviewInbox, tenantLedgerReviewInbox, loanReviewInbox, filteredDocuments, yearFilter, propertyFilter],
   );
 
   const setupChecklist = useMemo(

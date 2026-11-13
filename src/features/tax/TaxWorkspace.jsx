@@ -337,6 +337,8 @@ export function TaxWorkspace({
   getScheduleAmountTone,
   linkEscrowDisbursementToTransaction,
   loanPayments = [],
+  loanReviewInbox,
+  todayIso,
   navigateWithDashboardContext,
   openTransaction,
   ownerCommunicationCollapsed,
@@ -418,7 +420,7 @@ export function TaxWorkspace({
   const taxReadinessCounts = readinessCounts({ taxPacketSummary, taxReadinessSummary, taxReportingSummary });
   const taxPacketSupportBuckets = supportBuckets(taxPacketSummary?.documentChecklist || {}).filter((bucket) => bucket.rows.length > 0);
   const taxPacketNeedsNotes = (taxReportingSummary?.computedFiledRows || []).filter((row) => row.status === "needs_note");
-  const taxPacketNeedsCleanup = taxPacketOpenItems.length > 0 || taxPacketNeedsNotes.length > 0;
+  const taxPacketNeedsCleanup = taxPacketOpenItems.length > 0 || taxPacketNeedsNotes.length > 0 || taxReadinessCounts.sourceWarnings > 0;
   const taxSourceRowCount = Object.values(taxReportingSummary?.details || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
   const taxPacketContents = [
     { label: "Schedule E lines", value: taxLineDefs.length, helper: `${taxSourceRowCount} source row${taxSourceRowCount === 1 ? "" : "s"}` },
@@ -431,12 +433,12 @@ export function TaxWorkspace({
     ? "Needs cleanup first"
     : taxReadinessCounts.supportWarnings > 0
       ? "Missing support"
-      : "Ready to print";
+      : taxReadinessCounts.packageStatus === "Preliminary" ? "Preliminary" : "Ready to print";
   const taxPacketStatusClass = taxPacketNeedsCleanup
     ? "border-amber-200 bg-amber-50 text-amber-900"
     : taxReadinessCounts.supportWarnings > 0
       ? "border-blue-200 bg-blue-50 text-blue-900"
-      : "border-emerald-200 bg-emerald-50 text-emerald-900";
+      : taxReadinessCounts.packageStatus === "Preliminary" ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900";
   const loanEscrowWarnings = (taxReportingSummary?.doubleCountingWarnings || []).filter((warning) =>
     warning.key === "escrow_tax_possible_duplicate" ||
     warning.key === "escrow_insurance_possible_duplicate" ||
@@ -560,6 +562,9 @@ export function TaxWorkspace({
             taxReadinessSummary={taxReadinessSummary}
             taxReportingSummary={taxReportingSummary}
             taxSnapshot={taxSnapshot}
+              loanReviewInbox={loanReviewInbox}
+              yearFilter={yearFilter}
+              todayIso={todayIso}
           />
         ) : null}
 
@@ -1247,7 +1252,9 @@ export function TaxWorkspace({
                         ? "Resolve Work Queue items or add notes for filed amount differences before relying on this packet."
                         : taxReadinessCounts.supportWarnings > 0
                           ? "Totals can be reviewed, but some source rows still need support review."
-                          : "Source records and support look ready for the selected scope."}
+                            : taxReadinessCounts.packageStatus === "Preliminary"
+                              ? "The computed report is preliminary. Complete the remaining review before relying on this packet."
+                              : "Source records and support look ready for the selected scope."}
                     </div>
                   </div>
                   {taxPacketNeedsCleanup ? <Button size="sm" variant="secondary" onClick={() => navigateWithDashboardContext("review")}>Open Work Queue</Button> : null}

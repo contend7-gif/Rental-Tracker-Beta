@@ -1799,7 +1799,7 @@ function AppContent() {
     propertyFilter,
     tenantLedgerEntries,
     todayIso,
-    transactionReviewInbox,
+    unitFilter,
     units,
     usePeriods,
     workOrders,

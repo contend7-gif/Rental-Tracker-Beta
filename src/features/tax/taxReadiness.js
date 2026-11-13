@@ -1,3 +1,13 @@
+import { buildTransactionReviewInbox } from "../transactions/transactionReview.js";
+
+export function buildTaxTransactionReviewInbox({ transactions = [], yearFilter, propertyFilter = "all", unitFilter = "all", ...context } = {}) {
+  return buildTransactionReviewInbox(transactions.filter((transaction) =>
+    String(transaction.date || "").startsWith(String(yearFilter)) &&
+    (propertyFilter === "all" || transaction.propertyId === propertyFilter) &&
+    (unitFilter === "all" || transaction.unit === unitFilter)
+  ), context);
+}
+
 const SECTION_DEFS = [
   { key: "transactions", label: "Transactions", primaryActionLabel: "Open Transactions", targetView: "ledger" },
   { key: "documents", label: "Documents", primaryActionLabel: "Review Documents", targetView: "documents" },
