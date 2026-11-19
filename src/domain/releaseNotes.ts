@@ -8,6 +8,18 @@ export type ReleaseNotesEntry = {
 
 export const RELEASE_NOTES: ReleaseNotesEntry[] = [
   {
+    version: "1.11.13",
+    releaseDate: "2026-11-18",
+    title: "Safer transaction edits and payment evidence",
+    summary: "Keep depreciation, lease-extension payments, and receipt support accurate when entering or editing transactions.",
+    changes: [
+      "Create one linked asset when capitalizing an expense and keep later edits from duplicating its depreciation basis.",
+      "Keep payment confirmations that explicitly say the transfer has not posted in draft status until completion is confirmed.",
+      "Preserve lease-extension and tenant-ledger links during transaction edits and find older linked receipts when correcting extension payments.",
+      "Keep a transaction draft open when a receipt cannot be read, with options to replace or remove the file before saving.",
+    ],
+  },
+  {
     version: "1.11.12",
     releaseDate: "2026-11-12",
     title: "Year-end tax checklist and reliable readiness",

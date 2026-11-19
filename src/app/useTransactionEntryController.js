@@ -15,7 +15,6 @@ import {
 export function useTransactionEntryController({
   actions,
   appSettings,
-  attachDocumentToTransaction,
   canAttachToTransaction,
   categories,
   createBlankForm,
@@ -33,6 +32,7 @@ export function useTransactionEntryController({
   leases,
   pendingDocumentExpenseSource,
   pendingTxnAttachment,
+  prepareTransactionReceipt,
   prefetchDialog,
   properties,
   recurringThroughDate,
@@ -220,7 +220,14 @@ export function useTransactionEntryController({
     }
 
     const txId = editingTxnId || `t${Date.now()}`;
-    const receiptName = form.receiptName || (pendingTxnAttachment?.name || "");
+    const sourceDocument = pendingDocumentExpenseSource?.documentId
+      ? documents.find((document) => document.id === pendingDocumentExpenseSource.documentId)
+      : null;
+    if (pendingDocumentExpenseSource?.documentId && !sourceDocument) {
+      setNotice("The source document is no longer available. Reopen the transaction draft from Documents.");
+      return false;
+    }
+    const receiptName = form.receiptName || pendingTxnAttachment?.name || "";
     const txnTaxReviewRelevant = isTaxReviewRelevantTransaction({
       type: form.type,
       reimbursable: false,
@@ -289,12 +296,20 @@ export function useTransactionEntryController({
           }
         : undefined;
 
+    let receiptDocument;
+    if (pendingTxnAttachment) {
+      try {
+        receiptDocument = await prepareTransactionReceipt(txn, pendingTxnAttachment);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "The receipt file could not be read.";
+        setNotice(`${reason} Replace or remove the file, then save again.`);
+        return false;
+      }
+    }
+
     actions.addOrUpdateTransaction(txn, assetPayload);
 
-    if (pendingDocumentExpenseSource?.documentId) {
-      const sourceDocument = documents.find(
-        (document) => document.id === pendingDocumentExpenseSource.documentId,
-      );
+    if (sourceDocument) {
       if (pendingDocumentExpenseSource.linkMode === "related") {
         const relatedTransactionIds = [
           ...new Set([...(sourceDocument?.relatedTransactionIds || []), txn.id]),
@@ -315,11 +330,8 @@ export function useTransactionEntryController({
       }
     }
 
-    let attachmentMessage = pendingDocumentExpenseSource?.documentId ? " Receipt attached." : "";
-    if (pendingTxnAttachment) {
-      await attachDocumentToTransaction(txn, pendingTxnAttachment);
-      attachmentMessage = " Receipt attached.";
-    }
+    if (receiptDocument) actions.addDocument(receiptDocument);
+    const attachmentMessage = sourceDocument || receiptDocument ? " Receipt attached." : "";
 
     let recurringMessage = "";
     if (form.recurringMonthly === "Yes" && !txn.recurringTemplateId) {
@@ -377,7 +389,6 @@ export function useTransactionEntryController({
       return;
     }
     setPendingTxnAttachment(file);
-    setForm((prev) => ({ ...prev, receiptName: prev.receiptName || file.name }));
   };
 
   const openTransactionAttachmentPicker = () => {

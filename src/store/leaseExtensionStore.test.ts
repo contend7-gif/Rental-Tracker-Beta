@@ -5,6 +5,7 @@ import { buildMonthlyCloseReview } from "../domain/monthlyClose.ts";
 import { deriveRentCollectionSummary } from "../features/dashboard/dashboardDerived.js";
 import { getTaxDoubleCountingWarnings } from "../features/tax/taxSummary.js";
 import { createLeaseExtensionActions } from "./leaseExtensionStore.ts";
+import { createTransactionActions } from "./transactionStore.ts";
 
 const baseLease = {
   id: "lease-616",
@@ -89,6 +90,17 @@ test("retry, correction to unpaid and replacement payment never duplicate record
   assert.equal(state.leases[0].extensions?.length, 1);
   assert.equal(state.transactions.length, 1);
   assert.equal(state.entries.length, 2);
+  const transactionActions = createTransactionActions({
+    getTransactions: () => state.transactions, getUsePeriods: () => [], getLeases: () => state.leases, getUnits: () => [],
+    setTransactions: (value) => { state.transactions = typeof value === "function" ? value(state.transactions) : value; },
+    setTenantLedgerEntries: (value) => { state.entries = typeof value === "function" ? value(state.entries) : value; },
+    setDocuments: () => {}, setWorkOrders: () => {}, setAssets: () => {}, appendActivityLog: () => {},
+  });
+  const { rentLeaseExtensionId, tenantLedgerEntryId, ...editorFields } = state.transactions[0];
+  transactionActions.addOrUpdateTransaction({ ...editorFields, notes: "Edited from transactions" });
+  assert.equal(state.transactions[0].rentLeaseExtensionId, rentLeaseExtensionId);
+  assert.equal(state.transactions[0].tenantLedgerEntryId, tenantLedgerEntryId);
+
   assert.equal(actions.applyLeaseExtension(baseLease.id, { ...draft, amountPaid: 0 }).ok, true);
   assert.equal(state.transactions.length, 1);
   assert.equal(state.transactions[0].status, "voided");
@@ -99,6 +111,25 @@ test("retry, correction to unpaid and replacement payment never duplicate record
   assert.equal(state.entries.length, 2);
   assert.equal(state.transactions[0].status, "active");
   assert.equal(state.leases[0].monthlyRent, 1521.88);
+});
+
+test("an unpaid correction finds legacy receipts through ledger links and protects reconciled payments", () => {
+  const { state, actions } = fixture();
+  assert.equal(actions.applyLeaseExtension(baseLease.id, draft).ok, true);
+  assert.equal(actions.applyLeaseExtension(baseLease.id, { ...draft, amountPaid: 350, paymentReceivedDate: "2026-09-10" }).ok, true);
+  state.transactions = state.transactions.map((transaction) => ({
+    ...transaction,
+    rentLeaseExtensionId: undefined,
+    tenantLedgerEntryId: undefined,
+    reconciled: transaction.date === draft.paymentReceivedDate,
+  }));
+  const before = structuredClone(state);
+  assert.match(actions.applyLeaseExtension(baseLease.id, { ...draft, amountPaid: 0 }).message || "", /reconciliation/);
+  assert.deepEqual(state, before);
+  state.transactions = state.transactions.map((transaction) => ({ ...transaction, reconciled: false }));
+  assert.equal(actions.applyLeaseExtension(baseLease.id, { ...draft, amountPaid: 0 }).ok, true);
+  assert.equal(state.transactions.length, 2);
+  assert.ok(state.transactions.every((transaction) => transaction.status === "voided" && transaction.rentLeaseExtensionId === draft.id));
 });
 
 test("correction to an earlier extension keeps the latest departure and cancellation preserves cash", () => {

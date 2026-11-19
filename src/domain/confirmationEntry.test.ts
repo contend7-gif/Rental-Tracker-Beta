@@ -54,6 +54,15 @@ test("ambiguous amounts and dates stay blank instead of selecting a balance or d
   for (const amount of ["$1,55", "$500.999", "$1 500.00"]) assert.equal(parsePaymentConfirmation(`Amount: ${amount}`).amount, "");
 });
 
+test("negated payment status cannot pass the save guard", () => {
+  for (const status of ["has not posted", "hasn’t posted", "has not yet been posted", "has yet to be processed", "was not received"]) {
+    const text = `Fidelity transfer from Rental Bank 1234 to Personal Bank 5678. Amount: $450.00. Transfer date: October 29, 2026. The transfer ${status}.`;
+    const candidate = parsePaymentConfirmation(text);
+    assert.equal(candidate.status, "initiated", status);
+    assert.match(confirmationSaveIssue({ ...candidate, sourceConfirmation: { text, status: candidate.status } }, [], "", "2026-11-18"), /completed/, status);
+  }
+});
+
 test("year-end rent allocation without a stated year requires a manual month choice", () => {
   assert.equal(parsePaymentConfirmation("Venmo: Example Tenant paid you $500.00. Payment date: December 29, 2026. January rent.").rentPeriod, "");
   assert.match(confirmationSaveIssue({ ...transaction, rentPeriod: "" }, []), /rent month/);

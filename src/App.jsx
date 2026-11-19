@@ -1068,6 +1068,7 @@ function AppContent() {
 
   const {
     attachDocumentToTransaction,
+    prepareTransactionReceipt,
     onWorkOrderAttachmentInputChange,
     openWorkOrderAttachmentPicker,
     openWorkOrderDocuments,
@@ -1172,7 +1173,6 @@ function AppContent() {
   } = useTransactionEntryController({
     actions,
     appSettings,
-    attachDocumentToTransaction,
     canAttachToTransaction,
     categories,
     createBlankForm,
@@ -1190,6 +1190,7 @@ function AppContent() {
     leases,
     pendingDocumentExpenseSource,
     pendingTxnAttachment,
+    prepareTransactionReceipt,
     prefetchDialog,
     properties,
     recurringThroughDate,

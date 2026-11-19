@@ -60,7 +60,8 @@ export function parsePaymentConfirmation(raw) {
   const date = preferredDates.length === 1 ? preferredDates[0] : allDates.length === 1 ? allDates[0] : "";
   if (!date) warnings.push("Choose the actual payment date; the source does not identify one unambiguously.");
   const negative = /\b(?:cancelled|canceled|failed|declined|rejected|not completed|not processed|unsuccessful)\b/i.test(text);
-  const initiated = /\b(?:scheduled|pending|initiated|processing|will be|expected|on (?:its|the) way|in transit|request(?:ed)?|submitted)\b/i.test(text);
+  const awaitingCompletion = /\b(?:not|never|yet to|hasn['’]t|haven['’]t|hadn['’]t|wasn['’]t|weren['’]t|isn['’]t|aren['’]t|didn['’]t)\s+(?:(?:yet|be|been|successfully)\s+){0,3}(?:post(?:ed)?|complet(?:e|ed)|process(?:ed)?|receiv(?:e|ed)|sent|settle(?:d)?)\b/i.test(text);
+  const initiated = awaitingCompletion || /\b(?:scheduled|pending|initiated|processing|will be|expected|on (?:its|the) way|in transit|request(?:ed)?|submitted)\b/i.test(text);
   const completed = /\b(?:successfully|completed|processed|posted|you received|paid you|sent you|received a payment)\b/i.test(text);
   const status = negative ? "failed" : initiated ? "initiated" : completed ? "completed" : "unknown";
   if (status !== "completed") warnings.push("This is not clear evidence of a completed payment. Keep it as a draft until completion is confirmed.");

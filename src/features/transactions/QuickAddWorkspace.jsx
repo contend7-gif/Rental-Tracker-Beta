@@ -123,6 +123,7 @@ export function QuickAddWorkspace({
   onTransactionAttachmentInputChange,
   pendingDocumentExpenseSource,
   pendingTxnAttachment,
+  setPendingTxnAttachment,
   activeProperties,
   properties,
   recurringTemplates,
@@ -779,7 +780,10 @@ export function QuickAddWorkspace({
                   <div className="truncate text-sm font-semibold text-slate-900">{pendingTxnAttachment.name}</div>
                   <div className="text-xs text-slate-500">Ready to attach as document support</div>
                 </div>
-                <Badge className="!bg-emerald-50 !text-emerald-700">Selected</Badge>
+                <Button type="button" size="sm" variant="ghost" onClick={() => {
+                  setPendingTxnAttachment(null);
+                  if (txnAttachmentInputRef.current) txnAttachmentInputRef.current.value = "";
+                }}>Remove file</Button>
               </div>
             ) : null}
             {receiptRecommended ? (

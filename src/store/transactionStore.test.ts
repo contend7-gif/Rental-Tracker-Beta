@@ -31,6 +31,34 @@ function update<T>(current: T[], updater: T[] | ((previous: T[]) => T[])) {
   return typeof updater === "function" ? updater(current) : updater;
 }
 
+test("capitalizing a transaction creates one linked asset and ordinary edits preserve its basis", () => {
+  const legacyTransaction = { ...baseTransaction, id: "legacy-improvement", capitalImprovement: true };
+  let transactions = [baseTransaction, legacyTransaction];
+  let assets: Asset[] = [];
+  const actions = createTransactionActions({
+    getTransactions: () => transactions, getUsePeriods: () => [], getLeases: () => [], getUnits: () => [],
+    setTransactions: (updater) => { transactions = update(transactions, updater); },
+    setAssets: (updater) => { assets = update(assets, updater); },
+    setDocuments: () => undefined, setWorkOrders: () => undefined, setTenantLedgerEntries: () => undefined, appendActivityLog: () => undefined,
+  });
+  const improvement = { ...baseTransaction, capitalImprovement: true, amount: 1000 };
+  const payload = { propertyId: improvement.propertyId, unit: improvement.unit, type: "Improvement" as const, description: "Example improvement", cost: 1000, basis: 1000, life: 27.5, placedInService: improvement.date };
+  actions.addOrUpdateTransaction(improvement, payload);
+  assert.equal(assets[0].sourceTransactionId, improvement.id);
+  assert.deepEqual(assets[0].sourceTransactionIds, [improvement.id]);
+
+  actions.addOrUpdateTransaction({ ...improvement, notes: "Memo edited" }, payload);
+  actions.addOrUpdateTransaction({ ...legacyTransaction, notes: "Legacy memo edited" }, payload);
+  assert.deepEqual(assets.map((asset) => asset.basis), [1000]);
+
+  const newImprovement = { ...improvement, id: "new-improvement" };
+  actions.addOrUpdateTransaction(newImprovement, payload);
+  assert.equal(assets.length, 2);
+  actions.markTransactionCapitalImprovement(newImprovement.id, false);
+  actions.addOrUpdateTransaction(newImprovement, payload);
+  assert.equal(assets.length, 2);
+});
+
 test("a transaction scope correction updates only its single-purpose receipt and persists through later edits", () => {
   let transactions = [baseTransaction];
   const receipt: DocumentItem = { id: "receipt", name: "Utility bill", type: "Invoice", propertyId: "property-1", unit: "Unit 1", unitScopeOverride: true, transactionId: baseTransaction.id };

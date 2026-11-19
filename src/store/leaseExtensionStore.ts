@@ -50,6 +50,17 @@ export function createLeaseExtensionActions({
         : preview.extension;
       const charge = preview.charge;
       const previousExtension = lease.extensions?.find((item) => item.id === extension.id);
+      const paymentTransactionIds = new Set(ledgerBefore
+        .filter((entry) => entry.leaseId === leaseId && entry.leaseExtensionId === extension.id && entry.kind === "payment")
+        .map((entry) => entry.transactionId)
+        .filter(Boolean));
+      if (previousExtension?.paymentTransactionId) paymentTransactionIds.add(previousExtension.paymentTransactionId);
+      const isExtensionPayment = (transaction: Transaction) => transaction.rentLeaseExtensionId
+        ? transaction.rentLeaseExtensionId === extension.id
+        : paymentTransactionIds.has(transaction.id);
+      if (!preview.paymentTransaction && transactionsBefore.some((transaction) =>
+        isExtensionPayment(transaction) && transaction.status === "active" && transaction.reconciled
+      )) return { ok: false, message: "Reopen the linked bank reconciliation before correcting this payment." };
       const revisions = lease.extensionRevisions || [];
       const sameRevision = previousExtension && JSON.stringify({ ...previousExtension, updatedAt: "" }) === JSON.stringify({ ...extension, updatedAt: "" });
       const priorExtensions = (lease.extensions || []).filter((item) => item.id !== extension.id);
@@ -70,7 +81,7 @@ export function createLeaseExtensionActions({
         extensionRevisions: previousExtension && !sameRevision ? [...revisions, {
           extension: previousExtension,
           ledgerEntries: ledgerBefore.filter((item) => item.leaseExtensionId === extension.id),
-          transactions: transactionsBefore.filter((item) => item.rentLeaseExtensionId === extension.id),
+          transactions: transactionsBefore.filter(isExtensionPayment),
           recordedAt: new Date().toISOString(),
         }] : revisions,
       });
@@ -84,7 +95,9 @@ export function createLeaseExtensionActions({
 
       const nextTransactions = transactionsBefore
         .filter((transaction) => transaction.id !== preview.paymentTransaction?.id)
-        .map((transaction) => transaction.rentLeaseExtensionId === extension.id && !preview.paymentTransaction ? { ...transaction, status: "voided" as const } : transaction)
+        .map((transaction) => !preview.paymentTransaction && isExtensionPayment(transaction)
+          ? { ...transaction, rentLeaseExtensionId: extension.id, status: "voided" as const }
+          : transaction)
         .concat(preview.paymentTransaction ? normalizeTransaction(preview.paymentTransaction) : []);
 
       const nextDocuments = document

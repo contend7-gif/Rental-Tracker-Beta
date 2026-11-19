@@ -44,30 +44,35 @@ export function useDocumentAttachmentWorkflow({
   workOrderAttachmentInputRef,
   workOrderById,
 }: UseDocumentAttachmentWorkflowArgs) {
-  async function attachDocumentToTransaction(txn: Transaction | null | undefined, file: File | null | undefined) {
-    if (!txn || !file) return;
+  async function prepareTransactionReceipt(txn: Transaction, file: File): Promise<DocumentItem> {
     if (!canAttachToTransaction(file)) {
-      setNotice("Attach a PDF or image file for transaction receipts.");
-      return;
+      throw new Error("Attach a PDF or image file for transaction receipts.");
     }
 
+    if (file.size === 0) throw new Error("The receipt file is empty.");
+    const dataUrl = await readFileAsDataUrl(file);
+    if (!dataUrl) throw new Error("The receipt file could not be read.");
+    return {
+      id: `d${Date.now()}`,
+      propertyId: txn.propertyId,
+      unit: txn.unit,
+      transactionId: txn.id,
+      name: file.name,
+      type: "Transaction Receipt",
+      mimeType: file.type || "application/octet-stream",
+      uploadedAt: new Date().toISOString(),
+      dataUrl,
+      tags: inferDocumentTags({
+        document: { name: file.name, type: "Transaction Receipt", tags: [] },
+        transaction: txn,
+      }),
+    };
+  }
+
+  async function attachDocumentToTransaction(txn: Transaction | null | undefined, file: File | null | undefined) {
+    if (!txn || !file) return;
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      actions.addDocument({
-        id: `d${Date.now()}`,
-        propertyId: txn.propertyId,
-        unit: txn.unit,
-        transactionId: txn.id,
-        name: file.name,
-        type: "Transaction Receipt",
-        mimeType: file.type || "application/octet-stream",
-        uploadedAt: new Date().toISOString(),
-        dataUrl,
-        tags: inferDocumentTags({
-          document: { name: file.name, type: "Transaction Receipt", tags: [] },
-          transaction: txn,
-        }),
-      });
+      actions.addDocument(await prepareTransactionReceipt(txn, file));
       setNotice(`Attached ${file.name} to transaction.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not attach transaction file.");
@@ -135,6 +140,7 @@ export function useDocumentAttachmentWorkflow({
 
   return {
     attachDocumentToTransaction,
+    prepareTransactionReceipt,
     onWorkOrderAttachmentInputChange,
     openWorkOrderAttachmentPicker,
     openWorkOrderDocuments,

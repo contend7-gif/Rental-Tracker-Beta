@@ -53,10 +53,12 @@ export function createTransactionActions({
     addOrUpdateTransaction(transaction: Transaction, assetPayload?: AssetPayload) {
       const normalizedTransaction = normalizeTransaction(transaction);
       const priorTransaction = getTransactions().find((existing) => existing.id === normalizedTransaction.id);
+      normalizedTransaction.rentLeaseExtensionId ??= priorTransaction?.rentLeaseExtensionId;
+      normalizedTransaction.tenantLedgerEntryId ??= priorTransaction?.tenantLedgerEntryId;
       if (priorTransaction?.mileageEntryIds?.length && !normalizedTransaction.mileageEntryIds?.length) {
         normalizedTransaction.mileageEntryIds = priorTransaction.mileageEntryIds;
       }
-      const existsBefore = getTransactions().some((existing) => existing.id === normalizedTransaction.id);
+      const existsBefore = Boolean(priorTransaction);
       const normalizedAmount = Number(normalizedTransaction.amount);
       const linkedWorkOrderId = String(normalizedTransaction.workOrderId || "").trim();
       const linkedTenantLedgerEntryId = String(normalizedTransaction.tenantLedgerEntryId || "").trim();
@@ -113,15 +115,22 @@ export function createTransactionActions({
         summary: existsBefore ? "Transaction updated." : "Transaction created.",
         details: normalizedTransaction.description,
       });
-      if (assetPayload) {
-        setAssets((previous) => [{
-          id: `a${Date.now()}`,
-          ...assetPayload,
-          currentYearDep: assetPayload.basis / assetPayload.life,
-          bonusEligible: false,
-          bonusElected: false,
-          bonusRate: 0,
-        }, ...previous]);
+      // Older capitalized transactions may have an unlinked asset. Leave those for manual review.
+      if (assetPayload && normalizedTransaction.capitalImprovement && !priorTransaction?.capitalImprovement) {
+        const sourceId = normalizedTransaction.id;
+        setAssets((previous) => {
+          if (previous.some((asset) => asset.sourceTransactionId === sourceId || asset.sourceTransactionIds?.includes(sourceId))) return previous;
+          return [{
+            id: `a-improvement-${sourceId}`,
+            ...assetPayload,
+            sourceTransactionId: sourceId,
+            sourceTransactionIds: [sourceId],
+            currentYearDep: assetPayload.basis / assetPayload.life,
+            bonusEligible: false,
+            bonusElected: false,
+            bonusRate: 0,
+          }, ...previous];
+        });
       }
     },
     setTransactionTaxChecked(id: string, checked: boolean) {
@@ -191,6 +200,7 @@ export function createTransactionActions({
         taxChecked: false,
         reconciled: false,
         recurringTemplateId: undefined,
+        rentLeaseExtensionId: undefined,
         tenantLedgerEntryId: undefined,
         status: "active",
       };
